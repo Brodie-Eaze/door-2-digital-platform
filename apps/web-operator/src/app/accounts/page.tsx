@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Plus } from 'lucide-react';
+import { ArrowRight, Plus, UserPlus } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
@@ -14,11 +14,28 @@ export default function AccountsPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="Accounts">
       <div className="space-y-6 max-w-[1400px]">
+        {/* Header bar with primary CTA */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div className="text-[19px] font-semibold text-ink tracking-tight">
+              All sub-accounts
+            </div>
+            <div className="text-[12px] text-muted">
+              {ACCOUNTS.length} businesses live · {totalKnockers} knockers active across portfolio
+            </div>
+          </div>
+          <Link href="/onboard-account">
+            <Button variant="primary" leftIcon={<UserPlus size={14} />}>
+              Onboard new business
+            </Button>
+          </Link>
+        </div>
+
         <Banner tone="info">
           <span className="text-[13px]">
-            <span className="font-semibold">Door 2 Digital OS HQ</span> — your team's home. Click
-            any account to drop into its full CRM workspace (territories, Knockers, leads, pipeline,
-            campaigns, drip). Each account is a tiny operating system inside the one.
+            <span className="font-semibold">Door 2 Digital Command Centre</span> — your team's home.
+            Click any account to drop into its full CRM workspace (territories, Knockers, leads,
+            pipeline, campaigns, drip). Each account is a tiny operating system inside the one.
           </span>
         </Banner>
 

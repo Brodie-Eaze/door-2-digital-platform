@@ -55,14 +55,14 @@ export default function MobilePreviewPage(): JSX.Element {
   const shown = VARIANTS.filter((v) => filter === 'all' || filter === v.key);
 
   return (
-    <PlatformShell pageTitle="Door 2 Digital OS — app preview">
+    <PlatformShell pageTitle="Knocker iOS — app preview">
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Web preview of the native iOS <span className="font-semibold">Door 2 Digital OS</span>{' '}
-            field app. Real app built in Xcode (Swift / SwiftUI) per{' '}
-            <code className="kbd">ADR-0003</code>. Distributed via TestFlight + Internal Testing
-            under D2D&apos;s Apple Developer account.
+            Web preview of the native iOS <span className="font-semibold">Knocker iOS</span> field
+            app. Real app built in Xcode (Swift / SwiftUI) per <code className="kbd">ADR-0003</code>
+            . Distributed via TestFlight + Internal Testing under D2D&apos;s Apple Developer
+            account.
           </span>
         </Banner>
 
@@ -204,9 +204,9 @@ function LoginScreen() {
     <div className="h-full flex flex-col items-center justify-between px-6 pt-12 pb-10 bg-gradient-to-b from-paper to-surface">
       <div className="flex-1 flex flex-col items-center justify-center w-full">
         <div className="w-16 h-16 rounded-2xl bg-ink text-surface flex items-center justify-center text-2xl font-bold">
-          N
+          K
         </div>
-        <div className="text-[20px] font-bold text-ink mt-4">Door 2 Digital OS</div>
+        <div className="text-[20px] font-bold text-ink mt-4">Knocker iOS</div>
         <div className="text-accent text-[10px] font-semibold tracking-[0.18em] mt-1">
           FIELD APP
         </div>
@@ -491,7 +491,7 @@ function InboxScreen() {
             unread: true,
           },
           {
-            from: 'Door 2 Digital OS',
+            from: 'Knocker iOS',
             msg: 'Day-1 SMS to Maria Santos delivered + read',
             time: '2h',
             system: true,
@@ -502,7 +502,7 @@ function InboxScreen() {
             time: '4h',
           },
           {
-            from: 'Door 2 Digital OS',
+            from: 'Knocker iOS',
             msg: 'New territory cleared: Phoenix West (AZ)',
             time: 'Yest',
             system: true,

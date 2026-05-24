@@ -22,7 +22,13 @@ import {
   CheckSquare,
   Workflow,
   FolderOpen,
+  CalendarClock,
+  CreditCard,
+  ShieldCheck,
+  ArrowLeft,
+  Compass,
 } from 'lucide-react';
+import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
 import { getAccount, accountMonogram } from '@/lib/accounts';
@@ -34,8 +40,11 @@ interface AccountShellProps {
 }
 
 /**
- * Consolidated GHL-style nav — 9 items grouped into single-line groups.
- * Matches Brodie's brief: simplified IA so the sales team can navigate fast.
+ * Sub-account workspace shell — each business gets its own self-contained
+ * command surface inside the Door 2 Digital Command Centre. Structure mirrors
+ * across all accounts (charity, commercial, healthcare) so onboarding a new
+ * one drops a fully-equipped workspace in. All data inside is scoped to this
+ * account only — no cross-account leakage.
  */
 export function AccountShell({ accountSlug, pageTitle, children }: AccountShellProps): JSX.Element {
   const account = getAccount(accountSlug);
@@ -66,6 +75,15 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       ],
     },
     {
+      label: 'Field ops',
+      items: [
+        { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
+        { href: `${base}/territories`, label: 'Territories', icon: Compass },
+        { href: `${base}/roster`, label: 'Roster & shifts', icon: CalendarClock },
+        { href: `${base}/knocker-ios`, label: 'Knocker iOS preview', icon: Smartphone },
+      ],
+    },
+    {
       label: 'Operate',
       items: [
         { href: `${base}/calendars`, label: 'Calendars', icon: Calendar },
@@ -78,10 +96,10 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       ],
     },
     {
-      label: 'Field ops',
+      label: 'Finance & compliance',
       items: [
-        { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
-        { href: `${base}/knocker-ios`, label: 'Knocker iOS preview', icon: Smartphone },
+        { href: `${base}/invoices`, label: 'Invoices', icon: CreditCard },
+        { href: `${base}/compliance`, label: 'Compliance', icon: ShieldCheck },
       ],
     },
     {
@@ -97,13 +115,19 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
     <AppShell
       sidebar={
         <Sidebar
-          appName="Door 2 Digital OS"
-          appTagline={account?.shortName.toUpperCase() ?? 'ACCOUNT'}
+          appName={account?.shortName ?? 'Account'}
+          appTagline="SUB-ACCOUNT"
           homeHref={`${base}/today`}
           groups={NAV}
           userRole="org_admin"
           footer={
             <>
+              <Link
+                href="/accounts"
+                className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
+              >
+                <ArrowLeft size={10} /> Back to Command Centre
+              </Link>
               <div className="flex items-center gap-2">
                 {account && <Monogram letters={accountMonogram(account.shortName)} small />}
                 <span>{account?.shortName}</span>
@@ -121,6 +145,13 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
           env={process.env.NEXT_PUBLIC_ENV ?? 'local'}
           rightSlot={
             <div className="flex items-center gap-3">
+              <Link
+                href="/command-centre"
+                className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted hover:bg-paper hover:text-ink transition"
+                title="Back to Door 2 Digital Command Centre"
+              >
+                <Compass size={12} /> Command Centre
+              </Link>
               <button
                 className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
                 title="Search"
