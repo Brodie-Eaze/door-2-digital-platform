@@ -13,6 +13,8 @@ import {
   Settings,
   Bell,
   Search,
+  Smartphone,
+  Map as MapIcon,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
@@ -54,6 +56,13 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       items: [
         { href: `${base}/campaigns`, label: 'Marketing', icon: Megaphone },
         { href: `${base}/reports`, label: 'Reports', icon: BarChart3 },
+      ],
+    },
+    {
+      label: 'Field ops',
+      items: [
+        { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
+        { href: `${base}/knocker-ios`, label: 'Knocker iOS preview', icon: Smartphone },
       ],
     },
     {
