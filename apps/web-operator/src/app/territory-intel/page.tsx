@@ -1,4 +1,4 @@
-import { Sparkles, TrendingUp, DollarSign, Users, MapPin, Eye, Plus, Filter } from 'lucide-react';
+import { Sparkles, MapPin, Eye, Plus, Filter } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 

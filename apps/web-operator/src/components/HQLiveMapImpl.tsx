@@ -10,7 +10,6 @@
  *  - Built-in zoom + scale + attribution controls
  */
 
-import { useState } from 'react';
 import {
   MapContainer,
   TileLayer,

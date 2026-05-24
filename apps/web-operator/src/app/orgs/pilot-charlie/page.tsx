@@ -1,4 +1,4 @@
-import { Building2, Calendar, CreditCard, Globe, ShieldCheck, Users } from 'lucide-react';
+import { Building2, Calendar, CreditCard, Globe, ShieldCheck } from 'lucide-react';
 import { KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { OperatorShell } from '@/components/OperatorShell';
 import { PILOT, STATE_CLEARANCE } from '@/lib/fixtures';

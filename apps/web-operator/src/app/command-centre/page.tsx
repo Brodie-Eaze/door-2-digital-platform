@@ -1,7 +1,7 @@
 'use client';
 
 import { Radio, Sparkles, AlertTriangle, TrendingUp, Coffee, MapPin } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { FLEET_REPS } from '@/lib/fleet-reps';

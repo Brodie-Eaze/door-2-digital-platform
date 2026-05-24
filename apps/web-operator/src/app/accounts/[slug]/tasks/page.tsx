@@ -283,6 +283,16 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
     .filter((t) => (priorityFilter === 'all' ? true : t.priority === priorityFilter))
     .filter((t) => t.title.toLowerCase().includes(query.toLowerCase()));
 
+  // Escape-key closes detail drawer — declared before any conditional return
+  // so hook order is stable across renders (rules-of-hooks).
+  useEffect(() => {
+    function k(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelected(null);
+    }
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  }, []);
+
   if (!account) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Not found">
@@ -336,14 +346,6 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
       setSelected(t);
     };
   }
-
-  useEffect(() => {
-    function k(e: KeyboardEvent) {
-      if (e.key === 'Escape') setSelected(null);
-    }
-    document.addEventListener('keydown', k);
-    return () => document.removeEventListener('keydown', k);
-  }, []);
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Tasks">

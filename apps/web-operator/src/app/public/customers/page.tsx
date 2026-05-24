@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, TrendingUp, ShieldCheck, Heart, Building2, Stethoscope } from 'lucide-react';
+import { ArrowRight, Heart, Building2, Stethoscope } from 'lucide-react';
 import { PublicShell } from '@/components/PublicShell';
 
 export const metadata = {

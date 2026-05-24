@@ -5,7 +5,6 @@ import {
   Wand2,
   Sparkles,
   ShieldCheck,
-  ImageIcon,
   Send,
   Check,
   X,

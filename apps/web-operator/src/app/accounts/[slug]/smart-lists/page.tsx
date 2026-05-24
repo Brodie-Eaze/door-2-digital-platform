@@ -12,9 +12,7 @@ import {
   ArrowRight,
   Megaphone,
   MailPlus,
-  MessageSquare,
   Phone,
-  ChevronDown,
   TrendingUp,
   Eye,
   Edit3,
@@ -24,7 +22,7 @@ import {
   Layers,
   Zap,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -830,7 +828,7 @@ function PushModal({
             <div className="text-[15px] font-semibold text-ink">Push to campaign</div>
             <div className="text-[11px] text-muted mt-0.5">
               <span className="font-semibold text-ink">{count.toLocaleString()}</span> members from
-              "{listName}"
+              &ldquo;{listName}&rdquo;
             </div>
           </div>
           <button

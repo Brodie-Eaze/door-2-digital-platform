@@ -1,15 +1,5 @@
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Radio,
-  ShieldCheck,
-  Smartphone,
-  Sparkles,
-  Map as MapIcon,
-  TrendingUp,
-  Globe2,
-  CheckCircle2,
-} from 'lucide-react';
+import { ArrowRight, Radio, ShieldCheck, Sparkles, CheckCircle2 } from 'lucide-react';
 import { PublicShell } from '@/components/PublicShell';
 
 export const metadata = {

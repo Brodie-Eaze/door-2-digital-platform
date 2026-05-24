@@ -1,13 +1,4 @@
-import { AlertCircle, AlertTriangle } from 'lucide-react';
-import {
-  AnomalyCard,
-  Banner,
-  KpiCard,
-  Money,
-  RegionBadge,
-  Section,
-  StatusPill,
-} from '@d2d/ui-web';
+import { AnomalyCard, Banner, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { OperatorShell } from '@/components/OperatorShell';
 
 /**

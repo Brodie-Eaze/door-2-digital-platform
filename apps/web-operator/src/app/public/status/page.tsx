@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CheckCircle2, Activity, Globe2, AlertCircle, Clock } from 'lucide-react';
+import { CheckCircle2, Activity, Globe2, Clock } from 'lucide-react';
 import { PublicShell } from '@/components/PublicShell';
 
 export const metadata = {

@@ -41,7 +41,7 @@ export function KnockCard({
       )}
     >
       {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
+        // ui-web is framework-agnostic; consumers wrap with next/image if desired.
         <img
           src={photoUrl}
           alt=""

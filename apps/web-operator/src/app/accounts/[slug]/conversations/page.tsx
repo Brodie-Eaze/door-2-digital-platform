@@ -1,5 +1,5 @@
-import { MessageCircle, Phone, Mail, MessageSquare, Search } from 'lucide-react';
-import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { Phone, Mail, MessageSquare, Search } from 'lucide-react';
+import { Banner, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 
 const THREADS = [

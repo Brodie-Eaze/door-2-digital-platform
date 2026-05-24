@@ -8,7 +8,6 @@ import { ACCOUNTS } from '@/lib/accounts';
 export default function AccountsPage(): JSX.Element {
   const totalKnockers = ACCOUNTS.reduce((s, a) => s + a.knockers, 0);
   const totalLeads = ACCOUNTS.reduce((s, a) => s + a.leadsInboxToday, 0);
-  const totalConversions = ACCOUNTS.reduce((s, a) => s + a.conversionsMTD, 0);
   const totalRevenue = ACCOUNTS.reduce((s, a) => s + a.revenueCentsMTD, 0n);
 
   return (
@@ -33,9 +32,10 @@ export default function AccountsPage(): JSX.Element {
 
         <Banner tone="info">
           <span className="text-[13px]">
-            <span className="font-semibold">Door 2 Digital Command Centre</span> — your team's home.
-            Click any account to drop into its full CRM workspace (territories, Knockers, leads,
-            pipeline, campaigns, drip). Each account is a tiny operating system inside the one.
+            <span className="font-semibold">Door 2 Digital Command Centre</span> — your team&apos;s
+            home. Click any account to drop into its full CRM workspace (territories, Knockers,
+            leads, pipeline, campaigns, drip). Each account is a tiny operating system inside the
+            one.
           </span>
         </Banner>
 

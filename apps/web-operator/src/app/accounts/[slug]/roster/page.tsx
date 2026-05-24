@@ -355,7 +355,7 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Rostering for <span className="font-semibold">{account.shortName}</span>'s{' '}
+            Rostering for <span className="font-semibold">{account.shortName}</span>&apos;s{' '}
             {account.knockers} Knockers (top 12 shown). Hours auto-logged from Knocker iOS clock-in.
             Drag shifts between cells to reassign. Click any shift to edit. Pushes changes instantly
             to the rep&apos;s iPad.

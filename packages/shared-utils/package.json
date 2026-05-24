@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@d2d/shared-types": "workspace:*",
     "ulid": "^2.3.0"
   },
   "devDependencies": {

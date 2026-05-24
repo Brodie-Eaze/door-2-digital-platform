@@ -155,7 +155,7 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
             <Sparkles size={16} className="text-accent mt-0.5 shrink-0" />
             <div className="flex-1">
               <div className="text-[13px] font-semibold text-ink">
-                "Qualified → close drip" Day-2 call is converting only at 28%
+                &ldquo;Qualified → close drip&rdquo; Day-2 call is converting only at 28%
               </div>
               <div className="text-[12px] text-muted mt-1">
                 Consider replacing Day-2 call with a 2-min branded video sent over SMS (Heygen AI

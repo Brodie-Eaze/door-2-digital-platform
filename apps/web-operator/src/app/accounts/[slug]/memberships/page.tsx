@@ -15,7 +15,7 @@ import {
   Plus,
   Mail,
 } from 'lucide-react';
-import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { getAccount } from '@/lib/accounts';
 

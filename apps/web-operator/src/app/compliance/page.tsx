@@ -13,7 +13,7 @@ export default function CompliancePage(): JSX.Element {
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <ShieldCheck size={14} />
-            Campaigns only deliver to states where D2D's paid-solicitor registration is{' '}
+            Campaigns only deliver to states where D2D&apos;s paid-solicitor registration is{' '}
             <span className="font-semibold">approved</span>. Enforced server-side via{' '}
             <code className="kbd">CampaignStateClearance</code> per ADR.
           </span>

@@ -53,7 +53,8 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={14} />
             Saved filter rules that auto-populate. Lists feed into marketing campaigns + drips.
-            "Smart" lists update continuously — "Static" lists are manual snapshots.
+            &ldquo;Smart&rdquo; lists update continuously — &ldquo;Static&rdquo; lists are manual
+            snapshots.
           </span>
         </Banner>
 

@@ -115,7 +115,7 @@ async function buildServer() {
   app.setErrorHandler(errorHandler);
 
   // Health checks (unauthenticated)
-  await registerHealthRoutes(app);
+  await app.register(registerHealthRoutes);
 
   // Domain routes — auth first, then identity, then field-capture, CRM,
   // money, compliance / privacy, infrastructure, marketing. All return
@@ -154,7 +154,7 @@ async function buildServer() {
   await app.register(registerDsar, { prefix: '/v1/dsar/requests' });
 
   // Marketing + AI content (Phase 3) — registry first so route handlers can dispatch.
-  await registerIntegrations(app);
+  await app.register(registerIntegrations);
   await app.register(registerMarketing, { prefix: '/v1/marketing' });
   await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
   await app.register(registerMcpServer, { prefix: '/v1/mcp' });

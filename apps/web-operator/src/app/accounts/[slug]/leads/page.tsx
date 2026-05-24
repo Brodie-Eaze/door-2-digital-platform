@@ -22,8 +22,8 @@ export default function LeadsInboxPage({ params }: { params: { slug: string } })
       <div className="space-y-6 max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Every Knocker interaction at the door creates a Lead — even if they didn't sell on the
-            spot. Inside-sales team has <span className="font-semibold">7 days</span> to call,
+            Every Knocker interaction at the door creates a Lead — even if they didn&apos;t sell on
+            the spot. Inside-sales team has <span className="font-semibold">7 days</span> to call,
             convert, or close out.
           </span>
         </Banner>
