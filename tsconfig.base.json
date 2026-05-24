@@ -24,7 +24,9 @@
       "@d2d/api-client": ["./packages/api-client/src/index.ts"],
       "@d2d/ui-tokens": ["./packages/ui-tokens/src/index.ts"],
       "@d2d/ui-web": ["./packages/ui-web/src/index.ts"],
-      "@d2d/ui-web/*": ["./packages/ui-web/src/*"]
+      "@d2d/ui-web/*": ["./packages/ui-web/src/*"],
+      "@d2d/integrations": ["./packages/integrations/src/index.ts"],
+      "@d2d/integrations/*": ["./packages/integrations/src/*"]
     }
   }
 }

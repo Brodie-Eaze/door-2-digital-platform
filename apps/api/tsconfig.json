@@ -11,7 +11,9 @@
       "@d2d/shared-types": ["../../packages/shared-types/src/index.ts"],
       "@d2d/shared-types/*": ["../../packages/shared-types/src/*"],
       "@d2d/shared-utils": ["../../packages/shared-utils/src/index.ts"],
-      "@d2d/shared-utils/*": ["../../packages/shared-utils/src/*"]
+      "@d2d/shared-utils/*": ["../../packages/shared-utils/src/*"],
+      "@d2d/integrations": ["../../packages/integrations/src/index.ts"],
+      "@d2d/integrations/*": ["../../packages/integrations/src/*"]
     }
   },
   "include": ["src/**/*", "prisma/**/*.ts", "tests/**/*"],

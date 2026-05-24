@@ -38,6 +38,7 @@
     "@aws-sdk/client-kms": "^3.654.0",
     "@aws-sdk/client-s3": "^3.654.0",
     "@aws-sdk/client-secrets-manager": "^3.654.0",
+    "@d2d/integrations": "workspace:*",
     "@d2d/shared-types": "workspace:*",
     "@d2d/shared-utils": "workspace:*",
     "@fastify/cors": "^9.0.1",

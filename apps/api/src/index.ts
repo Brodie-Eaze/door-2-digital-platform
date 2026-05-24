@@ -47,6 +47,8 @@ import { registerDsar } from './domains/dsar/routes';
 import { registerMarketing } from './domains/marketing/routes';
 import { registerContentStudio } from './domains/content-studio/routes';
 import { registerRealtime } from './domains/realtime/routes';
+import { registerIntegrations } from './integrations';
+import { registerMcpServer } from './mcp/server';
 
 async function buildServer() {
   const e = env();
@@ -156,9 +158,11 @@ async function buildServer() {
   // Privacy ops (Phase 1.4)
   await app.register(registerDsar, { prefix: '/v1/dsar/requests' });
 
-  // Marketing + AI content (Phase 3)
+  // Marketing + AI content (Phase 3) — registry first so route handlers can dispatch.
+  await registerIntegrations(app);
   await app.register(registerMarketing, { prefix: '/v1/marketing' });
   await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
+  await app.register(registerMcpServer, { prefix: '/v1/mcp' });
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

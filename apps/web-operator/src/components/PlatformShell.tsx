@@ -29,6 +29,7 @@ import {
   Wand2,
   Megaphone,
   ExternalLink,
+  Plug,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 
@@ -77,6 +78,7 @@ const NAV: NavGroup[] = [
       { href: '/marketing-studio/campaigns', label: 'Campaigns', icon: Megaphone },
       { href: '/marketing-studio/brand-safety', label: 'Brand safety', icon: ShieldCheck },
       { href: '/marketing-studio/retargeting', label: 'Retargeting', icon: Target },
+      { href: '/marketing-studio/integrations', label: 'Integrations', icon: Plug },
     ],
   },
   {
