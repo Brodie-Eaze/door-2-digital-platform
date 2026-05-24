@@ -158,19 +158,21 @@ export function inferTheme(input: {
   }
 
   // 4. Vertical-specific keyword inference
-  if (/\b(pest|roach|termite|rodent|spray|exterminat|bug|insect)\b/.test(text))
+  // (Vertical hint catches the cleanest case; regex handles fixtures where
+  // vertical is short, e.g. 'pest' instead of 'pest_control'.)
+  if (vertical === 'pest' || /\b(pest|roach|termite|rodent|spray|exterminat|bug|insect)/.test(text))
     return 'pest_control';
   if (
-    /\b(wifi|fibre|fiber|broadband|electric|gas|telco|carrier|network|internet|kwh|power\s*plan)\b/.test(
+    vertical === 'energy' ||
+    vertical === 'telco' ||
+    /\b(wifi|fibre|fiber|broadband|electric|gas|telco|carrier|network|internet|kwh|power\s*plan)/.test(
       text,
     )
   )
     return 'energy_telco';
-  if (/\b(camera|doorbell|alarm|burglar|monitor|locks?|security\s*system)\b/.test(text))
+  if (/\b(camera|doorbell|alarm|burglar|monitor|locks?|security\s*system)/.test(text))
     return 'security';
-  if (
-    /\b(lawn|garden|paint|clean|maid|handyman|handyperson|tradie|landscaping|mowing)\b/.test(text)
-  )
+  if (/\b(lawn|garden|paint|clean|maid|handyman|handyperson|tradie|landscaping|mowing)/.test(text))
     return 'home_services';
 
   if (
