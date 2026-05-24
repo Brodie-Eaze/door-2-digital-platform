@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Door 2 Digital Knocker — Info.plist seed.
+  Drop the keys into your Xcode-generated Info.plist (or set them via
+  Target > Info tab). Includes ATS hardening, location/camera/biometric
+  usage strings, Mapbox token reference, and associated domains.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App identity -->
+    <key>CFBundleDisplayName</key>
+    <string>D2D Knocker</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- App Transport Security — strict, no exceptions in prod -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+
+    <!-- Location -->
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>D2D tracks your knock locations during shifts to verify field activity and credit you for your work.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>D2D needs your location to record where each knock happens.</string>
+
+    <!-- Camera + photos (for signed conversions) -->
+    <key>NSCameraUsageDescription</key>
+    <string>Capture door photos and signatures for signed conversions.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Save knock photos to your photo library.</string>
+
+    <!-- Biometric re-auth -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>Use Face ID to re-authenticate after backgrounding the app.</string>
+
+    <!-- Mapbox public token — set via build config, NOT committed plaintext -->
+    <key>MBXAccessToken</key>
+    <string>$(MAPBOX_PUBLIC_TOKEN)</string>
+
+    <!-- Background modes — enable in Signing & Capabilities -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>fetch</string>
+        <string>remote-notification</string>
+    </array>
+
+    <!-- Disable screenshots when PII visible (set FLAG_SECURE equivalent
+         programmatically in view code; iOS has no plist key for this) -->
+
+    <!-- Universal links -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:knocker.d2d.io</string>
+        <string>webcredentials:knocker.d2d.io</string>
+    </array>
+</dict>
+</plist>

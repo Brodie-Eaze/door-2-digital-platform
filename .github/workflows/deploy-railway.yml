@@ -1,0 +1,23 @@
+name: Deploy (Railway)
+
+on:
+  push:
+    branches: [main]
+    tags: ['staging-*', 'prod-*']
+
+jobs:
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ startsWith(github.ref, 'refs/tags/prod-') && 'production' || startsWith(github.ref, 'refs/tags/staging-') && 'staging' || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "TODO Phase 0 ops: wire Railway CLI deploy here once RAILWAY_TOKEN"
+          echo "secret is set. Per-service deploys via:"
+          echo "  railway up --service api      --detach"
+          echo "  railway up --service web-operator --detach"
+          echo "  railway up --service workers-audit-shipper --detach"
+          echo "  ..."
+          echo "Production tags require manual approval gate (set in repo Settings → Environments)."

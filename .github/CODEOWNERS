@@ -1,0 +1,44 @@
+# Door 2 Digital — code ownership.
+# Lines later in the file take precedence over lines earlier.
+# Update once GitHub usernames for the team are known.
+
+# Default — Brodie reviews anything without a more specific owner.
+*                                       @brodie
+
+# Backend
+/apps/api/                              @brodie
+/apps/api/src/domains/auth/             @brodie
+/apps/api/src/domains/payment/          @brodie
+/apps/api/src/domains/compliance/       @brodie
+/apps/api/src/domains/audit/            @brodie
+/apps/api/src/domains/pii-vault/        @brodie
+/apps/api/prisma/                       @brodie
+
+# Mobile
+/apps/knocker-ios/                      @brodie
+
+# Frontend
+/apps/web-operator/                     @brodie
+/apps/web-org/                          @brodie
+/apps/marketing-studio/                 @brodie
+
+# Shared packages
+/packages/shared-types/                 @brodie
+/packages/shared-utils/                 @brodie
+/packages/ui-tokens/                    @brodie
+/packages/ui-web/                       @brodie
+
+# Infra & CI
+/infra/                                 @brodie
+/.github/                               @brodie
+/Dockerfile*                            @brodie
+/docker-compose.yml                     @brodie
+/turbo.json                             @brodie
+/pnpm-workspace.yaml                    @brodie
+/tsconfig.base.json                     @brodie
+
+# Architecture decisions — any change must be reviewed by Brodie.
+/docs/adr/                              @brodie
+
+# Compliance docs — Brodie + counsel.
+/docs/compliance/                       @brodie

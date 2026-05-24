@@ -1,0 +1,26 @@
+# D2D Gitleaks configuration
+# Extends Gitleaks defaults; adds allowlist for plan/docs placeholder values.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow documentation placeholders and example .env files"
+paths = [
+  '''(?i)\.env\.example$''',
+  '''(?i)docs/.+\.md$''',
+  '''(?i)README\.md$''',
+  '''(?i)HANDOFF\.md$''',
+  '''(?i)\.claude/plans/.+\.md$''',
+]
+regexes = [
+  '''d2d_test_[A-Za-z0-9]{4,}''',           # test API keys in docs
+  '''sk_test_[A-Za-z0-9_-]{4,}''',           # Stripe test keys
+  '''AKIA(IOSFODNN7EXAMPLE|XXXX)''',         # AWS example access keys
+]
+stopwords = [
+  "EXAMPLE",
+  "PLACEHOLDER",
+  "REPLACE_ME",
+  "TODO",
+]

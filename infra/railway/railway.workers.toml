@@ -1,0 +1,15 @@
+# Railway service config — D2D BullMQ workers.
+# Create ONE Railway service per worker queue:
+#   audit-shipper, knock-sync, conversion-finalise, payout-prepare,
+#   content-generate, ad-deliver, dnk-sync, geo-refresh
+#
+# Each service sets WORKER_NAME env var; runtime selects the script.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.workers"
+
+[deploy]
+startCommand = "sh -c 'node apps/api/dist/src/workers/${WORKER_NAME}.worker.js'"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

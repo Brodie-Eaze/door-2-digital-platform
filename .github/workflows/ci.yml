@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  HUSKY: 0 # don't try to install hooks in CI
+
+jobs:
+  # ── Gate 1: Format ──────────────────────────────────────────────────────
+  format:
+    name: Format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+
+  # ── Gate 2: Lint ────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  # ── Gate 3: Typecheck ──────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  # ── Gate 4: Secrets scan ────────────────────────────────────────────────
+  gitleaks:
+    name: Gitleaks (secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Gate 5: SAST (Semgrep) ──────────────────────────────────────────────
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    container: returntocorp/semgrep
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep ci --config p/owasp-top-ten --config p/typescript --config p/react
+
+  # ── Gate 6: Dependency + IaC scan (Trivy) ──────────────────────────────
+  trivy:
+    name: Trivy (deps + IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+  # ── Gate 7: Unit tests ──────────────────────────────────────────────────
+  test-unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  # ── Gate 8: Integration tests (Testcontainers PG + Redis) ──────────────
+  test-integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: d2d
+          POSTGRES_PASSWORD: d2d
+          POSTGRES_DB: d2d_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U d2d"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://d2d:d2d@localhost:5432/d2d_test
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter api db:generate
+      - run: pnpm --filter api db:migrate
+      - run: pnpm --filter api test:integration
+
+  # ── Gate 9: Cross-tenant + cross-region isolation probe ────────────────
+  isolation-probe:
+    name: Isolation probe
+    runs-on: ubuntu-latest
+    needs: [test-integration]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "TODO Phase 1.1: spin up two ephemeral tenants + two ephemeral regions,"
+          echo "assert cross-tenant read returns 403 + audit row, assert cross-region"
+          echo "read returns 403 + audit row."
+
+  # ── Gate 10: Audit chain Merkle replay ─────────────────────────────────
+  audit-chain-verify:
+    name: Audit chain verify (weekly)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "TODO Phase 1.4: replay audit chain per region, fail if any rowHash"
+          echo "differs from computed expected. Commit weekly Merkle root to"
+          echo "docs/audits/merkle-roots/<region>/<YYYY>-W<NN>.json"

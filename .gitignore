@@ -1,0 +1,75 @@
+# Dependencies
+node_modules
+.pnpm-store
+.yarn
+
+# Build artifacts
+dist
+build
+.next
+.turbo
+*.tsbuildinfo
+.nx/cache
+
+# Test outputs
+coverage
+playwright-report
+test-results
+*.log
+
+# Env files (NEVER commit)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+Thumbs.db
+ehthumbs.db
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# iOS / Xcode (apps/knocker-ios)
+apps/knocker-ios/**/xcuserdata/
+apps/knocker-ios/**/*.xcuserstate
+apps/knocker-ios/**/DerivedData/
+apps/knocker-ios/**/Build/
+apps/knocker-ios/**/.build/
+apps/knocker-ios/**/Pods/
+apps/knocker-ios/**/Carthage/
+apps/knocker-ios/**/fastlane/report.xml
+apps/knocker-ios/**/fastlane/screenshots
+
+# Sentry
+.sentryclirc
+
+# Vercel
+.vercel
+
+# Docker
+*.pid
+
+# Local-only
+HANDOFF-local.md
+NOTES-local.md

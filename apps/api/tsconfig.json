@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@d2d/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@d2d/shared-types/*": ["../../packages/shared-types/src/*"],
+      "@d2d/shared-utils": ["../../packages/shared-utils/src/index.ts"],
+      "@d2d/shared-utils/*": ["../../packages/shared-utils/src/*"]
+    }
+  },
+  "include": ["src/**/*", "prisma/**/*.ts", "tests/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

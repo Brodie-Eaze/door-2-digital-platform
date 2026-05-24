@@ -1,0 +1,89 @@
+# =============================================================================
+# Door 2 Digital — local development stack.
+#
+#   pnpm dev                          → starts the apps
+#   docker compose up -d              → starts the infra below
+#
+# Ports
+#   5433  Postgres + PostGIS         (host)
+#   6380  Redis                       (host)
+#   9000  MinIO                       (host — S3-compatible)
+#   9001  MinIO console               (http://localhost:9001)
+#   8025  Mailpit web UI              (http://localhost:8025)
+#   16686 Jaeger UI                   (http://localhost:16686)
+#   4318  OTel collector (HTTP)
+# =============================================================================
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: d2d-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: d2d
+      POSTGRES_PASSWORD: d2d
+      POSTGRES_DB: d2d_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - d2d-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U d2d -d d2d_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: d2d-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - d2d-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: d2d-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: d2d
+      MINIO_ROOT_PASSWORD: d2d-minio-dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - d2d-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: d2d-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: d2d-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+volumes:
+  d2d-postgres-data:
+  d2d-redis-data:
+  d2d-minio-data:
