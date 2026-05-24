@@ -1,86 +1,138 @@
 /**
- * Lead routes — Phase 0 stubs.
+ * Lead routes — Phase 1.2 real implementation.
  *
- * Full implementation Phase 1.2:
- *   - POST  /v1/leads                          create (typically from knock or inbound form)
- *   - GET   /v1/leads                          list (filter status, owner, source, vertical, date)
- *   - GET   /v1/leads/:id                      read (PII masked unless `lead:unmask` scope)
- *   - PATCH /v1/leads/:id                      update status / fields (XState transition guarded)
- *   - POST  /v1/leads/:id/assign               assign to inside-sales / manager
- *   - POST  /v1/leads/:id/activities           log call, sms, email, note, status_change
- *   - GET   /v1/leads/:id/activities           timeline (cursor-paginated)
- *   - POST  /v1/leads/:id/do-not-contact       mark DNC + propagate to DNK/DNC lists
- *
- * Cross-cutting:
- *   - Lead lifecycle = XState v5 machine (`libs/state-machines/lead.machine.ts`).
- *     Invalid transitions return 409 PROBLEM_INVALID_STATE_TRANSITION.
- *   - PII vault: email/phone deterministically encrypted; givenName/familyName
- *     envelope-encrypted; address linked via `Address`.
- *   - On `lead.status=converted`, emits `lead.converted` webhook +
- *     creates Conversion via service call (NOT exposed as REST).
+ * Endpoints:
+ *   POST   /v1/leads                          create (auto-routes if no assignee)
+ *   GET    /v1/leads                          cursor-paginated list
+ *   GET    /v1/leads/:id                      one + last 20 activities
+ *   PATCH  /v1/leads/:id                      status (state-machine), assignedToId
+ *   POST   /v1/leads/:id/assign               reassign + LeadActivity entry
+ *   POST   /v1/leads/:id/activities           append activity (call/sms/email/note)
+ *   POST   /v1/leads/:id/dnk                  501 — handled by Agent 15's DNK service
  */
 import type { FastifyInstance } from 'fastify';
 import {
   createLeadRequestSchema,
+  updateLeadRequestSchema,
   assignLeadRequestSchema,
   leadActivityRequestSchema,
-} from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+  listLeadsQuerySchema,
+} from './schemas';
+import { createLead, listLeads, getLead, updateLead, assignLead, appendActivity } from './service';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+
+interface IdParams {
+  id: string;
+}
 
 export async function registerLead(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'lead', status: 'scaffold', phase: '1.2' }));
+  app.get('/_status', async () => ({ domain: 'lead', status: 'live', phase: '1.2' }));
 
-  app.post('/', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createLeadRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Lead create lands in Phase 1.2',
+  // POST /v1/leads — create
+  app.post('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = createLeadRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const lead = await createLead(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { lead } };
+      },
     });
   });
 
-  app.get('/', async (_req, reply) =>
+  // GET /v1/leads — list
+  app.get('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listLeadsQuerySchema.parse(req.query);
+    const result = await listLeads(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // GET /v1/leads/:id — one + last 20 activities
+  app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const lead = await getLead(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ lead });
+  });
+
+  // PATCH /v1/leads/:id — state machine guarded
+  app.patch<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = updateLeadRequestSchema.parse(req.body);
+    const lead = await updateLead(req.params.id, body, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ lead });
+  });
+
+  // POST /v1/leads/:id/assign — reassign
+  app.post<{ Params: IdParams }>('/:id/assign', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = assignLeadRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const lead = await assignLead(req.params.id, body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 200, body: { lead } };
+      },
+    });
+  });
+
+  // POST /v1/leads/:id/activities — append activity
+  app.post<{ Params: IdParams }>(
+    '/:id/activities',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = leadActivityRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const activity = await appendActivity(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 201, body: { activity } };
+        },
+      });
+    },
+  );
+
+  // POST /v1/leads/:id/dnk — 501 stub, DNK service in Agent 15
+  app.post<{ Params: IdParams }>('/:id/dnk', { preHandler: requireAuth }, async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',
       status: 501,
-      detail: 'Lead list lands in Phase 1.2',
+      detail: 'DNK marking is handled by the do-not-knock service (Agent 15)',
     }),
   );
-
-  app.get('/:id', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Lead read lands in Phase 1.2',
-    }),
-  );
-
-  app.post('/:id/assign', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = assignLeadRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Lead assign lands in Phase 1.2',
-    });
-  });
-
-  app.post('/:id/activities', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = leadActivityRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Lead activity create lands in Phase 1.2',
-    });
-  });
 }

@@ -1,61 +1,167 @@
 /**
- * Knock routes — Phase 0 stubs.
+ * Knock routes — Phase 1.2 real implementation.
  *
- * Full implementation Phase 1.2:
- *   - POST /v1/knocks                       single knock (online path; idempotency REQUIRED)
- *   - POST /v1/knocks/batch                 offline reconcile (up to 500 knocks per batch,
- *                                           body limit bumped to 10 MB; per-knock idempotency
- *                                           inside `batchId` envelope)
- *   - GET  /v1/knocks                       list (filter session, territory, disposition, date);
- *                                           cursor-paginated
- *   - GET  /v1/knocks/:id                   read single knock with attachments
- *   - PATCH /v1/knocks/:id/disposition      manager-only correction (audit-logged + reason)
+ * Two route bundles share this file:
  *
- * Cross-cutting:
- *   - Idempotency-Key required on `/` POST. Batch uses `batchId` + per-knock `clientId`.
- *   - GPS fabrication detector runs server-side; flagged knocks land in `risk.flagged_knock`.
- *   - PII (notes, leadDraft) encrypted at rest via `services/pii-vault`.
- *   - Photo/signature uploads pre-signed via `POST /v1/uploads/sign` (separate module).
- *   - Emits `knock.created` webhook; publishes to Ably channel
- *     `org:<id>:territory:<id>:knocks` for live operator console.
+ *   registerKnockSessions @ /v1/sessions
+ *     POST   /                            start a session
+ *     POST   /:id/end                     end a session (idempotent)
+ *
+ *   registerKnock @ /v1/knocks
+ *     POST   /                            single knock (idempotency req'd)
+ *     POST   /batch                       offline reconcile (≤500 per call,
+ *                                         body limit bumped to 10 MB)
+ *     GET    /                            cursor-paginated list
+ *     GET    /:id                         read one
+ *     POST   /:id/contest                 501 — disposition correction
+ *                                         workflow lands in Phase 1.2
  */
 import type { FastifyInstance } from 'fastify';
-import { createKnockRequestSchema, knockBatchRequestSchema } from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import {
+  startSessionRequestSchema,
+  createKnockRequestSchema,
+  knockBatchRequestSchema,
+  listKnocksQuerySchema,
+} from './schemas';
+import {
+  startSession,
+  endSession,
+  createKnock,
+  createKnockBatch,
+  listKnocks,
+  getKnock,
+} from './service';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+
+interface IdParams {
+  id: string;
+}
+
+export async function registerKnockSessions(app: FastifyInstance): Promise<void> {
+  app.get('/_status', async () => ({ domain: 'knock-session', status: 'live', phase: '1.2' }));
+
+  // POST /v1/sessions — start a new KnockSession
+  app.post('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = startSessionRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const session = await startSession(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { session } };
+      },
+    });
+  });
+
+  // POST /v1/sessions/:id/end — end a session
+  app.post<{ Params: IdParams }>('/:id/end', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const session = await endSession(req.params.id, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 200, body: { session } };
+      },
+    });
+  });
+}
 
 export async function registerKnock(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'knock', status: 'scaffold', phase: '1.2' }));
+  app.get('/_status', async () => ({ domain: 'knock', status: 'live', phase: '1.2' }));
 
-  app.post('/', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createKnockRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Knock create lands in Phase 1.2',
+  // Bump body limit for batch route. Fastify resolves the highest limit on
+  // the route options if registered there; we use plugin-level so all
+  // POSTs under /v1/knocks can accept big offline reconcile payloads.
+  // 10 MB matches the public contract.
+  // NB: this only loosens for THIS encapsulated child app.
+  app.addHook('onRoute', (route) => {
+    if (route.method === 'POST') {
+      route.bodyLimit = 10 * 1024 * 1024;
+    }
+  });
+
+  // POST /v1/knocks/batch — declared first so Fastify doesn't shadow it.
+  app.post('/batch', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = knockBatchRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const result = await createKnockBatch(body.knocks, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: result };
+      },
     });
   });
 
-  app.post('/batch', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = knockBatchRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Knock batch sync lands in Phase 1.2',
+  // POST /v1/knocks — single
+  app.post('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = createKnockRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const result = await createKnock(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { knock: result.knock, deduped: result.deduped } };
+      },
     });
   });
 
-  app.get('/', async (_req, reply) =>
+  // GET /v1/knocks — list
+  app.get('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listKnocksQuerySchema.parse(req.query);
+    const result = await listKnocks(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // GET /v1/knocks/:id — one
+  app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const knock = await getKnock(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ knock });
+  });
+
+  // POST /v1/knocks/:id/contest — 501 stub
+  app.post<{ Params: IdParams }>('/:id/contest', { preHandler: requireAuth }, async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',
       status: 501,
-      detail: 'Knock list lands in Phase 1.2',
+      detail: 'Knock disposition contest workflow lands in Phase 1.2',
     }),
   );
 }

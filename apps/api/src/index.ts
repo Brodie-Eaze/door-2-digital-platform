@@ -27,7 +27,7 @@ import { registerAuth } from './domains/auth/routes';
 import { registerOrg } from './domains/org/routes';
 import { registerUser } from './domains/user/routes';
 import { registerTerritory } from './domains/territory/routes';
-import { registerKnock } from './domains/knock/routes';
+import { registerKnock, registerKnockSessions } from './domains/knock/routes';
 import { registerLead } from './domains/lead/routes';
 import { registerCrm } from './domains/crm/routes';
 import { registerConversion } from './domains/conversion/routes';
@@ -131,6 +131,7 @@ async function buildServer() {
   // Field capture + CRM (Phase 1.2)
   await app.register(registerTerritory, { prefix: '/v1/territories' });
   await app.register(registerKnock, { prefix: '/v1/knocks' });
+  await app.register(registerKnockSessions, { prefix: '/v1/sessions' });
   await app.register(registerLead, { prefix: '/v1/leads' });
   await app.register(registerConsent, { prefix: '/v1/consent' });
   await app.register(registerDoNotKnock, { prefix: '/v1/do-not-knock' });

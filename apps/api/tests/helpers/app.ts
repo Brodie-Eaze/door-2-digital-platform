@@ -12,6 +12,9 @@ import { registerCorrelationId } from '../../src/shared/middleware/correlation';
 import { registerAuth } from '../../src/domains/auth/routes';
 import { registerOrg } from '../../src/domains/org/routes';
 import { registerUser } from '../../src/domains/user/routes';
+import { registerTerritory } from '../../src/domains/territory/routes';
+import { registerKnock, registerKnockSessions } from '../../src/domains/knock/routes';
+import { registerLead } from '../../src/domains/lead/routes';
 import { prisma, shutdownDb } from '../../src/config/db';
 import { newId } from '@d2d/shared-utils';
 
@@ -27,6 +30,10 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await app.register(registerAuth, { prefix: '/v1/auth' });
   await app.register(registerOrg, { prefix: '/v1/orgs' });
   await app.register(registerUser, { prefix: '/v1/users' });
+  await app.register(registerTerritory, { prefix: '/v1/territories' });
+  await app.register(registerKnock, { prefix: '/v1/knocks' });
+  await app.register(registerKnockSessions, { prefix: '/v1/sessions' });
+  await app.register(registerLead, { prefix: '/v1/leads' });
   await app.ready();
   return app;
 }
