@@ -5,6 +5,7 @@ import {
   MessageCircle,
   Inbox,
   Kanban,
+  ListChecks,
   Megaphone,
   Phone,
   BarChart3,
@@ -40,9 +41,10 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       ],
     },
     {
-      label: 'Sales',
+      label: 'Contacts',
       items: [
-        { href: `${base}/leads`, label: 'Leads', icon: Inbox },
+        { href: `${base}/leads`, label: 'Leads inbox', icon: Inbox },
+        { href: `${base}/smart-lists`, label: 'Smart Lists', icon: ListChecks },
         { href: `${base}/pipeline`, label: 'Pipeline', icon: Kanban },
         { href: `${base}/inside-sales`, label: 'Calls', icon: Phone },
       ],
