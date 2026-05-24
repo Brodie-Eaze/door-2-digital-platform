@@ -19,7 +19,10 @@ export async function errorHandler(
     problem = { ...err.problem, traceId };
   } else if (err instanceof ZodError) {
     problem = {
-      ...Problems.validation('Request schema invalid', err.flatten().fieldErrors as unknown[]),
+      ...Problems.validation(
+        'Request schema invalid',
+        err.flatten().fieldErrors as unknown as unknown[],
+      ),
       traceId,
     };
   } else if ('statusCode' in err && typeof err.statusCode === 'number') {

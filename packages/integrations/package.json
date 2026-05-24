@@ -4,6 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "description": "Provider-adapter plug-in architecture for the AI Marketing Studio — Meta Marketing, Higgsfield, Claude, OpenAI, FLUX, Ideogram, Runway, HeyGen, Google Ads, TikTok.",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {

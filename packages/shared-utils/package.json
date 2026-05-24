@@ -4,6 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "description": "Cross-cutting utilities — BigInt money, RFC 7807 Problem Details, idempotency, hashing, ULID, audit-chain.",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {

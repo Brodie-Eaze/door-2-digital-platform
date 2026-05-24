@@ -22,6 +22,7 @@ import { redis, shutdownRedis } from './config/redis';
 import { errorHandler } from './shared/errors/handler';
 import { registerHealthRoutes } from './shared/health';
 import { registerCorrelationId } from './shared/middleware/correlation';
+import { newId } from '@d2d/shared-utils';
 import { registerAuth } from './domains/auth/routes';
 import { registerOrg } from './domains/org/routes';
 import { registerUser } from './domains/user/routes';
@@ -62,14 +63,7 @@ async function buildServer() {
     logger: log,
     trustProxy: true,
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
-    genReqId: () => {
-      // Use ULID for correlation ID — sortable + 26 chars
-      // ULID generator imported from shared-utils on first use
-      // (lazy import to keep build chain happy when Prisma generates)
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { newId } = require('@d2d/shared-utils/ulid');
-      return newId('req');
-    },
+    genReqId: () => newId('req'),
   });
 
   // Security headers

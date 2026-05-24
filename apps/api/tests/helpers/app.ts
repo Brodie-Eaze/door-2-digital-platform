@@ -1,0 +1,81 @@
+/**
+ * Test helpers — build a Fastify app with the same wiring as production,
+ * just without the listen() call. Tests use app.inject() to issue
+ * requests without binding a port.
+ *
+ * Also exposes `truncateAll()` to wipe mutable rows between suites.
+ */
+import Fastify, { type FastifyInstance } from 'fastify';
+import sensible from '@fastify/sensible';
+import { errorHandler } from '../../src/shared/errors/handler';
+import { registerCorrelationId } from '../../src/shared/middleware/correlation';
+import { registerAuth } from '../../src/domains/auth/routes';
+import { registerOrg } from '../../src/domains/org/routes';
+import { registerUser } from '../../src/domains/user/routes';
+import { prisma, shutdownDb } from '../../src/config/db';
+import { newId } from '@d2d/shared-utils';
+
+export async function buildTestApp(): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: false,
+    trustProxy: true,
+    genReqId: () => newId('req'),
+  });
+  await app.register(sensible);
+  await app.register(registerCorrelationId);
+  app.setErrorHandler(errorHandler);
+  await app.register(registerAuth, { prefix: '/v1/auth' });
+  await app.register(registerOrg, { prefix: '/v1/orgs' });
+  await app.register(registerUser, { prefix: '/v1/users' });
+  await app.ready();
+  return app;
+}
+
+/**
+ * Wipe rows from every domain table — order honours FK constraints. We
+ * truncate so the next test starts from a known empty state.
+ */
+export async function truncateAll(): Promise<void> {
+  const tables = [
+    'AuditEvent',
+    'IdempotencyRecord',
+    'RefreshToken',
+    'UserCredential',
+    'TerritoryAssignment',
+    'Knock',
+    'KnockSession',
+    'LeadActivity',
+    'ConsentRecord',
+    'Donation',
+    'Sale',
+    'Commission',
+    'PayoutBatch',
+    'CommissionPlan',
+    'Conversion',
+    'Lead',
+    'Territory',
+    'CampaignStateClearance',
+    'PaidSolicitorRegistration',
+    'Campaign',
+    'Creative',
+    'AdCampaign',
+    'AdAccount',
+    'WebhookDelivery',
+    'WebhookEndpoint',
+    'ApiKey',
+    'SsoConfiguration',
+    'OrgBilling',
+    'BrandKit',
+    'User',
+    'Org',
+    'Address',
+    'DoNotKnock',
+    'DoNotCall',
+  ];
+  const list = tables.map((t) => `"${t}"`).join(', ');
+  await prisma().$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE;`);
+}
+
+export async function teardown(): Promise<void> {
+  await shutdownDb();
+}

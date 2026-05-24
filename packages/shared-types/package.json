@@ -4,6 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "description": "Branded primitives, enums, and Zod DTO schemas shared across api + workers + web + mobile.",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {

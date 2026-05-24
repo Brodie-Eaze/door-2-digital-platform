@@ -23,7 +23,10 @@ export interface IdempotencyRecord {
 
 /** Hash the request body for idempotency-key matching. */
 export function hashRequestBody(body: unknown): string {
-  const canonical = canonicalize(body);
+  // canonicalize(undefined) returns `undefined` (a non-string) because
+  // JSON.stringify(undefined) === undefined; fall back to an empty-object
+  // canonical form so the hash is stable across bodyless POSTs.
+  const canonical = canonicalize(body ?? {}) ?? '{}';
   return createHash('sha256').update(canonical).digest('hex');
 }
 

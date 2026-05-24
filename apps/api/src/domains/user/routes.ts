@@ -1,84 +1,148 @@
 /**
- * User routes — Phase 0 stubs.
+ * User routes — invite / accept-invite / list / get / patch / archive.
  *
- * Full implementation Phase 1.1:
- *   - POST   /v1/users                    create staff/knocker; emits invite if `invite=true`
- *   - GET    /v1/users                    list (filter by role, manager, status); cursor-paginated
- *   - GET    /v1/users/:id                read single user (PII masked unless `unmask` scope)
- *   - PATCH  /v1/users/:id                update (role, manager, phone); audit-logged
- *   - POST   /v1/users/:id/invite         (re)send invite email with magic link
- *   - POST   /v1/users/:id/archive        soft-delete (status=archived); preserves audit trail
- *   - POST   /v1/users/:id/role           role change (org_admin+ only; step-up auth required)
- *   - POST   /v1/users/:id/reset-mfa      org_admin force-reset MFA (audit + notify subject)
- *
- * Cross-cutting:
- *   - TenantGuard required on every route — derives orgId from JWT.
- *   - RegionGuard required on writes — user.regionCode must match deploy region.
- *   - PII masking applied at egress (givenName, familyName, email, phone).
- *   - All writes idempotent via Idempotency-Key header.
+ * Role / MFA-reset endpoints are still 501 stubs (Phase 1.2).
  */
 import type { FastifyInstance } from 'fastify';
 import {
   createUserRequestSchema,
   updateUserRequestSchema,
   inviteUserRequestSchema,
-} from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+  acceptInviteRequestSchema,
+  listUsersQuerySchema,
+} from './schemas';
+import { inviteUser, acceptInvite, listUsers, getUser, updateUser, archiveUser } from './service';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+
+interface UserIdParams {
+  id: string;
+}
 
 export async function registerUser(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'user', status: 'scaffold', phase: '1.1' }));
+  app.get('/_status', async () => ({ domain: 'user', status: 'live', phase: '1.1' }));
 
-  app.post('/', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createUserRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'User create lands in Phase 1.1',
+  // POST /v1/users — invite a user; returns inviteToken
+  app.post('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    // Combine create + invite shapes — caller may include expiresInDays inline
+    const merged = createUserRequestSchema.merge(inviteUserRequestSchema.partial()).parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const result = await inviteUser(merged, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: result };
+      },
     });
   });
 
-  app.get('/', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'User list lands in Phase 1.1',
-    }),
+  // POST /v1/users/accept-invite — unauthenticated
+  app.post('/accept-invite', async (req, reply) => {
+    const body = acceptInviteRequestSchema.parse(req.body);
+    const user = await acceptInvite(body);
+    return reply.code(200).send({ user });
+  });
+
+  // GET /v1/users — list within actor's org
+  app.get('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listUsersQuerySchema.parse(req.query);
+    const result = await listUsers(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // GET /v1/users/:id
+  app.get<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const user = await getUser(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ user });
+  });
+
+  // PATCH /v1/users/:id
+  app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = updateUserRequestSchema.parse(req.body);
+    const user = await updateUser(req.params.id, body, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ user });
+  });
+
+  // POST /v1/users/:id/archive
+  app.post<{ Params: UserIdParams }>(
+    '/:id/archive',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await archiveUser(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
   );
 
-  app.patch('/:id', async (req, reply) => {
-    const parsed = updateUserRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'User update lands in Phase 1.1',
-    });
-  });
+  // POST /v1/users/:id/invite — resend invite (501 until rotation lands)
+  app.post<{ Params: UserIdParams }>(
+    '/:id/invite',
+    { preHandler: requireAuth },
+    async (_req, reply) =>
+      reply.code(501).type('application/problem+json').send({
+        type: 'https://docs.d2d.io/problems/not-implemented',
+        title: 'Not implemented',
+        status: 501,
+        detail: 'Invite-resend lands in Phase 1.2',
+      }),
+  );
 
-  app.post('/:id/invite', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = inviteUserRequestSchema.parse(req.body ?? {});
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'User invite lands in Phase 1.1',
-    });
-  });
+  // POST /v1/users/:id/role — 501 (step-up required, Phase 1.2)
+  app.post<{ Params: UserIdParams }>(
+    '/:id/role',
+    { preHandler: requireAuth },
+    async (_req, reply) =>
+      reply.code(501).type('application/problem+json').send({
+        type: 'https://docs.d2d.io/problems/not-implemented',
+        title: 'Not implemented',
+        status: 501,
+        detail: 'Role change with step-up auth lands in Phase 1.2',
+      }),
+  );
 
-  app.post('/:id/archive', async (req, reply) => {
-    requireIdempotencyKey(req);
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'User archive lands in Phase 1.1',
-    });
-  });
+  // POST /v1/users/:id/reset-mfa — 501 (Phase 1.2)
+  app.post<{ Params: UserIdParams }>(
+    '/:id/reset-mfa',
+    { preHandler: requireAuth },
+    async (_req, reply) =>
+      reply.code(501).type('application/problem+json').send({
+        type: 'https://docs.d2d.io/problems/not-implemented',
+        title: 'Not implemented',
+        status: 501,
+        detail: 'MFA reset lands in Phase 1.2',
+      }),
+  );
 }
