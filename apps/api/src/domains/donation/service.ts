@@ -1,0 +1,211 @@
+/**
+ * Donation service — Phase 1.3 real (pause / cancel / change-amount + read).
+ *
+ * Donations are children of Conversion rows; we load the parent on every
+ * mutation to honour tenant isolation.
+ */
+import type { RegionCode } from '@prisma/client';
+import { Problems, ProblemError } from '@d2d/shared-utils';
+import { prisma } from '../../config/db';
+import { AuditService } from '../audit/service';
+import type {
+  CancelDonationRequest,
+  ChangeDonationAmountRequest,
+  PauseDonationRequest,
+} from './schemas';
+
+interface ActorContext {
+  userId: string;
+  orgId: string;
+  regionCode: RegionCode;
+}
+
+export interface DonationPublic {
+  id: string;
+  conversionId: string;
+  donorEmail: string;
+  amountCents: string;
+  currency: string;
+  frequency: string | null;
+  status: string;
+  receiptNumber: string | null;
+  startedAt: string;
+  cancelledAt: string | null;
+}
+
+async function loadDonationAndAssertTenant(
+  id: string,
+  actor: ActorContext,
+): Promise<{
+  row: {
+    id: string;
+    conversionId: string;
+    donorEmail: string;
+    amountCents: bigint;
+    currency: string;
+    frequency: string | null;
+    status: string;
+    receiptNumber: string | null;
+    startedAt: Date;
+    cancelledAt: Date | null;
+  };
+  orgId: string;
+}> {
+  const donation = await prisma().donation.findUnique({
+    where: { id },
+    include: { conversion: { select: { orgId: true } } },
+  });
+  if (!donation) throw new ProblemError(Problems.notFound('Donation', id));
+  if (donation.conversion.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(donation.conversion.orgId));
+  }
+  return { row: donation, orgId: donation.conversion.orgId };
+}
+
+export async function getDonation(id: string, actor: ActorContext): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  return toPublic(row);
+}
+
+export async function pauseDonation(
+  id: string,
+  input: PauseDonationRequest,
+  actor: ActorContext,
+): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  if (row.status === 'paused') return toPublic(row);
+  if (row.status === 'cancelled') {
+    throw new ProblemError(Problems.conflict('Cannot pause a cancelled donation'));
+  }
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { status: 'paused' },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'donation.paused',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'paused' },
+      ...(input.resumeAt || input.reason
+        ? {
+            metadata: {
+              ...(input.resumeAt && { resumeAt: input.resumeAt }),
+              ...(input.reason && { reason: input.reason }),
+            },
+          }
+        : {}),
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+export async function cancelDonation(
+  id: string,
+  input: CancelDonationRequest,
+  actor: ActorContext,
+): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  if (row.status === 'cancelled') return toPublic(row);
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { status: 'cancelled', cancelledAt: new Date() },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'donation.cancelled',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'cancelled' },
+      metadata: {
+        reason: input.reason,
+        ...(input.refundLastChargeCents !== undefined && {
+          refundLastChargeCents: input.refundLastChargeCents.toString(),
+        }),
+      },
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+export async function changeDonationAmount(
+  id: string,
+  input: ChangeDonationAmountRequest,
+  actor: ActorContext,
+): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  if (!row.frequency) {
+    throw new ProblemError(
+      Problems.validation('Amount change only applies to recurring donations'),
+    );
+  }
+  if (row.status === 'cancelled') {
+    throw new ProblemError(Problems.conflict('Cannot change amount of a cancelled donation'));
+  }
+  const newAmount = input.newAmountCents;
+  if (newAmount <= 0n) {
+    throw new ProblemError(Problems.validation('newAmountCents must be > 0'));
+  }
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { amountCents: newAmount },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'donation.amount_changed',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { amountCents: row.amountCents.toString() },
+      afterJson: { amountCents: newAmount.toString() },
+      ...(input.effectiveAt || input.reason
+        ? {
+            metadata: {
+              ...(input.effectiveAt && { effectiveAt: input.effectiveAt }),
+              ...(input.reason && { reason: input.reason }),
+            },
+          }
+        : {}),
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+function toPublic(r: {
+  id: string;
+  conversionId: string;
+  donorEmail: string;
+  amountCents: bigint;
+  currency: string;
+  frequency: string | null;
+  status: string;
+  receiptNumber: string | null;
+  startedAt: Date;
+  cancelledAt: Date | null;
+}): DonationPublic {
+  return {
+    id: r.id,
+    conversionId: r.conversionId,
+    donorEmail: r.donorEmail,
+    amountCents: r.amountCents.toString(),
+    currency: r.currency,
+    frequency: r.frequency,
+    status: r.status,
+    receiptNumber: r.receiptNumber,
+    startedAt: r.startedAt.toISOString(),
+    cancelledAt: r.cancelledAt?.toISOString() ?? null,
+  };
+}

@@ -1,66 +1,130 @@
 /**
- * Webhook routes — Phase 0 stubs.
+ * Webhook routes — Phase 1.3 real.
  *
- * Full implementation Phase 1.3:
- *   - POST   /v1/webhooks/endpoints                 register endpoint (URL + event types + description)
- *   - GET    /v1/webhooks/endpoints                 list endpoints
- *   - GET    /v1/webhooks/endpoints/:id             read endpoint with current secret prefix + delivery KPIs
- *   - PATCH  /v1/webhooks/endpoints/:id             update URL / event types
- *   - DELETE /v1/webhooks/endpoints/:id             disable endpoint (preserves history)
- *   - POST   /v1/webhooks/endpoints/:id/rotate-secret rotate HMAC secret (returns new secret once)
- *   - GET    /v1/webhooks/endpoints/:id/deliveries  delivery log (cursor-paginated, last 30d)
- *   - POST   /v1/webhooks/deliveries/:id/replay     replay a delivery (idempotent at receiver)
+ *   POST   /v1/webhooks/endpoints                    register endpoint (returns plaintext secret once)
+ *   GET    /v1/webhooks/endpoints                    list (cursor-paginated, status filter)
+ *   POST   /v1/webhooks/endpoints/:id/rotate-secret  mint new secret, return plaintext once
+ *   DELETE /v1/webhooks/endpoints/:id                soft-delete (status='archived')
+ *   GET    /v1/webhooks/endpoints/:id/deliveries     delivery log (cursor-paginated)
  *
- * Cross-cutting:
- *   - Signature: `D2D-Signature: t=<unix>,v1=<HMAC-SHA256(secret, t + '.' + body)>`.
- *     ±5min replay window enforced at receiver; receiver MUST be idempotent on event.id (ULID).
- *   - Retry schedule: 30s → 2m → 10m → 1h → 6h → 24h → DLQ.
- *   - Secret rotation supports overlap window (both old + new sigs accepted for 24h).
+ * Signature contract:
+ *   D2D-Signature: t=<unix>,v1=<hex-hmac-sha256(secret, t + "." + body)>
+ *   Receivers MUST be idempotent on event.id (ULID) and verify within ±5min.
+ *
+ * Routes are mounted at `/v1/webhooks` so the relative paths below read as
+ * the full URL above.
  */
 import type { FastifyInstance } from 'fastify';
-import { createWebhookEndpointSchema } from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { Problems, ProblemError } from '@d2d/shared-utils';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+import { WebhookService } from './service';
+import {
+  createWebhookEndpointRequestSchema,
+  listWebhookDeliveriesQuerySchema,
+  listWebhookEndpointsQuerySchema,
+} from './schemas';
+
+interface IdParams {
+  id: string;
+}
+
+const ADMIN_ROLES = new Set(['super_admin', 'org_admin']);
+
+function requireAdmin(role: string): void {
+  if (!ADMIN_ROLES.has(role)) {
+    throw new ProblemError(Problems.forbidden('org_admin role required for webhook management'));
+  }
+}
 
 export async function registerWebhook(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'webhook', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', async () => ({ domain: 'webhook', status: 'live', phase: '1.3' }));
 
-  app.post('/', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createWebhookEndpointSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Webhook endpoint register lands in Phase 1.3',
+  // POST /v1/webhooks/endpoints
+  app.post('/endpoints', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    requireAdmin(ctx.role);
+    const body = createWebhookEndpointRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const endpoint = await WebhookService.registerEndpoint(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { endpoint } };
+      },
     });
   });
 
-  app.get('/', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Webhook endpoint list lands in Phase 1.3',
-    }),
+  // GET /v1/webhooks/endpoints
+  app.get('/endpoints', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listWebhookEndpointsQuerySchema.parse(req.query);
+    const result = await WebhookService.listEndpoints(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // POST /v1/webhooks/endpoints/:id/rotate-secret
+  app.post<{ Params: IdParams }>(
+    '/endpoints/:id/rotate-secret',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      requireAdmin(ctx.role);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const endpoint = await WebhookService.rotateSecret(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { endpoint } };
+        },
+      });
+    },
   );
 
-  app.post('/:id/rotate-secret', async (req, reply) => {
-    requireIdempotencyKey(req);
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Webhook secret rotation lands in Phase 1.3',
-    });
-  });
+  // DELETE /v1/webhooks/endpoints/:id
+  app.delete<{ Params: IdParams }>(
+    '/endpoints/:id',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      requireAdmin(ctx.role);
+      const endpoint = await WebhookService.softDeleteEndpoint(req.params.id, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as never,
+      });
+      return reply.code(200).send({ endpoint });
+    },
+  );
 
-  app.get('/:id/deliveries', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Webhook delivery log lands in Phase 1.3',
-    }),
+  // GET /v1/webhooks/endpoints/:id/deliveries
+  app.get<{ Params: IdParams }>(
+    '/endpoints/:id/deliveries',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const query = listWebhookDeliveriesQuerySchema.parse(req.query);
+      const result = await WebhookService.listDeliveries(req.params.id, query, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as never,
+      });
+      return reply.code(200).send(result);
+    },
   );
 }

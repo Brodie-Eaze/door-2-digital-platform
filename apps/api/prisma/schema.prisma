@@ -507,12 +507,18 @@ model Lead {
   vertical      Vertical
   campaignId    String?
   campaign      Campaign?  @relation(fields: [campaignId], references: [id])
-  givenName     String /// PII
-  familyName    String /// PII
-  email         String? /// PII
-  emailDigest   String?
-  phone         String? /// PII
-  phoneDigest   String?
+  givenName     String /// PII (legacy plaintext — name kept readable for routing UIs)
+  familyName    String /// PII (legacy plaintext)
+  email         String? /// PII (legacy plaintext — superseded by emailVault when present)
+  emailDigest   String? // HMAC-SHA256 search digest
+  phone         String? /// PII (legacy plaintext — superseded by phoneVault when present)
+  phoneDigest   String? // HMAC-SHA256 search digest
+  // PII vault — Agent 15: envelope-encrypted blobs binding ciphertext to
+  // (rowType, rowId) via AAD. Legacy plaintext columns above retained for
+  // backwards compat; pii-vault unmask is the only path to plaintext.
+  emailVault    Json?
+  phoneVault    Json?
+  notesVault    Json?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -889,4 +895,54 @@ model RefreshToken {
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// PII Vault — two-person JIT unmask requests (Agent 15)
+// ───────────────────────────────────────────────────────────────────────────
+
+model PiiUnmaskRequest {
+  id              String    @id // pur_*
+  orgId           String
+  regionCode      RegionCode
+  requesterId     String
+  approverId      String?
+  rowType         String // Lead | Donation | Sale | Conversion
+  rowId           String
+  fields          String[]  // email | phone | address | fullName | paymentLast4
+  justification   String
+  status          String    @default("pending") // pending | approved | rejected | revealed | expired
+  grantTokenHash  String?
+  grantExpiresAt  DateTime?
+  revealedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectedReason  String?
+  createdAt       DateTime  @default(now())
+
+  @@index([orgId, status])
+  @@index([rowType, rowId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Notification Log — Agent 15 (sms / email / push channels)
+// ───────────────────────────────────────────────────────────────────────────
+
+model NotificationLog {
+  id                 String    @id // nlg_*
+  orgId              String
+  regionCode         RegionCode
+  channel            String // sms | email | push
+  recipientHash      String // HMAC-SHA256 of normalised recipient — never plaintext
+  subject            String?
+  bodyPreview        String // up to 200 chars (no PII bleed)
+  fromBrand          String?
+  status             String    @default("queued") // queued | sent | failed | bounced
+  providerExternalId String?
+  providerError      String?
+  payload            Json      @default("{}")
+  createdAt          DateTime  @default(now())
+  sentAt             DateTime?
+
+  @@index([orgId, channel, status])
+  @@index([orgId, createdAt])
 }

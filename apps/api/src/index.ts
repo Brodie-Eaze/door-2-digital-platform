@@ -147,7 +147,7 @@ async function buildServer() {
   await app.register(registerCommission, { prefix: '/v1/commissions' });
   await app.register(registerPayout, { prefix: '/v1/payout-batches' });
   await app.register(registerBilling, { prefix: '/v1/billing' });
-  await app.register(registerWebhook, { prefix: '/v1/webhooks/endpoints' });
+  await app.register(registerWebhook, { prefix: '/v1/webhooks' });
   await app.register(registerRealtime, { prefix: '/v1/realtime' });
 
   // Privacy ops (Phase 1.4)

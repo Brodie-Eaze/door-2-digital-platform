@@ -15,10 +15,11 @@
  * TODO(Agent 15 / pii-vault): route through the deterministic-encrypt
  * + envelope-encrypt path once the vault domain is live.
  */
-import type { LeadStatus, Prisma, RegionCode, Vertical } from '@prisma/client';
-import { emailDigest, phoneDigest, newId, Problems, ProblemError } from '@d2d/shared-utils';
+import type { LeadStatus, RegionCode, Vertical } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
-import { env } from '../../config/env';
+import { PiiVaultService } from '../pii-vault/service';
 import { writeAudit } from '../../shared/audit/write';
 import type {
   CreateLeadRequest,
@@ -183,11 +184,13 @@ export async function createLead(
   }
 
   const id = newId('lead');
-  const e = env();
-  // TODO(pii-vault): replace these plaintext writes with deterministic-encrypt
-  // + envelope-encrypt routing once Agent 15 lands the vault.
-  const emailDig = input.email ? emailDigest(input.email, e.PII_SEARCH_KEY) : null;
-  const phoneDig = input.phone ? phoneDigest(input.phone, e.PII_SEARCH_KEY) : null;
+  // Agent 15 — PII vault wraps email/phone/notes. Digests use HMAC-SHA256
+  // (deterministic) so unique lookups still work without holding plaintext.
+  const emailVault = input.email ? PiiVaultService.encryptForRow('Lead', id, input.email) : null;
+  const phoneVault = input.phone ? PiiVaultService.encryptForRow('Lead', id, input.phone) : null;
+  const emailDig = input.email ? PiiVaultService.digest(input.email) : null;
+  const phoneDig = input.phone ? PiiVaultService.digest(input.phone) : null;
+  const notesVault = input.notes ? PiiVaultService.encryptForRow('Lead', id, input.notes) : null;
 
   const result = await prisma().$transaction(async (tx) => {
     const row = await tx.lead.create({
@@ -203,10 +206,15 @@ export async function createLead(
         campaignId: input.campaignId ?? null,
         givenName: input.givenName,
         familyName: input.familyName,
+        // Legacy plaintext columns kept for backwards compatibility — the
+        // canonical PII lives in *Vault and is read via PiiVaultService.
         email: input.email ?? null,
         emailDigest: emailDig,
+        emailVault: emailVault ? (emailVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
         phone: input.phone ?? null,
         phoneDigest: phoneDig,
+        phoneVault: phoneVault ? (phoneVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        notesVault: notesVault ? (notesVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       },
     });
     await writeAudit(tx, {

@@ -1,57 +1,76 @@
 /**
- * Sale routes — Phase 0 stubs.
+ * Sale routes — Phase 1.3 real (read + installer-handoff).
  *
- * Full implementation Phase 1.3:
- *   - POST /v1/sales                              create sale tied to existing Conversion
- *   - GET  /v1/sales                              list (filter product, period, installer)
- *   - GET  /v1/sales/:id                          read with installer schedule + commission preview
- *   - PATCH /v1/sales/:id                         update product / contract metadata
- *   - POST /v1/sales/:id/installer-handoff        push to installer org + scheduling system
- *   - POST /v1/sales/:id/cancel                   cancel pre-install (refund + clawback)
- *
- * Cross-cutting:
- *   - Sales unlike Donations are one-shot; commission accrues on `conversion.finalised`
- *     but `installer-handoff` triggers the `sale.handoff.completed` webhook for
- *     downstream installer notification.
- *   - Refund/cancel path mirrors donation cancel — flips Commission rows to clawed_back.
+ *   GET   /v1/sales/:id                       read with installer schedule
+ *   POST  /v1/sales/:id/installer-handoff     set installer + scheduled install date
+ *   POST  /v1/sales                           501 — sales are created via /v1/conversions
+ *   POST  /v1/sales/:id/cancel                501 — Phase 1.4 refund + clawback
  */
 import type { FastifyInstance } from 'fastify';
-import { createSaleRequestSchema, installerHandoffRequestSchema } from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+import { getSale, installerHandoff } from './service';
+import { installerHandoffRequestSchema } from './schemas';
+
+interface IdParams {
+  id: string;
+}
 
 export async function registerSale(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'sale', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', async () => ({ domain: 'sale', status: 'live', phase: '1.3' }));
 
-  app.post('/', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createSaleRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Sale create lands in Phase 1.3',
-    });
-  });
-
-  app.get('/:id', async (_req, reply) =>
+  // POST /v1/sales — 501, sales are created via /v1/conversions
+  app.post('/', { preHandler: requireAuth }, async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',
       status: 501,
-      detail: 'Sale read lands in Phase 1.3',
+      detail: 'Create a sale via POST /v1/conversions with type=sale_commercial',
     }),
   );
 
-  app.post('/:id/installer-handoff', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = installerHandoffRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
+  // GET /v1/sales/:id
+  app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const sale = await getSale(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ sale });
+  });
+
+  // POST /v1/sales/:id/installer-handoff
+  app.post<{ Params: IdParams }>(
+    '/:id/installer-handoff',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = installerHandoffRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const sale = await installerHandoff(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { sale } };
+        },
+      });
+    },
+  );
+
+  // POST /v1/sales/:id/cancel — Phase 1.4
+  app.post<{ Params: IdParams }>('/:id/cancel', { preHandler: requireAuth }, async (_req, reply) =>
+    reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',
       status: 501,
-      detail: 'Sale installer handoff lands in Phase 1.3',
-    });
-  });
+      detail: 'Sale cancel + clawback lands in Phase 1.4',
+    }),
+  );
 }

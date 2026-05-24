@@ -29,6 +29,11 @@ const envSchema = z.object({
   AUDIT_CHAIN_SECRET: z.string().min(32),
   KMS_DEV_SECRET: z.string().length(64).optional(),
   AWS_KMS_KEY_ARN: z.string().optional(),
+  // PII vault — Agent 15: dev "KMS" key wraps per-row DEKs; SIV key
+  // produces deterministic search digests. 32 bytes base64 = ~44 chars.
+  // Production replaces both with AWS KMS-backed values.
+  PII_KMS_KEY: z.string().min(40),
+  PII_SIV_KEY: z.string().min(40),
 
   // Auth
   JWT_ACCESS_SECRET: z.string().min(32),
@@ -97,10 +102,7 @@ export function env(): Env {
     const parsed = envSchema.safeParse(process.env);
     if (!parsed.success) {
       // eslint-disable-next-line no-console
-      console.error(
-        'Environment validation failed:\n',
-        parsed.error.flatten().fieldErrors,
-      );
+      console.error('Environment validation failed:\n', parsed.error.flatten().fieldErrors);
       process.exit(1);
     }
     _env = parsed.data;

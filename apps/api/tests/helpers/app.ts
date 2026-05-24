@@ -15,6 +15,13 @@ import { registerUser } from '../../src/domains/user/routes';
 import { registerTerritory } from '../../src/domains/territory/routes';
 import { registerKnock, registerKnockSessions } from '../../src/domains/knock/routes';
 import { registerLead } from '../../src/domains/lead/routes';
+import { registerAudit } from '../../src/domains/audit/routes';
+import { registerPiiVault } from '../../src/domains/pii-vault/routes';
+import { registerConversion } from '../../src/domains/conversion/routes';
+import { registerDonation } from '../../src/domains/donation/routes';
+import { registerSale } from '../../src/domains/sale/routes';
+import { registerWebhook } from '../../src/domains/webhook/routes';
+import { registerNotification } from '../../src/domains/notification/routes';
 import { prisma, shutdownDb } from '../../src/config/db';
 import { newId } from '@d2d/shared-utils';
 
@@ -34,6 +41,13 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await app.register(registerKnock, { prefix: '/v1/knocks' });
   await app.register(registerKnockSessions, { prefix: '/v1/sessions' });
   await app.register(registerLead, { prefix: '/v1/leads' });
+  await app.register(registerAudit, { prefix: '/v1/audit/events' });
+  await app.register(registerPiiVault, { prefix: '/v1/pii' });
+  await app.register(registerConversion, { prefix: '/v1/conversions' });
+  await app.register(registerDonation, { prefix: '/v1/donations' });
+  await app.register(registerSale, { prefix: '/v1/sales' });
+  await app.register(registerWebhook, { prefix: '/v1/webhooks' });
+  await app.register(registerNotification, { prefix: '/v1/notifications' });
   await app.ready();
   return app;
 }
@@ -78,6 +92,8 @@ export async function truncateAll(): Promise<void> {
     'Address',
     'DoNotKnock',
     'DoNotCall',
+    'PiiUnmaskRequest',
+    'NotificationLog',
   ];
   const list = tables.map((t) => `"${t}"`).join(', ');
   await prisma().$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE;`);
