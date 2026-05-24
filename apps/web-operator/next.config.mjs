@@ -45,17 +45,11 @@ function buildCsp() {
       'https://*.basemaps.cartocdn.com',
       // Demo creative previews (Marketing Studio) — free seeded placeholder images.
       // Real creative storage will be S3/R2 in Phase 1.3 (per ADR-0008).
+      // Marketing Studio now uses a same-origin /creative-bank/ photo bank — no
+      // third-party image hosts required for theme-relevant creatives.
       'https://picsum.photos',
       'https://fastly.picsum.photos',
       'https://i.pravatar.cc',
-      'https://images.unsplash.com',
-      // LoremFlickr — keyword-driven photo lookup from Flickr's pool (e.g. /food,
-      // /solar-panels, /pest-control). Each call returns a real themed photo. Used
-      // by creative-images.ts picker for relevant Marketing Studio previews.
-      'https://loremflickr.com',
-      'https://*.loremflickr.com',
-      'https://live.staticflickr.com',
-      'https://*.staticflickr.com',
     ],
     'font-src': ["'self'", 'data:'],
     'connect-src': [

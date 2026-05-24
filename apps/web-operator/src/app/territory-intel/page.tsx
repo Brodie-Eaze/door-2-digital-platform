@@ -246,7 +246,7 @@ export default function TerritoryIntelPage(): JSX.Element {
         </Banner>
 
         {showNewZoneBanner && (
-          <Banner tone="warning">
+          <Banner tone="warn">
             <span className="text-[13px]">
               Draw mode coming in Phase 1.2 — for now, click any cell on the map to drill in and
               assign a rep.

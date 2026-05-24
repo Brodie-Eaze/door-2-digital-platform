@@ -1,17 +1,14 @@
 /**
  * Themed creative photo picker for the Marketing Studio.
  *
- * Strategy: LoremFlickr keyword endpoints. Each theme maps to a set of
- * Flickr-friendly keywords, and the picker builds a URL like:
+ * Strategy: hand-curated local photo bank under
+ * `apps/web-operator/public/creative-bank/<theme>/<n>.jpg`. Photos were
+ * downloaded once from Unsplash search results, visually verified to match
+ * their theme, then served same-origin — no third-party reliability, no
+ * keyword roulette, no CSP issues, no API key. Each theme has 5 verified
+ * photos; the picker rotates by deterministic hash of the creative id.
  *
- *   https://loremflickr.com/600/600/food,family,meal?lock=<hash(id)>
- *
- * `lock=<n>` makes the result deterministic — same creative id always gets
- * the same photo so HMR + reloads don't reshuffle. Real photos, no curated
- * ID list to keep in sync. CSP allows loremflickr.com + staticflickr.com.
- *
- * When we ship real storage in Phase 1.3 (per ADR-0008), creative URLs come
- * from the org's S3/R2 bucket via signed URL. This file goes away then.
+ * Real creative storage lands in Phase 1.3 (S3/R2 per ADR-0008).
  */
 
 export type CreativeTheme =
@@ -30,62 +27,86 @@ export type CreativeTheme =
   | 'home_services'
   | 'business_b2b';
 
-/**
- * Flickr-friendly keyword groups per theme. Comma-separated keywords narrow
- * the photo pool — keep them concrete (objects/scenes) not abstract.
- */
-const THEME_KEYWORDS: Record<CreativeTheme, string> = {
-  charity_food: 'food,family,meal',
-  charity_water: 'water,well,village',
-  charity_children: 'children,school,classroom',
-  charity_medical: 'clinic,nurse,medical',
-  charity_disaster: 'disaster,relief,refugee',
-  charity_environment: 'forest,ocean,nature',
-  charity_animals: 'rescue,dog,puppy',
-  solar: 'solar,panel,rooftop',
-  pest_control: 'house,suburban,home',
-  energy_telco: 'power,electricity,grid',
-  healthcare: 'hospital,nurse,doctor',
-  security: 'security,camera,doorbell',
-  home_services: 'home,garden,lawn',
-  business_b2b: 'office,team,meeting',
+/** Photos per theme. Numbers match files in /public/creative-bank/<theme>/<n>.jpg */
+const PHOTOS_PER_THEME: Record<CreativeTheme, number> = {
+  charity_food: 5,
+  charity_water: 5,
+  charity_children: 5,
+  charity_medical: 5,
+  charity_disaster: 5,
+  charity_environment: 5,
+  charity_animals: 5,
+  solar: 5,
+  pest_control: 5,
+  energy_telco: 5,
+  healthcare: 5,
+  security: 5,
+  home_services: 5,
+  business_b2b: 5,
 };
 
 const FALLBACK_THEME: CreativeTheme = 'business_b2b';
 
 /**
- * djb2 hash → stable integer from a string. Used as the `lock` param so the
- * same creative id always renders the same photo.
+ * djb2 hash → stable integer from a string. Used to pick which of the N
+ * photos for a theme this creative id should display.
  */
 function djb2(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
     h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
   }
-  return h % 100000; // LoremFlickr accepts any positive int
+  return h;
 }
 
 /**
- * Pick a deterministic, theme-relevant image URL for a creative.
+ * Pick a deterministic, theme-relevant image path for a creative.
  *
- *   pickCreativeImage('charity_food', 'c-001', { w: 600, h: 750 })
- *   → https://loremflickr.com/600/750/food,family,meal?lock=42137
+ *   pickCreativeImage('charity_food', 'c-001')
+ *   → /creative-bank/charity_food/3.jpg
+ *
+ * `opts.w` / `opts.h` are accepted for backward compatibility but ignored —
+ * source photos are 900×900 and the browser handles resizing.
  */
 export function pickCreativeImage(
   theme: CreativeTheme,
   id: string,
-  opts: { w?: number; h?: number } = {},
+  _opts: { w?: number; h?: number } = {},
 ): string {
-  const keywords = THEME_KEYWORDS[theme] ?? THEME_KEYWORDS[FALLBACK_THEME];
-  const lock = djb2(id);
-  const w = opts.w ?? 600;
-  const h = opts.h ?? 600;
-  return `https://loremflickr.com/${w}/${h}/${encodeURIComponent(keywords)}?lock=${lock}`;
+  const t = PHOTOS_PER_THEME[theme] ? theme : FALLBACK_THEME;
+  const count = PHOTOS_PER_THEME[t];
+  const n = (djb2(id) % count) + 1; // 1-based
+  return `/creative-bank/${t}/${n}.jpg`;
 }
+
+/**
+ * Hint table — if vertical exactly matches a theme name, use it directly
+ * rather than running the regex inference.
+ */
+const VERTICAL_THEMES: Record<string, CreativeTheme> = {
+  charity_food: 'charity_food',
+  charity_water: 'charity_water',
+  charity_children: 'charity_children',
+  charity_medical: 'charity_medical',
+  charity_disaster: 'charity_disaster',
+  charity_environment: 'charity_environment',
+  charity_animals: 'charity_animals',
+  solar: 'solar',
+  pest_control: 'pest_control',
+  energy_telco: 'energy_telco',
+  healthcare: 'healthcare',
+  security: 'security',
+  home_services: 'home_services',
+  business_b2b: 'business_b2b',
+};
 
 /**
  * Infer a theme from a creative's vertical + headline when fixture data
  * doesn't carry an explicit `theme` field.
+ *
+ * Charity copy without a specific keyword (food/water/medical/disaster/
+ * environment/animals) defaults to charity_children — sponsorship / general
+ * giving creatives are the safe visual default for "charity" copy.
  */
 export function inferTheme(input: {
   vertical?: string;
@@ -99,37 +120,65 @@ export function inferTheme(input: {
   const text = `${input.headline ?? ''} ${input.copy ?? ''} ${input.account ?? ''}`.toLowerCase();
   const vertical = (input.vertical ?? '').toLowerCase();
 
-  if (vertical.includes('charity')) {
-    if (/\b(feed|hungr|food|meal|families\s*fed|kitchen|hunger)\b/.test(text))
+  // 1. Exact vertical → theme hint
+  if (VERTICAL_THEMES[vertical]) return VERTICAL_THEMES[vertical];
+
+  // 2. Solar wins outright if vertical or copy mentions it (even without keywords)
+  if (vertical.includes('solar') || /\b(solar|panel|kilowatt|kwh|rooftop\s*solar)\b/.test(text)) {
+    return 'solar';
+  }
+
+  // 3. Charity inference
+  if (vertical.includes('charity') || vertical.includes('nonprofit') || vertical.includes('ngo')) {
+    if (/\b(feed|hungr|food|meal|families\s*fed|kitchen|hunger|pantry)\b/.test(text))
       return 'charity_food';
-    if (/\b(water|well|drink|thirst|clean\s*water)\b/.test(text)) return 'charity_water';
-    if (/\b(child|kid|sponsor|school|learn|education|classroom|teach)\b/.test(text))
-      return 'charity_children';
-    if (/\b(clinic|vaccin|medical|nurse|doctor|treatment|health|disease)\b/.test(text))
+    if (/\b(water|well|drink|thirst|clean\s*water|sanitation)\b/.test(text)) return 'charity_water';
+    if (
+      /\b(clinic|vaccin|medical|nurse|doctor|treatment|disease|surgery|oncolog|hospital)\b/.test(
+        text,
+      )
+    )
       return 'charity_medical';
-    if (/\b(disaster|refug|relief|crisis|recover|earthquake|flood|hurricane|war)\b/.test(text))
+    if (
+      /\b(disaster|refug|relief|crisis|recover|earthquake|flood|hurricane|war|emergency)\b/.test(
+        text,
+      )
+    )
       return 'charity_disaster';
     if (
-      /\b(forest|tree|ocean|environment|climate|reef|coral|wildlife|conserv|sustainab|planet)\b/.test(
+      /\b(forest|tree|ocean|environment|climate|reef|coral|wildlife|conserv|sustainab|planet|reforestation)\b/.test(
         text,
       )
     )
       return 'charity_environment';
-    if (/\b(dog|cat|puppy|kitten|pet|rescue|shelter|paw|animal|wildlife)\b/.test(text))
+    if (/\b(dog|cat|puppy|kitten|pet|rescue|shelter|paw|animal)\b/.test(text))
       return 'charity_animals';
+    // Charity context without specific keyword → children/sponsorship (safe default)
     return 'charity_children';
   }
 
-  if (/\b(solar|panel|kilowatt|kwh|sun|rooftop\s*solar)\b/.test(text)) return 'solar';
+  // 4. Vertical-specific keyword inference
   if (/\b(pest|roach|termite|rodent|spray|exterminat|bug|insect)\b/.test(text))
     return 'pest_control';
-  if (/\b(wifi|fibre|fiber|broadband|electric|gas|telco|carrier|network|internet)\b/.test(text))
+  if (
+    /\b(wifi|fibre|fiber|broadband|electric|gas|telco|carrier|network|internet|kwh|power\s*plan)\b/.test(
+      text,
+    )
+  )
     return 'energy_telco';
-  if (/\b(camera|doorbell|alarm|security|burglar|monitor|locks?)\b/.test(text)) return 'security';
-  if (/\b(lawn|garden|paint|clean|maid|handyman|handyperson|tradie|landscaping)\b/.test(text))
+  if (/\b(camera|doorbell|alarm|burglar|monitor|locks?|security\s*system)\b/.test(text))
+    return 'security';
+  if (
+    /\b(lawn|garden|paint|clean|maid|handyman|handyperson|tradie|landscaping|mowing)\b/.test(text)
+  )
     return 'home_services';
 
-  if (vertical.includes('healthcare') || vertical.includes('hospital')) return 'healthcare';
+  if (
+    vertical.includes('healthcare') ||
+    vertical.includes('hospital') ||
+    vertical.includes('clinic')
+  )
+    return 'healthcare';
 
   return 'business_b2b';
 }
