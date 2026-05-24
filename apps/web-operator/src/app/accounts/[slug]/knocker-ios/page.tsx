@@ -32,7 +32,7 @@ export default function KnockerIOSPreviewPage({
             <a
               href="/mobile-preview"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="card card-pad hover:shadow-md transition cursor-pointer flex items-start gap-3"
             >
               <div className="w-12 h-12 rounded-xl bg-ink text-surface flex items-center justify-center">

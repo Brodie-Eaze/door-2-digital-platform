@@ -60,9 +60,14 @@ function buildCsp() {
     'object-src': ["'none'"],
     'worker-src': ["'self'", 'blob:'],
     'manifest-src': ["'self'"],
+    // Block plugin content (Flash/PDF/Silverlight) — defence in depth.
+    'media-src': ["'self'"],
+    // Force any http:// asset references to upgrade to https:// in prod.
+    // (Has no effect on localhost over http; safe to include.)
+    'upgrade-insecure-requests': [],
   };
   return Object.entries(directives)
-    .map(([k, v]) => `${k} ${v.join(' ')}`)
+    .map(([k, v]) => (v.length === 0 ? k : `${k} ${v.join(' ')}`))
     .join('; ');
 }
 
@@ -80,11 +85,19 @@ const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'off' },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-site' },
+  // Block Adobe/Flash cross-domain policy files (legacy, but cheap to disable).
+  { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+  // Opt-in to origin-keyed agent clustering — site-isolation hint to the browser.
+  { key: 'Origin-Agent-Cluster', value: '?1' },
 ];
 
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Explicit: never ship sourcemaps to the browser in prod. (Default is already
+  // false in Next 14, but pin it so a future config change can't silently flip
+  // the bundle into reverse-engineerable shape.)
+  productionBrowserSourceMaps: false,
   output: 'standalone',
   experimental: { typedRoutes: false },
   transpilePackages: ['@d2d/ui-web', '@d2d/ui-tokens', '@d2d/shared-types', '@d2d/shared-utils'],

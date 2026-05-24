@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { Banner, Section, StatusPill } from '@d2d/ui-web';
@@ -327,15 +328,12 @@ function ScreenPreview({ kind }: { kind: ScreenEntry['preview'] }): JSX.Element 
         <div className={base} style={style}>
           <div className="absolute inset-0 flex items-center justify-around px-4">
             {[1, 2, 3, 4].map((i) => (
-              <>
-                <div
-                  key={`n-${i}`}
-                  className="w-8 h-8 rounded-lg bg-accentSoft border border-accent/30 flex items-center justify-center"
-                >
+              <Fragment key={`n-${i}`}>
+                <div className="w-8 h-8 rounded-lg bg-accentSoft border border-accent/30 flex items-center justify-center">
                   <div className="w-3 h-3 bg-accent rounded" />
                 </div>
                 {i < 4 && <div className="flex-1 h-px bg-line2" />}
-              </>
+              </Fragment>
             ))}
           </div>
         </div>
@@ -389,10 +387,10 @@ function ScreenPreview({ kind }: { kind: ScreenEntry['preview'] }): JSX.Element 
           <div className="absolute inset-3 flex">
             <div className="w-6 flex flex-col items-center pt-1">
               {[1, 2, 3, 4, 5].map((i) => (
-                <>
-                  <div key={`d-${i}`} className="w-3 h-3 rounded-full bg-accent" />
+                <Fragment key={`d-${i}`}>
+                  <div className="w-3 h-3 rounded-full bg-accent" />
                   {i < 5 && <div className="w-px flex-1 bg-line2 my-0.5" />}
-                </>
+                </Fragment>
               ))}
             </div>
             <div className="flex-1 space-y-2 pt-1">

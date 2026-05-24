@@ -1,0 +1,12 @@
+# Door 2 Digital — Security disclosures
+# https://datatracker.ietf.org/doc/html/rfc9116
+
+Contact: mailto:security@door2digital.io
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://app.door2digital.io/.well-known/security.txt
+Policy: https://door2digital.io/security
+Acknowledgments: https://door2digital.io/security/hall-of-fame
+# We aim to acknowledge reports within 24 hours and remediate per severity:
+# Critical 24h · High 72h · Medium 7d · Low 30d.
+# Bug bounty: invite-only Phase 3, public Phase 4.
