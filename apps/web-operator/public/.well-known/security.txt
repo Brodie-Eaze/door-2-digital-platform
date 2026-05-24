@@ -1,12 +1,37 @@
 # Door 2 Digital — Security disclosures
-# https://datatracker.ietf.org/doc/html/rfc9116
+# Per RFC 9116: https://datatracker.ietf.org/doc/html/rfc9116
 
 Contact: mailto:security@door2digital.io
-Expires: 2027-01-01T00:00:00.000Z
+Contact: https://door2digital.io/public/bug-bounty
+Expires: 2027-05-24T00:00:00.000Z
+Encryption: https://door2digital.io/.well-known/pgp-key.txt
+Acknowledgments: https://door2digital.io/public/bug-bounty
 Preferred-Languages: en
 Canonical: https://app.door2digital.io/.well-known/security.txt
-Policy: https://door2digital.io/security
-Acknowledgments: https://door2digital.io/security/hall-of-fame
+Canonical: https://door2digital.io/.well-known/security.txt
+Policy: https://door2digital.io/public/security
+Hiring: https://door2digital.io/careers
+
+# Reporting expectations
 # We aim to acknowledge reports within 24 hours and remediate per severity:
-# Critical 24h · High 72h · Medium 7d · Low 30d.
-# Bug bounty: invite-only Phase 3, public Phase 4.
+#   Critical    24h
+#   High        72h
+#   Medium      7d
+#   Low         30d
+#
+# Public bug bounty program launching with Phase 4. See:
+#   https://door2digital.io/public/bug-bounty
+#
+# Reward tiers (USD):
+#   P1 Critical  $5,000
+#   P2 High      $2,000
+#   P3 Medium    $500
+#   P4 Low       $100
+#
+# Out of scope:
+#   - Denial-of-service (DoS / DDoS / rate-limit exhaustion)
+#   - Physical security / social engineering
+#   - Third-party sub-processors we don't own (Stripe, Twilio, etc.)
+#
+# Coordinated disclosure: 90 days post-fix unless mutually agreed otherwise.
+# Hall of fame: https://door2digital.io/public/bug-bounty

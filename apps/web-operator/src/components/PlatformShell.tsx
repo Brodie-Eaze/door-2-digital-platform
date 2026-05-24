@@ -28,6 +28,7 @@ import {
   Sparkles,
   Wand2,
   Megaphone,
+  ExternalLink,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 
@@ -94,6 +95,7 @@ const NAV: NavGroup[] = [
   {
     label: 'System',
     items: [
+      { href: '/public', label: 'Public site', icon: ExternalLink },
       { href: '/screens', label: 'Screens gallery', icon: ImageIcon, roles: ['super_admin'] },
       { href: '/ops/health', label: 'System health', icon: Activity, roles: ['super_admin'] },
       { href: '/settings', label: 'Platform settings', icon: Settings, roles: ['super_admin'] },
