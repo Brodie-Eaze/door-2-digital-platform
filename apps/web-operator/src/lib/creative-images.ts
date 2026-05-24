@@ -91,8 +91,12 @@ export function inferTheme(input: {
   vertical?: string;
   headline?: string;
   copy?: string;
+  /** Optional extra context — e.g. the account name. Folded into text matching. */
+  account?: string;
+  /** Allow callers to pass extra fields without TS complaints. */
+  [extra: string]: string | undefined;
 }): CreativeTheme {
-  const text = `${input.headline ?? ''} ${input.copy ?? ''}`.toLowerCase();
+  const text = `${input.headline ?? ''} ${input.copy ?? ''} ${input.account ?? ''}`.toLowerCase();
   const vertical = (input.vertical ?? '').toLowerCase();
 
   if (vertical.includes('charity')) {
