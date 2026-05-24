@@ -11,7 +11,8 @@ import {
   Check,
 } from 'lucide-react';
 import { Banner } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell as OperatorShell } from '@/components/PlatformShell';
+import { NoctuaPhoneMap } from '@/components/NoctuaPhoneMap';
 
 /**
  * iPhoneMock-sized mock of the knocker iOS app for demo purposes.
@@ -120,87 +121,26 @@ function PhoneMock({ variant }: { variant: 'map' | 'sheet' | 'leaderboard' }) {
 function MapScreen() {
   return (
     <div className="relative h-full" style={{ paddingBottom: 80 }}>
-      {/* Pseudo-map */}
-      <div
-        className="relative h-full"
-        style={{
-          backgroundImage:
-            'linear-gradient(135deg, #F7F8FA 25%, transparent 25%), linear-gradient(225deg, #F7F8FA 25%, transparent 25%), linear-gradient(45deg, #F7F8FA 25%, transparent 25%), linear-gradient(315deg, #F7F8FA 25%, #EEF1F5 25%)',
-          backgroundPosition: '12px 0, 12px 0, 0 0, 0 0',
-          backgroundSize: '24px 24px',
-          backgroundColor: '#FFFFFF',
-        }}
-      >
-        {/* Territory polygon */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 80,
-            left: 30,
-            width: 200,
-            height: 280,
-            background: 'rgba(59,130,246,0.18)',
-            border: '1.5px solid #1D4ED8',
-            borderRadius: 8,
-          }}
-        />
+      {/* REAL satellite map (Esri World Imagery + boundaries overlay) */}
+      <div className="relative h-full">
+        <NoctuaPhoneMap />
 
-        {/* Knock pins */}
-        {[
-          { left: 60, top: 110, color: '#1D4ED8' },
-          { left: 110, top: 140, color: '#1D4ED8' },
-          { left: 150, top: 100, color: '#475569' },
-          { left: 170, top: 200, color: '#475569' },
-          { left: 70, top: 240, color: '#1D4ED8' },
-          { left: 130, top: 280, color: '#0F172A' },
-        ].map((p, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              left: p.left,
-              top: p.top,
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: p.color,
-              border: '2px solid white',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-            }}
-          />
-        ))}
-
-        {/* Current GPS pin */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 120,
-            top: 210,
-            width: 16,
-            height: 16,
-            borderRadius: '50%',
-            background: '#3B82F6',
-            border: '3px solid white',
-            boxShadow: '0 0 0 8px rgba(59,130,246,0.2)',
-          }}
-        />
-
-        {/* Top status pill */}
-        <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-          <div className="bg-surface/95 backdrop-blur px-3 py-1.5 rounded-full text-[11px] border border-line2 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-success" />
+        {/* Top status pill — floats above map */}
+        <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-[1000] pointer-events-none">
+          <div className="bg-surface/95 backdrop-blur px-3 py-1.5 rounded-full text-[11px] border border-line2 flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
             <span className="text-ink font-medium">Austin East · 8 / 248 knocks</span>
           </div>
-          <div className="bg-surface/95 backdrop-blur px-2 py-1.5 rounded-full text-[10px] border border-line2 numeric text-ink">
+          <div className="bg-surface/95 backdrop-blur px-2 py-1.5 rounded-full text-[10px] border border-line2 numeric text-ink shadow-sm">
             ±3m
           </div>
         </div>
 
-        {/* Knock here FAB */}
+        {/* Knock here FAB — floats above map */}
         <button
-          className="absolute right-4 flex items-center gap-1.5 text-surface font-semibold text-[13px] shadow-lg"
+          className="absolute right-4 flex items-center gap-1.5 text-surface font-semibold text-[13px] shadow-lg z-[1000]"
           style={{
-            bottom: 24,
+            bottom: 100,
             background: '#0F172A',
             padding: '12px 18px',
             borderRadius: 999,
