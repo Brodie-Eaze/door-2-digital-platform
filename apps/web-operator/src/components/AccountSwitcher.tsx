@@ -64,7 +64,7 @@ export function AccountSwitcher({ currentSlug }: { currentSlug: string }): JSX.E
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-medium text-ink truncate">{a.name}</div>
                 <div className="text-[10px] text-muted">
-                  {a.vertical} · {a.region} · {a.noctuas} Noctuas
+                  {a.vertical} · {a.region} · {a.knockers} Knockers
                 </div>
               </div>
               <span

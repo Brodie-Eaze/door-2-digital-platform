@@ -68,7 +68,7 @@ export default function CampaignsPage({ params }: { params: { slug: string } }):
           <span className="text-[13px]">
             Each campaign targets a <span className="font-semibold">smart lead list</span>.
             Multi-channel (Meta / Google / TikTok / Email / SMS). Conversions trace back to the
-            originating Noctua via attribution → bills via the 3-bucket rake.
+            originating Knocker via attribution → bills via the 3-bucket rake.
           </span>
         </Banner>
 

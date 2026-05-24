@@ -1,10 +1,8 @@
 'use client';
 
 /**
- * Top-level platform shell — used for the NoctuaOS home and global pages
- * (accounts list, billing, audit, compliance, screens gallery, settings).
- * Renamed from OperatorShell to reflect that this is the team-wide CRM
- * not just an admin tool.
+ * Door 2 Digital OS — top-level HQ shell.
+ * The Command Centre your team logs into. Cross-account views live here.
  */
 import {
   Building2,
@@ -15,6 +13,10 @@ import {
   Settings,
   Image as ImageIcon,
   Smartphone,
+  Radio,
+  CalendarClock,
+  Map,
+  Target,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 
@@ -22,6 +24,15 @@ const NAV: NavGroup[] = [
   {
     label: 'Portfolio',
     items: [{ href: '/accounts', label: 'All accounts', icon: Building2 }],
+  },
+  {
+    label: 'Command Centre',
+    items: [
+      { href: '/command-centre', label: 'Live field map', icon: Radio },
+      { href: '/territory-intel', label: 'Territory intel', icon: Map },
+      { href: '/roster', label: 'Roster & shifts', icon: CalendarClock },
+      { href: '/planning', label: 'Planning', icon: Target },
+    ],
   },
   {
     label: 'Cross-account',
@@ -35,7 +46,7 @@ const NAV: NavGroup[] = [
     label: 'Design',
     items: [
       { href: '/screens', label: 'Screens gallery', icon: ImageIcon },
-      { href: '/mobile-preview', label: 'NoctuaOS app preview', icon: Smartphone },
+      { href: '/mobile-preview', label: 'Knocker iOS preview', icon: Smartphone },
     ],
   },
   {
@@ -57,15 +68,15 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
     <AppShell
       sidebar={
         <Sidebar
-          appName="NoctuaOS"
-          appTagline="HQ"
+          appName="Door 2 Digital"
+          appTagline="HQ · COMMAND CENTRE"
           homeHref="/accounts"
           groups={NAV}
           userRole="super_admin"
           footer={
             <>
-              <div>v0.3.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</div>
-              <div className="truncate">brodie@noctuaos.com</div>
+              <div>v0.4.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</div>
+              <div className="truncate">brodie@door2digital.com</div>
             </>
           }
         />

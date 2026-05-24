@@ -30,11 +30,11 @@ const LEAD = {
 const TIMELINE = [
   {
     when: '2026-05-23T14:55:12Z',
-    actor: { name: 'Jada Davis', initials: 'JD', role: 'Noctua' },
+    actor: { name: 'Jada Davis', initials: 'JD', role: 'Knocker' },
     icon: PenTool,
     color: 'text-success',
     title: 'Lead captured at door',
-    detail: '4218 Lakeview Dr · Austin TX · Noctua rated interest: HIGH',
+    detail: '4218 Lakeview Dr · Austin TX · Knocker rated interest: HIGH',
     artifacts: ['Signed consent', 'Photo of doorstep', 'GPS ±3m', 'Pitch: clean-water programme'],
     badge: 'door',
   },
@@ -103,7 +103,7 @@ const TIMELINE = [
     icon: Hash,
     color: 'text-accent',
     title: 'Attribution computed → DOOR bucket (15%)',
-    detail: 'Noctua Jada Davis credited. D2D rake: $3.60/mo. Processor residual: $0.04/mo.',
+    detail: 'Knocker Jada Davis credited. D2D rake: $3.60/mo. Processor residual: $0.04/mo.',
     artifacts: [
       'Conversion attributionSource=door',
       'Commission accrual → JD',

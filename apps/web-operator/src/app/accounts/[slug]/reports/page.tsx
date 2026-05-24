@@ -38,7 +38,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               'Conversions by attribution',
-              'Commission accrual by Noctua',
+              'Commission accrual by Knocker',
               'CPA by marketing channel',
               'Lead-to-close cycle time',
               'Pipeline velocity',

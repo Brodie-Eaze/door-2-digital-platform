@@ -4,7 +4,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { accountData } from '@/lib/account-fixtures';
 
 export default function TodayPage({ params }: { params: { slug: string } }): JSX.Element {
-  const { account, anomalies, noctuas } = accountData(params.slug);
+  const { account, anomalies, knockers } = accountData(params.slug);
   if (!account)
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Not found">
@@ -12,11 +12,11 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
       </AccountShell>
     );
 
-  const topNoctuas = [...noctuas]
+  const topKnockers = [...knockers]
     .filter((n) => n.status === 'active')
     .sort((a, b) => b.conversions - a.conversions)
     .slice(0, 5);
-  const todayRev = topNoctuas.reduce((s, n) => s + n.revenueCents, 0n);
+  const todayRev = topKnockers.reduce((s, n) => s + n.revenueCents, 0n);
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Today">
@@ -24,13 +24,13 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
             label="Knocks today"
-            value={topNoctuas.reduce((s, n) => s + n.knocks, 0)}
+            value={topKnockers.reduce((s, n) => s + n.knocks, 0)}
             delta="+8.4%"
             deltaTone="positive"
           />
           <KpiCard
             label="Conversions today"
-            value={topNoctuas.reduce((s, n) => s + n.conversions, 0)}
+            value={topKnockers.reduce((s, n) => s + n.conversions, 0)}
             delta="+12.1%"
             deltaTone="positive"
           />
@@ -60,11 +60,11 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
           <div className="space-y-4">
             <Section
               title="Live leaderboard"
-              subtitle={`Top Noctuas — ${account.shortName}`}
+              subtitle={`Top Knockers — ${account.shortName}`}
               paddedBody={false}
             >
               <div className="divide-y divide-line2">
-                {topNoctuas.map((n, i) => (
+                {topKnockers.map((n, i) => (
                   <div key={n.initials} className="flex items-center gap-3 px-5 py-3">
                     <div
                       className={`w-5 text-[11px] font-semibold ${i === 0 ? 'text-success' : 'text-soft'}`}

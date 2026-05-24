@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Banner } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
-import { NoctuaPhoneMap } from '@/components/NoctuaPhoneMap';
+import { KnockerPhoneMap } from '@/components/KnockerPhoneMap';
 
 type VariantKey =
   | 'login'
@@ -55,13 +55,14 @@ export default function MobilePreviewPage(): JSX.Element {
   const shown = VARIANTS.filter((v) => filter === 'all' || filter === v.key);
 
   return (
-    <PlatformShell pageTitle="NoctuaOS — app preview">
+    <PlatformShell pageTitle="Door 2 Digital OS — app preview">
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Web preview of the native iOS <span className="font-semibold">NoctuaOS</span> field app.
-            Real app built in Xcode (Swift / SwiftUI) per <code className="kbd">ADR-0003</code>.
-            Distributed via TestFlight + Internal Testing under D2D&apos;s Apple Developer account.
+            Web preview of the native iOS <span className="font-semibold">Door 2 Digital OS</span>{' '}
+            field app. Real app built in Xcode (Swift / SwiftUI) per{' '}
+            <code className="kbd">ADR-0003</code>. Distributed via TestFlight + Internal Testing
+            under D2D&apos;s Apple Developer account.
           </span>
         </Banner>
 
@@ -205,7 +206,7 @@ function LoginScreen() {
         <div className="w-16 h-16 rounded-2xl bg-ink text-surface flex items-center justify-center text-2xl font-bold">
           N
         </div>
-        <div className="text-[20px] font-bold text-ink mt-4">NoctuaOS</div>
+        <div className="text-[20px] font-bold text-ink mt-4">Door 2 Digital OS</div>
         <div className="text-accent text-[10px] font-semibold tracking-[0.18em] mt-1">
           FIELD APP
         </div>
@@ -218,7 +219,9 @@ function LoginScreen() {
           Sign in with Okta SSO →
         </button>
       </div>
-      <div className="text-[10px] text-soft">v1.0.4 · 218 Noctuas live · 7 territories cleared</div>
+      <div className="text-[10px] text-soft">
+        v1.0.4 · 218 Knockers live · 7 territories cleared
+      </div>
     </div>
   );
 }
@@ -227,7 +230,7 @@ function MapScreen() {
   return (
     <div className="relative h-full" style={{ paddingBottom: 80 }}>
       <div className="relative h-full">
-        <NoctuaPhoneMap />
+        <KnockerPhoneMap />
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-[1000] pointer-events-none">
           <div className="bg-surface/95 backdrop-blur px-3 py-1.5 rounded-full text-[11px] border border-line2 flex items-center gap-1.5 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
@@ -488,7 +491,7 @@ function InboxScreen() {
             unread: true,
           },
           {
-            from: 'NoctuaOS',
+            from: 'Door 2 Digital OS',
             msg: 'Day-1 SMS to Maria Santos delivered + read',
             time: '2h',
             system: true,
@@ -499,7 +502,7 @@ function InboxScreen() {
             time: '4h',
           },
           {
-            from: 'NoctuaOS',
+            from: 'Door 2 Digital OS',
             msg: 'New territory cleared: Phoenix West (AZ)',
             time: 'Yest',
             system: true,

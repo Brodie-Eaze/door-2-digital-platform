@@ -15,49 +15,49 @@ const TEAM = [
     role: 'super_admin',
     status: 'Online',
     online: true,
-    email: 'brodie@noctuaos.com',
+    email: 'brodie@door2digital.com',
   },
   {
     name: 'Jordan Mosley',
     role: 'knocker',
     status: 'On shift',
     online: true,
-    email: 'jordan@noctuaos.com',
+    email: 'jordan@door2digital.com',
   },
   {
     name: 'Jada Davis',
     role: 'knocker',
     status: 'On shift',
     online: true,
-    email: 'jada@noctuaos.com',
+    email: 'jada@door2digital.com',
   },
   {
     name: 'Aaliyah Reed',
     role: 'knocker',
     status: 'On shift',
     online: true,
-    email: 'aaliyah@noctuaos.com',
+    email: 'aaliyah@door2digital.com',
   },
   {
     name: 'Tomás Mendez',
     role: 'inside_sales',
     status: 'Online',
     online: true,
-    email: 'tomas@noctuaos.com',
+    email: 'tomas@door2digital.com',
   },
   {
     name: 'Asha Mehta',
     role: 'inside_sales',
     status: 'Away',
     online: false,
-    email: 'asha@noctuaos.com',
+    email: 'asha@door2digital.com',
   },
   {
     name: 'Devon Russell',
     role: 'knocker',
     status: 'Idle',
     online: false,
-    email: 'devon@noctuaos.com',
+    email: 'devon@door2digital.com',
   },
   {
     name: 'Mira Chen',
@@ -84,7 +84,7 @@ export default function TeamPage({ params }: { params: { slug: string } }): JSX.
             value={TEAM.length}
             hint={`${TEAM.filter((t) => t.online).length} online now`}
           />
-          <KpiCard label="Noctuas" value={TEAM.filter((t) => t.role === 'knocker').length} />
+          <KpiCard label="Knockers" value={TEAM.filter((t) => t.role === 'knocker').length} />
           <KpiCard
             label="Inside sales"
             value={TEAM.filter((t) => t.role === 'inside_sales').length}

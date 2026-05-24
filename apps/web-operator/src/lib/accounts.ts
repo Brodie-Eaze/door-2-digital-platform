@@ -2,7 +2,7 @@
  * Accounts fixtures — Brodie's team's sub-accounts (GHL model).
  *
  * Each account is its own "tiny operating system" with full CRM, territories,
- * Noctuas, leads, pipeline, campaigns, drip. The whole NoctuaOS team
+ * Knockers, leads, pipeline, campaigns, drip. The whole Door 2 Digital OS team
  * (sales, tech, admin) drills in from the top-level accounts list.
  */
 
@@ -21,7 +21,7 @@ export interface Account {
   avatarFg: string;
   plan: 'Enterprise' | 'Growth' | 'Trial';
   health: AccountHealth;
-  noctuas: number;
+  knockers: number;
   insideSalesReps: number;
   territoriesActive: number;
   leadsInboxToday: number;
@@ -50,7 +50,7 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
-    noctuas: 218,
+    knockers: 218,
     insideSalesReps: 14,
     territoriesActive: 7,
     leadsInboxToday: 84,
@@ -70,7 +70,7 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
-    noctuas: 162,
+    knockers: 162,
     insideSalesReps: 11,
     territoriesActive: 12,
     leadsInboxToday: 102,
@@ -90,7 +90,7 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Growth',
     health: 'attention',
-    noctuas: 32,
+    knockers: 32,
     insideSalesReps: 4,
     territoriesActive: 4,
     leadsInboxToday: 21,
@@ -110,7 +110,7 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Trial',
     health: 'healthy',
-    noctuas: 8,
+    knockers: 8,
     insideSalesReps: 2,
     territoriesActive: 3,
     leadsInboxToday: 14,

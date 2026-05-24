@@ -69,7 +69,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
     <AppShell
       sidebar={
         <Sidebar
-          appName="NoctuaOS"
+          appName="Door 2 Digital OS"
           appTagline={account?.shortName.toUpperCase() ?? 'ACCOUNT'}
           homeHref={`${base}/today`}
           groups={NAV}

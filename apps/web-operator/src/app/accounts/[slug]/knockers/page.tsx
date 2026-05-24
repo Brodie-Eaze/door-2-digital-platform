@@ -2,26 +2,26 @@ import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { accountData } from '@/lib/account-fixtures';
 
-export default function NoctuasPage({ params }: { params: { slug: string } }): JSX.Element {
-  const { account, noctuas } = accountData(params.slug);
+export default function KnockersPage({ params }: { params: { slug: string } }): JSX.Element {
+  const { account, knockers } = accountData(params.slug);
   if (!account)
     return (
       <AccountShell accountSlug={params.slug}>
         <div>Not found</div>
       </AccountShell>
     );
-  const active = noctuas.filter((n) => n.status === 'active');
-  const idle = noctuas.filter((n) => n.status === 'idle');
+  const active = knockers.filter((n) => n.status === 'active');
+  const idle = knockers.filter((n) => n.status === 'idle');
   const totalRev = active.reduce((s, n) => s + n.revenueCents, 0n);
 
   return (
-    <AccountShell accountSlug={params.slug} pageTitle="Noctuas">
+    <AccountShell accountSlug={params.slug} pageTitle="Knockers">
       <div className="space-y-6 max-w-[1400px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
             label="Active today"
             value={active.length}
-            hint={`${noctuas.length} on roster`}
+            hint={`${knockers.length} on roster`}
           />
           <KpiCard label="Idle past start" value={idle.length} hint="auto-SMS sent" />
           <KpiCard
@@ -46,7 +46,7 @@ export default function NoctuasPage({ params }: { params: { slug: string } }): J
           <table className="tbl">
             <thead>
               <tr>
-                <th>Noctua</th>
+                <th>Knocker</th>
                 <th>Territory</th>
                 <th>Status</th>
                 <th>Knocks</th>
@@ -56,7 +56,7 @@ export default function NoctuasPage({ params }: { params: { slug: string } }): J
               </tr>
             </thead>
             <tbody>
-              {[...noctuas]
+              {[...knockers]
                 .sort((a, b) => b.conversions - a.conversions)
                 .map((n) => (
                   <tr key={n.initials}>

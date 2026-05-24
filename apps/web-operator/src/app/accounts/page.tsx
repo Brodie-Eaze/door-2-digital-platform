@@ -6,7 +6,7 @@ import { AccountAvatar } from '@/components/AccountAvatar';
 import { ACCOUNTS } from '@/lib/accounts';
 
 export default function AccountsPage(): JSX.Element {
-  const totalNoctuas = ACCOUNTS.reduce((s, a) => s + a.noctuas, 0);
+  const totalKnockers = ACCOUNTS.reduce((s, a) => s + a.knockers, 0);
   const totalLeads = ACCOUNTS.reduce((s, a) => s + a.leadsInboxToday, 0);
   const totalConversions = ACCOUNTS.reduce((s, a) => s + a.conversionsMTD, 0);
   const totalRevenue = ACCOUNTS.reduce((s, a) => s + a.revenueCentsMTD, 0n);
@@ -16,17 +16,17 @@ export default function AccountsPage(): JSX.Element {
       <div className="space-y-6 max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            <span className="font-semibold">NoctuaOS HQ</span> — your team's home. Click any account
-            to drop into its full CRM workspace (territories, Noctuas, leads, pipeline, campaigns,
-            drip). Each account is a tiny operating system inside the one.
+            <span className="font-semibold">Door 2 Digital OS HQ</span> — your team's home. Click
+            any account to drop into its full CRM workspace (territories, Knockers, leads, pipeline,
+            campaigns, drip). Each account is a tiny operating system inside the one.
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Accounts" value={ACCOUNTS.length} hint="charity + commercial" />
           <KpiCard
-            label="Noctuas active"
-            value={totalNoctuas}
+            label="Knockers active"
+            value={totalKnockers}
             delta="+18 vs yest."
             deltaTone="positive"
           />
@@ -46,7 +46,7 @@ export default function AccountsPage(): JSX.Element {
 
         <Section
           title="Sub-accounts"
-          subtitle="Each account is fully isolated — own territories, Noctuas, leads, pipeline, compliance"
+          subtitle="Each account is fully isolated — own territories, Knockers, leads, pipeline, compliance"
           action={
             <Button leftIcon={<Plus size={14} />} variant="primary" size="sm">
               New account
@@ -94,7 +94,7 @@ export default function AccountsPage(): JSX.Element {
                 </div>
 
                 <div className="mt-4 grid grid-cols-4 gap-2 pt-4 border-t border-line2">
-                  <Stat label="Noctuas" value={a.noctuas.toString()} />
+                  <Stat label="Knockers" value={a.knockers.toString()} />
                   <Stat label="Leads today" value={a.leadsInboxToday.toString()} />
                   <Stat label="Conv. MTD" value={a.conversionsMTD.toLocaleString()} />
                   <Stat
@@ -116,7 +116,7 @@ export default function AccountsPage(): JSX.Element {
                 <th>Account</th>
                 <th>Vertical</th>
                 <th>Region</th>
-                <th>Noctuas</th>
+                <th>Knockers</th>
                 <th>MTD Conv.</th>
                 <th>MTD Revenue</th>
                 <th>Projected LTV</th>
@@ -139,7 +139,7 @@ export default function AccountsPage(): JSX.Element {
                   <td>
                     <RegionBadge region={a.region} />
                   </td>
-                  <td className="numeric text-[13px]">{a.noctuas}</td>
+                  <td className="numeric text-[13px]">{a.knockers}</td>
                   <td className="numeric text-[13px]">{a.conversionsMTD.toLocaleString()}</td>
                   <td>
                     <Money cents={a.revenueCentsMTD} region={a.region === 'AU' ? 'AU' : 'US'} />

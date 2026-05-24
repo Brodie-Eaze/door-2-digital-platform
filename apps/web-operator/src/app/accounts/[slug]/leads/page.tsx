@@ -22,7 +22,7 @@ export default function LeadsInboxPage({ params }: { params: { slug: string } })
       <div className="space-y-6 max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Every Noctua interaction at the door creates a Lead — even if they didn't sell on the
+            Every Knocker interaction at the door creates a Lead — even if they didn't sell on the
             spot. Inside-sales team has <span className="font-semibold">7 days</span> to call,
             convert, or close out.
           </span>
@@ -81,7 +81,7 @@ export default function LeadsInboxPage({ params }: { params: { slug: string } })
               {
                 icon: Inbox,
                 label: 'Captured',
-                sub: 'by Noctua at door',
+                sub: 'by Knocker at door',
                 tone: 'bg-accentSoft text-accent',
               },
               { icon: ArrowRight, arrow: true },

@@ -1,4 +1,5 @@
 import '@d2d/ui-tokens/globals.css';
+import 'leaflet/dist/leaflet.css';
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
@@ -17,15 +18,12 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Door 2 Digital — Operator Console',
-  description: 'Cross-tenant operations view for D2D platform staff.',
+  title: 'Door 2 Digital OS — Command Centre',
+  description:
+    'The operating system for door-to-door sales. Multi-account command centre + field intelligence.',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}): JSX.Element {
+export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen font-sans">{children}</body>

@@ -47,7 +47,7 @@ const SCREENS: ScreenEntry[] = [
     title: 'Leads inbox',
     scope: 'In-account',
     surface: 'CRM',
-    description: 'Every Noctua-captured + ad-clicked lead lands here. 3-source attribution.',
+    description: 'Every Knocker-captured + ad-clicked lead lands here. 3-source attribution.',
     preview: 'cards-grid',
   },
   {
@@ -99,8 +99,8 @@ const SCREENS: ScreenEntry[] = [
     preview: 'dialer',
   },
   {
-    href: '/accounts/hope-forward/noctuas',
-    title: 'Noctuas roster',
+    href: '/accounts/hope-forward/knockers',
+    title: 'Knockers roster',
     scope: 'In-account',
     surface: 'Field',
     description: "Today's field-rep performance — knocks, conversions, revenue, idle alerts.",
@@ -156,7 +156,7 @@ const SCREENS: ScreenEntry[] = [
   },
   {
     href: '/mobile-preview',
-    title: 'Noctua iOS app preview',
+    title: 'Knocker iOS app preview',
     scope: 'Mobile',
     surface: 'Field',
     description: 'Native iOS knocker app: Map, KnockSheet bottom sheet, Me/leaderboard.',
@@ -176,8 +176,8 @@ export default function ScreensPage(): JSX.Element {
       <div className="space-y-6 max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Visual catalogue of every UI surface in NoctuaOS. Click any tile to open the live
-            screen.
+            Visual catalogue of every UI surface in Door 2 Digital OS. Click any tile to open the
+            live screen.
             <span className="font-semibold ml-1">17 screens</span> total across HQ, in-account, and
             mobile.
           </span>

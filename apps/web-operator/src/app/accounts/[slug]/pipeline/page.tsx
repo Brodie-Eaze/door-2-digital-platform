@@ -62,7 +62,7 @@ const PIPELINES: Record<
     valueLabel: 'contract value',
   },
   recruiting: {
-    name: 'Noctua recruiting',
+    name: 'Knocker recruiting',
     icon: UserPlus,
     description: 'Field-rep applicant funnel (high-churn)',
     valueLabel: 'lifetime productivity',

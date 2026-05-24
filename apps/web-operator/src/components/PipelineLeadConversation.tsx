@@ -33,7 +33,7 @@ interface Poll {
 const PRESENCE: Array<{ initials: string; name: string; color: string; viewing: boolean }> = [
   { initials: 'SH', name: 'Sarah Harris', color: '#0F172A', viewing: true },
   { initials: 'BR', name: 'Brodie', color: '#3B82F6', viewing: true },
-  { initials: 'JD', name: 'Jada Davis (Noctua)', color: '#1D4ED8', viewing: false },
+  { initials: 'JD', name: 'Jada Davis (Knocker)', color: '#1D4ED8', viewing: false },
   { initials: 'TM', name: 'Tomás Mendez', color: '#475569', viewing: false },
 ];
 
@@ -41,7 +41,7 @@ const SEED_MESSAGES: Message[] = [
   {
     id: 'm1',
     authorInitials: 'SY',
-    authorName: 'NoctuaOS',
+    authorName: 'Door 2 Digital OS',
     authorColor: '#475569',
     body: 'Lead Maria Santos created from door knock by Jada Davis (Austin East).',
     ts: '2026-05-23 14:55',
@@ -67,7 +67,7 @@ const SEED_MESSAGES: Message[] = [
   {
     id: 'm4',
     authorInitials: 'SY',
-    authorName: 'NoctuaOS',
+    authorName: 'Door 2 Digital OS',
     authorColor: '#475569',
     body: 'Outbound call attempted at 14:30 — no answer, voicemail left.',
     ts: '2026-05-24 14:30',

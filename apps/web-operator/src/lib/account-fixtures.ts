@@ -31,7 +31,7 @@ export interface LeadRow {
   capturedAt: string;
 }
 
-export interface Noctua {
+export interface Knocker {
   initials: string;
   name: string;
   status: 'active' | 'idle' | 'training';
@@ -153,7 +153,7 @@ function pseudoLeads(
   });
 }
 
-function pseudoNoctuas(count: number): Noctua[] {
+function pseudoKnockers(count: number): Knocker[] {
   const names = [
     ['JM', 'Jordan Mosley'],
     ['AR', 'Aaliyah Reed'],
@@ -191,7 +191,7 @@ export function accountData(slug: string) {
       account: null,
       anomalies: [] as Anomaly[],
       leads: [] as LeadRow[],
-      noctuas: [] as Noctua[],
+      knockers: [] as Knocker[],
     };
   }
 
@@ -205,12 +205,12 @@ export function accountData(slug: string) {
     {
       severity: 'warning',
       title: `${acct.shortName} ${acct.region === 'AU' ? 'Melbourne CBD' : 'Austin-East'} conversion below baseline`,
-      description: 'Two Noctuas report unusual resistance. Check pitch script.',
+      description: 'Two Knockers report unusual resistance. Check pitch script.',
       timestamp: '1h ago',
     },
     {
       severity: 'info',
-      title: `Top Noctua today: ${slug === 'pestmax' ? 'Devon R' : 'Jordan M'} · ${slug === 'pestmax' ? '14' : '31'} conversions`,
+      title: `Top Knocker today: ${slug === 'pestmax' ? 'Devon R' : 'Jordan M'} · ${slug === 'pestmax' ? '14' : '31'} conversions`,
       description: `${slug === 'pestmax' ? '$4,180' : '$8,940'} of recurring giving in one shift. Recognise on leaderboard.`,
       timestamp: '2h ago',
     },
@@ -219,7 +219,7 @@ export function accountData(slug: string) {
   const assigneePool = ['JD', 'AM', 'TM', 'SH', 'BR'];
   const leadCount = Math.min(acct.leadsInboxToday, 18);
   const leads = pseudoLeads(leadCount, acct.region === 'AU' ? 'AU' : 'US', 0, assigneePool);
-  const noctuas = pseudoNoctuas(Math.min(acct.noctuas, 12));
+  const knockers = pseudoKnockers(Math.min(acct.knockers, 12));
 
-  return { account: acct, anomalies, leads, noctuas };
+  return { account: acct, anomalies, leads, knockers };
 }

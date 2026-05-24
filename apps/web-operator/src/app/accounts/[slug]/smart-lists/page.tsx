@@ -96,7 +96,7 @@ const LISTS: SmartList[] = [
   {
     id: 'l2',
     name: 'Texas-only door knocks, last 30d',
-    description: 'Geo-targeted recruit ads for new TX Noctuas',
+    description: 'Geo-targeted recruit ads for new TX Knockers',
     type: 'smart',
     memberCount: 1240,
     growthDelta: 82,
@@ -231,7 +231,7 @@ const FIELDS = [
   { value: 'AI.leadScore', label: 'AI lead score' },
   { value: 'AI.intent', label: 'AI intent classifier' },
   { value: 'engagement.lastActivity', label: 'Last activity' },
-  { value: 'noctua.id', label: 'Captured by Noctua' },
+  { value: 'knocker.id', label: 'Captured by Knocker' },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
