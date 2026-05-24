@@ -15,9 +15,15 @@ function buildCsp() {
   } catch {
     /* defaults above */
   }
+  // Next.js dev mode uses eval() for React Refresh / HMR + source maps.
+  // Without 'unsafe-eval' in dev, the whole client bundle fails to evaluate
+  // and the page never hydrates. In production, the bundler emits no eval
+  // calls so we tighten back to 'self' only.
+  const isDev = process.env.NODE_ENV !== 'production';
+  const scriptSrc = isDev ? ["'self'", "'unsafe-eval'", "'unsafe-inline'"] : ["'self'"];
   const directives = {
     'default-src': ["'self'"],
-    'script-src': ["'self'"],
+    'script-src': scriptSrc,
     // Next static optimisation injects inline critical CSS without nonce.
     // unsafe-inline scoped to styles only is the standard mitigation.
     'style-src': ["'self'", "'unsafe-inline'"],
