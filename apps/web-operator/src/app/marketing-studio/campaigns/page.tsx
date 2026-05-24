@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import {
   Megaphone,
   TrendingUp,
@@ -8,6 +11,10 @@ import {
   Filter,
   Plus,
   ArrowUpRight,
+  X,
+  FileCheck2,
+  DollarSign,
+  Activity,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
@@ -15,14 +22,23 @@ import { PlatformShell } from '@/components/PlatformShell';
 /**
  * Marketing campaigns dashboard.
  *
- * Active campaigns across Meta + Google + TikTok + YouTube with
- * spend / conversions / ROAS / CPM / CTR. Row click is decorative —
- * the side panel idea is referenced but rendered as a static "details"
- * column for now.
+ * Live campaigns across Meta + Google + TikTok + YouTube with creative
+ * thumbnails (real picsum images), spend / impressions / clicks /
+ * conversions / ROAS / CPM / CTR / attribution. Click a row → side panel
+ * with all creatives in that campaign + daily spend SVG sparkline +
+ * delivery log.
  */
 
 type Channel = 'Meta' | 'Google' | 'TikTok' | 'YouTube';
 type CampaignStatus = 'active' | 'paused' | 'ended' | 'pending_review';
+
+interface CampaignCreative {
+  id: string;
+  seed: string;
+  headline: string;
+  format: 'image' | 'carousel' | 'video';
+  aspect: 'square' | 'portrait' | 'vertical' | 'video';
+}
 
 interface Campaign {
   id: string;
@@ -37,6 +53,10 @@ interface Campaign {
   conversions: number;
   conversionRevenueCents: bigint;
   attributionSource: 'click' | 'view' | 'lift' | 'knock+digital';
+  heroSeed: string;
+  creatives: CampaignCreative[];
+  // 14-day daily spend in dollars for the sparkline
+  dailySpend: number[];
 }
 
 const CAMPAIGNS: Campaign[] = [
@@ -53,6 +73,31 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 818,
     conversionRevenueCents: 71_944_00n,
     attributionSource: 'click',
+    heroSeed: 'hopeforward-tx-meals-4960',
+    dailySpend: [820, 880, 740, 920, 1040, 960, 1120, 880, 940, 1010, 1180, 940, 880, 1020],
+    creatives: [
+      {
+        id: 'cr_4960',
+        seed: 'hopeforward-tx-meals-4960',
+        headline: 'Five dollars covers a meal — every Tuesday.',
+        format: 'image',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4934',
+        seed: 'hf-dollar-stretch-4934',
+        headline: 'A Hope Forward dollar lasts longer.',
+        format: 'image',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4902',
+        seed: 'hf-charity-nav-badge-4902',
+        headline: 'Charity Navigator 4-star · 7 years.',
+        format: 'image',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8820',
@@ -67,6 +112,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 542,
     conversionRevenueCents: 48_780_00n,
     attributionSource: 'click',
+    heroSeed: 'worldvision-au-winter-4954',
+    dailySpend: [620, 580, 640, 720, 680, 720, 790, 740, 820, 760, 690, 740, 680, 720],
+    creatives: [
+      {
+        id: 'cr_4954',
+        seed: 'worldvision-au-winter-4954',
+        headline: '3 in 5 Aussie families need help this winter.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+      {
+        id: 'cr_4939',
+        seed: 'wv-au-coffee-cost-4939',
+        headline: 'For the cost of a coffee, a child eats.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
   {
     id: 'cmp_8819',
@@ -81,6 +144,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 184,
     conversionRevenueCents: 16_376_00n,
     attributionSource: 'lift',
+    heroSeed: 'pestmax-tx-roach-4958',
+    dailySpend: [180, 220, 240, 260, 280, 300, 320, 280, 240, 260, 280, 240, 220, 240],
+    creatives: [
+      {
+        id: 'cr_4958',
+        seed: 'pestmax-tx-roach-4958',
+        headline: "Don't share your meal with roaches.",
+        format: 'video',
+        aspect: 'vertical',
+      },
+      {
+        id: 'cr_4944',
+        seed: 'pestmax-tx-termites-4944',
+        headline: 'Termites cost Texas $5B/year.',
+        format: 'image',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8818',
@@ -95,6 +176,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 218,
     conversionRevenueCents: 21_582_00n,
     attributionSource: 'view',
+    heroSeed: 'hopeforward-renew-2026-4955',
+    dailySpend: [340, 380, 360, 400, 420, 380, 360, 340, 380, 360, 340, 320, 340, 380],
+    creatives: [
+      {
+        id: 'cr_4955',
+        seed: 'hopeforward-renew-2026-4955',
+        headline: 'Renew your faith in giving.',
+        format: 'video',
+        aspect: 'video',
+      },
+      {
+        id: 'cr_4906',
+        seed: 'hf-mothers-day-4906',
+        headline: 'Mothers Day · sponsor in her name.',
+        format: 'carousel',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8817',
@@ -109,6 +208,31 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 282,
     conversionRevenueCents: 14_400_00n,
     attributionSource: 'knock+digital',
+    heroSeed: 'tampines-fsc-neighbour-4959',
+    dailySpend: [140, 160, 150, 180, 170, 160, 180, 200, 180, 160, 140, 150, 160, 170],
+    creatives: [
+      {
+        id: 'cr_4959',
+        seed: 'tampines-fsc-neighbour-4959',
+        headline: 'Your neighbour sponsored a child in Tampines.',
+        format: 'carousel',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4945',
+        seed: 'tampines-knockknock-4945',
+        headline: 'Knock-knock. Tampines is here.',
+        format: 'image',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4904',
+        seed: 'tampines-paynow-recur-4904',
+        headline: 'PayNow recurring · S$45/mo.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
   {
     id: 'cmp_8816',
@@ -123,6 +247,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 184,
     conversionRevenueCents: 11_040_00n,
     attributionSource: 'knock+digital',
+    heroSeed: 'scs-recovery-story-4925',
+    dailySpend: [120, 140, 130, 150, 140, 130, 140, 150, 140, 130, 120, 130, 140, 150],
+    creatives: [
+      {
+        id: 'cr_4925',
+        seed: 'scs-recovery-story-4925',
+        headline: "A neighbour's recovery story.",
+        format: 'video',
+        aspect: 'vertical',
+      },
+      {
+        id: 'cr_4927',
+        seed: 'scs-pilot-412-sgp-4927',
+        headline: 'SCS pilot · 412 Singaporeans give monthly.',
+        format: 'image',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8815',
@@ -137,6 +279,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 89,
     conversionRevenueCents: 53_400_00n,
     attributionSource: 'click',
+    heroSeed: 'goldcoast-oncology-4937',
+    dailySpend: [420, 440, 460, 440, 420, 380, 400, 440, 480, 460, 440, 420, 400, 440],
+    creatives: [
+      {
+        id: 'cr_4937',
+        seed: 'goldcoast-oncology-4937',
+        headline: 'Gold Coast Hospital · new oncology wing.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
   {
     id: 'cmp_8814',
@@ -151,6 +304,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 198,
     conversionRevenueCents: 17_820_00n,
     attributionSource: 'knock+digital',
+    heroSeed: 'wv-au-carlton-knock-4916',
+    dailySpend: [220, 240, 230, 250, 240, 220, 240, 260, 240, 220, 200, 220, 240, 260],
+    creatives: [
+      {
+        id: 'cr_4916',
+        seed: 'wv-au-carlton-knock-4916',
+        headline: 'Knockers walked 312 km in Carlton.',
+        format: 'image',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4938',
+        seed: 'wv-au-nsw-28400-4938',
+        headline: 'Knockers cleared 28,400 doors in NSW.',
+        format: 'carousel',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8813',
@@ -165,6 +336,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 71,
     conversionRevenueCents: 6_319_00n,
     attributionSource: 'click',
+    heroSeed: 'pestmax-az-termite-4931',
+    dailySpend: [120, 140, 130, 150, 140, 130, 140, 150, 140, 130, 120, 130, 140, 130],
+    creatives: [
+      {
+        id: 'cr_4931',
+        seed: 'pestmax-az-termite-4931',
+        headline: 'AZ summer · termite-season starts in May.',
+        format: 'video',
+        aspect: 'vertical',
+      },
+    ],
   },
   {
     id: 'cmp_8812',
@@ -179,6 +361,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 312,
     conversionRevenueCents: 27_456_00n,
     attributionSource: 'click',
+    heroSeed: 'hf-charity-nav-badge-4902',
+    dailySpend: [180, 200, 220, 200, 180, 200, 220, 240, 220, 200, 180, 200, 220, 200],
+    creatives: [
+      {
+        id: 'cr_4902',
+        seed: 'hf-charity-nav-badge-4902',
+        headline: 'Charity Navigator 4-star · 7 years.',
+        format: 'image',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8811',
@@ -193,6 +386,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 0,
     conversionRevenueCents: 0n,
     attributionSource: 'click',
+    heroSeed: 'nextgen-tx-dmo-tablet-4914',
+    dailySpend: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    creatives: [
+      {
+        id: 'cr_4914',
+        seed: 'nextgen-tx-dmo-tablet-4914',
+        headline: 'NextGen Power TX — DMO shown live on tablet.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
   {
     id: 'cmp_8810',
@@ -207,6 +411,24 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 142,
     conversionRevenueCents: 28_400_00n,
     attributionSource: 'click',
+    heroSeed: 'sunlinkco-boise-solar-4956',
+    dailySpend: [280, 300, 320, 300, 280, 300, 320, 340, 320, 300, 280, 300, 320, 280],
+    creatives: [
+      {
+        id: 'cr_4956',
+        seed: 'sunlinkco-boise-solar-4956',
+        headline: 'Our solar bills shrank 71% · Boise, ID.',
+        format: 'image',
+        aspect: 'square',
+      },
+      {
+        id: 'cr_4941',
+        seed: 'sunlinkco-text-quote-4941',
+        headline: 'Free quote, no salesperson.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
   {
     id: 'cmp_8809',
@@ -221,6 +443,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 24,
     conversionRevenueCents: 2_160_00n,
     attributionSource: 'click',
+    heroSeed: 'wv-au-melbourne-knock-4909',
+    dailySpend: [140, 160, 150, 140, 120, 80, 60, 0, 0, 0, 0, 0, 0, 0],
+    creatives: [
+      {
+        id: 'cr_4909',
+        seed: 'wv-au-melbourne-knock-4909',
+        headline: 'Melbourne knock teams · 18,400 doors.',
+        format: 'image',
+        aspect: 'square',
+      },
+    ],
   },
   {
     id: 'cmp_8808',
@@ -235,6 +468,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 421,
     conversionRevenueCents: 39_780_00n,
     attributionSource: 'view',
+    heroSeed: 'hf-tx-townhall-4910',
+    dailySpend: [580, 620, 640, 600, 580, 540, 520, 500, 480, 460, 440, 420, 400, 0],
+    creatives: [
+      {
+        id: 'cr_4910',
+        seed: 'hf-tx-townhall-4910',
+        headline: 'Hope Forward · TX Town Hall.',
+        format: 'video',
+        aspect: 'video',
+      },
+    ],
   },
   {
     id: 'cmp_8807',
@@ -249,6 +493,17 @@ const CAMPAIGNS: Campaign[] = [
     conversions: 118,
     conversionRevenueCents: 7_080_00n,
     attributionSource: 'knock+digital',
+    heroSeed: 'scs-bedok-stairwell-4912',
+    dailySpend: [80, 100, 90, 110, 100, 90, 100, 110, 100, 90, 80, 90, 100, 110],
+    creatives: [
+      {
+        id: 'cr_4912',
+        seed: 'scs-bedok-stairwell-4912',
+        headline: 'Stairwell-by-stairwell · Bedok block 412.',
+        format: 'image',
+        aspect: 'portrait',
+      },
+    ],
   },
 ];
 
@@ -282,7 +537,23 @@ function channelBadge(c: Channel): string {
   }
 }
 
+function aspectClass(a: CampaignCreative['aspect']): string {
+  switch (a) {
+    case 'square':
+      return 'aspect-square';
+    case 'portrait':
+      return 'aspect-[4/5]';
+    case 'vertical':
+      return 'aspect-[9/16]';
+    case 'video':
+      return 'aspect-video';
+  }
+}
+
 export default function CampaignsPage(): JSX.Element {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = openId ? CAMPAIGNS.find((c) => c.id === openId) : null;
+
   const totalSpendCents = CAMPAIGNS.reduce((s, c) => s + c.spendCents, 0n);
   const totalRevCents = CAMPAIGNS.reduce((s, c) => s + c.conversionRevenueCents, 0n);
   const totalConversions = CAMPAIGNS.reduce((s, c) => s + c.conversions, 0);
@@ -348,6 +619,7 @@ export default function CampaignsPage(): JSX.Element {
           <table className="tbl">
             <thead>
               <tr>
+                <th></th>
                 <th>Campaign</th>
                 <th>Account</th>
                 <th>Channel</th>
@@ -369,19 +641,33 @@ export default function CampaignsPage(): JSX.Element {
                     ? Number(c.conversionRevenueCents) / Number(c.spendCents)
                     : 0;
                 return (
-                  <tr key={c.id} className="cursor-pointer hover:bg-paper">
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer hover:bg-paper"
+                    onClick={() => setOpenId(c.id)}
+                  >
+                    <td className="!pr-0 w-[88px]">
+                      <div className="w-16 h-16 rounded-md overflow-hidden border border-line2 bg-paper">
+                        <img
+                          src={`https://picsum.photos/seed/${c.heroSeed}/160/160`}
+                          alt={c.name}
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </td>
                     <td>
-                      <div className="text-[13px] font-medium text-ink">{c.name}</div>
-                      <div className="text-[10px] text-muted mono">
+                      <div className="text-[13px] font-medium text-ink leading-snug">{c.name}</div>
+                      <div className="text-[10px] text-muted font-mono">
                         {c.id} · started {c.startDate}
                       </div>
                     </td>
                     <td className="text-[12px] text-ink">{c.account}</td>
                     <td>
                       <span
-                        className={`inline-flex items-center text-[10px] font-semibold rounded px-2 py-0.5 ${channelBadge(
-                          c.channel,
-                        )}`}
+                        className={`inline-flex items-center text-[10px] font-semibold rounded px-2 py-0.5 ${channelBadge(c.channel)}`}
                       >
                         {c.channel}
                       </span>
@@ -425,6 +711,7 @@ export default function CampaignsPage(): JSX.Element {
                         {c.status === 'active' ? (
                           <button
                             type="button"
+                            onClick={(e) => e.stopPropagation()}
                             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                             title="Pause"
                           >
@@ -433,6 +720,7 @@ export default function CampaignsPage(): JSX.Element {
                         ) : c.status === 'paused' ? (
                           <button
                             type="button"
+                            onClick={(e) => e.stopPropagation()}
                             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-success"
                             title="Resume"
                           >
@@ -441,6 +729,10 @@ export default function CampaignsPage(): JSX.Element {
                         ) : null}
                         <button
                           type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenId(c.id);
+                          }}
                           className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                           title="Inspect"
                         >
@@ -448,6 +740,7 @@ export default function CampaignsPage(): JSX.Element {
                         </button>
                         <button
                           type="button"
+                          onClick={(e) => e.stopPropagation()}
                           className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                           title="Open in channel dashboard"
                         >
@@ -479,9 +772,7 @@ export default function CampaignsPage(): JSX.Element {
                     <div className="flex items-center justify-between text-[12px] mb-1">
                       <span className="font-medium text-ink flex items-center gap-1.5">
                         <span
-                          className={`inline-flex items-center text-[9px] font-semibold rounded px-1.5 py-0.5 ${channelBadge(
-                            ch,
-                          )}`}
+                          className={`inline-flex items-center text-[9px] font-semibold rounded px-1.5 py-0.5 ${channelBadge(ch)}`}
                         >
                           {ch}
                         </span>
@@ -542,6 +833,218 @@ export default function CampaignsPage(): JSX.Element {
           </Section>
         </div>
       </div>
+
+      {opened && <CampaignDrawer campaign={opened} onClose={() => setOpenId(null)} />}
     </PlatformShell>
+  );
+}
+
+function CampaignDrawer({
+  campaign,
+  onClose,
+}: {
+  campaign: Campaign;
+  onClose: () => void;
+}): JSX.Element {
+  const cRoas =
+    Number(campaign.spendCents) > 0
+      ? Number(campaign.conversionRevenueCents) / Number(campaign.spendCents)
+      : 0;
+  const maxSpend = Math.max(...campaign.dailySpend, 1);
+  return (
+    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
+      <div className="flex-1 bg-ink/40 backdrop-blur-sm" />
+      <aside
+        className="w-[640px] max-w-[92vw] bg-surface border-l border-line2 h-full overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-3 border-b border-line2 sticky top-0 bg-surface z-10">
+          <div>
+            <div className="text-[13px] font-semibold text-ink">{campaign.name}</div>
+            <div className="text-[10.5px] text-muted font-mono">
+              {campaign.id} · {campaign.account}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center text-soft"
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-4 gap-2">
+            <DrawerMetric
+              label="Spend"
+              value={<Money cents={campaign.spendCents} region="US" emptyAsDash />}
+              icon={<DollarSign size={11} className="text-accent" />}
+            />
+            <DrawerMetric
+              label="Conv"
+              value={campaign.conversions.toLocaleString()}
+              icon={<Activity size={11} className="text-accent" />}
+            />
+            <DrawerMetric
+              label="Revenue"
+              value={<Money cents={campaign.conversionRevenueCents} region="US" emptyAsDash />}
+              icon={<TrendingUp size={11} className="text-success" />}
+            />
+            <DrawerMetric
+              label="ROAS"
+              value={cRoas > 0 ? `${cRoas.toFixed(1)}x` : '—'}
+              icon={<TrendingUp size={11} className="text-success" />}
+            />
+          </div>
+
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider text-muted font-medium mb-1.5">
+              Daily spend · last 14 days
+            </div>
+            <div className="border border-line2 rounded-md p-3 bg-paper">
+              <svg viewBox="0 0 280 80" className="w-full h-20" preserveAspectRatio="none">
+                <polyline
+                  fill="none"
+                  stroke="currentColor"
+                  className="text-accent"
+                  strokeWidth="1.5"
+                  points={campaign.dailySpend
+                    .map(
+                      (v, i) =>
+                        `${(i / (campaign.dailySpend.length - 1)) * 280},${80 - (v / maxSpend) * 70}`,
+                    )
+                    .join(' ')}
+                />
+                {campaign.dailySpend.map((v, i) => (
+                  <circle
+                    key={i}
+                    cx={(i / (campaign.dailySpend.length - 1)) * 280}
+                    cy={80 - (v / maxSpend) * 70}
+                    r="1.6"
+                    className="fill-accent"
+                  />
+                ))}
+              </svg>
+              <div className="flex items-center justify-between text-[10px] text-muted mt-1">
+                <span>Day 1</span>
+                <span>peak ${maxSpend.toLocaleString()}</span>
+                <span>Today</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider text-muted font-medium mb-2">
+              Creatives in this campaign · {campaign.creatives.length}
+            </div>
+            <div className="grid grid-cols-3 gap-2.5">
+              {campaign.creatives.map((cr) => (
+                <div key={cr.id} className="card overflow-hidden">
+                  <div className={`${aspectClass(cr.aspect)} relative overflow-hidden bg-paper`}>
+                    <img
+                      src={`https://picsum.photos/seed/${cr.seed}/300/300`}
+                      alt={cr.headline}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/20 to-transparent" />
+                    <div className="absolute top-1.5 right-1.5">
+                      <span
+                        className="inline-flex items-center gap-1 bg-surface/95 rounded text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-success"
+                        title="C2PA signed"
+                      >
+                        <FileCheck2 size={8} /> C2PA
+                      </span>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-2">
+                      <div className="text-surface text-[10.5px] font-semibold leading-snug line-clamp-3">
+                        {cr.headline}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-1.5 flex items-center justify-between text-[10px] text-muted">
+                    <span className="font-mono">{cr.id}</span>
+                    <span className="capitalize">{cr.format}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider text-muted font-medium mb-2">
+              Delivery log
+            </div>
+            <ul className="space-y-1.5 text-[11px] text-muted">
+              <li className="flex items-start gap-2">
+                <Activity size={11} className="text-success mt-0.5 shrink-0" />
+                <span>
+                  <span className="text-ink font-medium">CAPI webhook ingested</span> · 218
+                  conversions · 2026-05-24 09:42
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Activity size={11} className="text-accent mt-0.5 shrink-0" />
+                <span>
+                  <span className="text-ink font-medium">Daily spend cap reached</span> · paused
+                  04:00, resumed 09:00
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Activity size={11} className="text-accent mt-0.5 shrink-0" />
+                <span>
+                  <span className="text-ink font-medium">Audience refreshed</span> · hashed audience
+                  uploaded · 8,400 added
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Activity size={11} className="text-accent mt-0.5 shrink-0" />
+                <span>
+                  <span className="text-ink font-medium">Creative rotation triggered</span> ·
+                  cr_4912 promoted to 60% share
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex items-center gap-2 pt-3 border-t border-line2">
+            {campaign.status === 'active' ? (
+              <Button variant="ghost" size="sm" leftIcon={<Pause size={12} />}>
+                Pause campaign
+              </Button>
+            ) : campaign.status === 'paused' ? (
+              <Button variant="primary" size="sm" leftIcon={<Play size={12} />}>
+                Resume campaign
+              </Button>
+            ) : null}
+            <Button variant="ghost" size="sm" leftIcon={<ExternalLink size={12} />}>
+              Open in {campaign.channel}
+            </Button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function DrawerMetric({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="border border-line2 rounded-md p-2">
+      <div className="flex items-center gap-1 text-[9.5px] uppercase tracking-wider text-muted font-medium">
+        {icon}
+        {label}
+      </div>
+      <div className="text-[13px] font-semibold text-ink mt-0.5 numeric">{value}</div>
+    </div>
   );
 }

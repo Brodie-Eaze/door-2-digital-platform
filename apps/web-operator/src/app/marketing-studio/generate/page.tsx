@@ -40,95 +40,126 @@ type Format = 'image' | 'carousel' | 'video';
 
 interface Variant {
   id: string;
+  seed: string;
   headline: string;
   copy: string;
-  gradient: string;
   safetyPass: boolean;
   cost: number;
   c2paId: string;
   status: 'preview' | 'approved' | 'rejected';
+  capability: 'image' | 'carousel' | 'video' | 'avatar';
 }
 
 const VARIANT_SEEDS: Variant[] = [
   {
     id: 'var_a01',
+    seed: 'tampines-door-story-a01',
     headline: "Every door is someone's story.",
     copy: 'Sponsor a child in Tampines for just S$45/month. PayNow today, see your impact tomorrow.',
-    gradient: 'from-emerald-500 to-teal-700',
     safetyPass: true,
     cost: 0.42,
     c2paId: 'c2pa-9421a',
     status: 'preview',
+    capability: 'image',
   },
   {
     id: 'var_a02',
+    seed: 'tampines-5min-change-a02',
     headline: "In 5 minutes you can change a Tampines family's year.",
     copy: 'S$45/mo via PayNow corporate UEN T26CC0021K. Tax-deductible 250% (IPC).',
-    gradient: 'from-blue-500 to-indigo-700',
     safetyPass: true,
     cost: 0.38,
     c2paId: 'c2pa-9421b',
     status: 'preview',
+    capability: 'image',
   },
   {
     id: 'var_a03',
+    seed: 'tampines-school-meals-a03',
     headline: 'Your S$45 buys a week of school meals.',
     copy: "House-to-house permit PLRD/H2H/2026/0188. Knocker shows you the schools you're feeding.",
-    gradient: 'from-violet-500 to-purple-700',
     safetyPass: true,
     cost: 0.41,
     c2paId: 'c2pa-9421c',
     status: 'preview',
+    capability: 'image',
   },
   {
     id: 'var_a04',
+    seed: 'tampines-8210-doors-a04',
     headline: 'We knocked on 8,210 doors in your block.',
     copy: 'Less than 4% give. Be one of them. Recurring S$45/mo · cancel anytime.',
-    gradient: 'from-amber-500 to-orange-700',
     safetyPass: true,
     cost: 0.39,
     c2paId: 'c2pa-9421d',
     status: 'preview',
+    capability: 'carousel',
   },
   {
     id: 'var_a05',
+    seed: 'tampines-quiet-8-pct-a05',
     headline: "Singapore's quiet 8% live below the line.",
     copy: 'Tampines FSC reaches them. You can too. S$45/mo via PayNow.',
-    gradient: 'from-rose-500 to-red-700',
     safetyPass: false,
     cost: 0.44,
     c2paId: 'c2pa-9421e',
     status: 'preview',
+    capability: 'image',
   },
   {
     id: 'var_a06',
+    seed: 'tampines-door-fed-a06',
     headline: 'A door knocked is a child fed.',
     copy: 'Our PLRD-permitted Knockers walk Tampines daily. Sponsor for S$45/mo.',
-    gradient: 'from-sky-500 to-blue-700',
     safetyPass: true,
     cost: 0.4,
     c2paId: 'c2pa-9421f',
     status: 'preview',
+    capability: 'image',
   },
   {
     id: 'var_a07',
+    seed: 'tampines-cdc-voucher-a07',
     headline: 'Your CDC voucher? Stretch it twice as far.',
     copy: 'Round-up at point of sale → recurring S$5/mo to Tampines FSC. PayNow today.',
-    gradient: 'from-green-500 to-emerald-700',
     safetyPass: true,
     cost: 0.43,
     c2paId: 'c2pa-9421g',
     status: 'preview',
+    capability: 'carousel',
   },
   {
     id: 'var_a08',
+    seed: 'tampines-knockknock-a08',
     headline: 'Knock-knock. Tampines is here.',
     copy: 'Our youngest sponsor is 16, our oldest 92. Join them with S$45/mo.',
-    gradient: 'from-pink-500 to-rose-700',
     safetyPass: true,
     cost: 0.45,
     c2paId: 'c2pa-9421h',
     status: 'preview',
+    capability: 'image',
+  },
+  {
+    id: 'var_a09',
+    seed: 'tampines-recovery-video-a09',
+    headline: 'One block, 412 sponsors, and counting.',
+    copy: 'A short film from a single Tampines HDB block. Tap to watch · 28s.',
+    safetyPass: true,
+    cost: 0.62,
+    c2paId: 'c2pa-9421i',
+    status: 'preview',
+    capability: 'video',
+  },
+  {
+    id: 'var_a10',
+    seed: 'tampines-avatar-thanks-a10',
+    headline: 'A personal thanks from our Tampines team.',
+    copy: 'AI-presented avatar segment · CEO-recorded script · 18s.',
+    safetyPass: true,
+    cost: 1.84,
+    c2paId: 'c2pa-9421j',
+    status: 'preview',
+    capability: 'avatar',
   },
 ];
 
@@ -162,6 +193,17 @@ export default function GenerateCreativePage(): JSX.Element {
     setVariants((vs) => vs.map((v) => (v.id === id ? { ...v, status: 'rejected' as const } : v)));
   }
 
+  function regenerate(id: string): void {
+    // Re-seed deterministically so the image swaps for the same variant id.
+    setVariants((vs) =>
+      vs.map((v) =>
+        v.id === id
+          ? { ...v, seed: `${v.seed}-r${Date.now() % 1000}`, status: 'preview' as const }
+          : v,
+      ),
+    );
+  }
+
   const selected = variants.find((v) => v.id === selectedId);
   const approvedCount = variants.filter((v) => v.status === 'approved').length;
   const rejectedCount = variants.filter((v) => v.status === 'rejected').length;
@@ -183,7 +225,11 @@ export default function GenerateCreativePage(): JSX.Element {
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard label="Variants this brief" value={variants.length} hint="image · 8 default" />
+          <KpiCard
+            label="Variants this brief"
+            value={variants.length}
+            hint="image + carousel + video + avatar"
+          />
           <KpiCard
             label="Safety pass"
             value={`${safetyPassCount} / ${variants.length}`}
@@ -286,8 +332,19 @@ export default function GenerateCreativePage(): JSX.Element {
                   }
                   className="w-full"
                 >
-                  {isGenerating ? 'Generating variants…' : 'Generate 8 variants'}
+                  {isGenerating ? 'Generating variants…' : 'Generate 10 variants'}
                 </Button>
+                <div className="pt-2 border-t border-line2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted font-medium mb-1.5">
+                    Pipeline · estimated
+                  </div>
+                  <div className="space-y-1 text-[11px]">
+                    <BriefMeta label="Compose" value="claude-3-5-sonnet · ~$0.04" />
+                    <BriefMeta label="Image gen" value="flux-1.1-pro · ~$0.32" />
+                    <BriefMeta label="Safety scan" value="Anthropic + Sightengine · ~$0.02" />
+                    <BriefMeta label="C2PA sign" value="ed25519 · $0.00" />
+                  </div>
+                </div>
               </div>
             </Section>
           </div>
@@ -298,18 +355,33 @@ export default function GenerateCreativePage(): JSX.Element {
               title={`Preview · ${variants.length} variants`}
               subtitle="Click a tile to inspect provenance + safety detail"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {variants.map((v) => (
-                  <VariantCard
-                    key={v.id}
-                    variant={v}
-                    isSelected={selectedId === v.id}
-                    onSelect={() => setSelectedId(v.id)}
-                    onApprove={() => approve(v.id)}
-                    onReject={() => reject(v.id)}
-                  />
-                ))}
-              </div>
+              {isGenerating ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="card overflow-hidden">
+                      <div className="aspect-[4/5] bg-paper animate-pulse" />
+                      <div className="p-2.5 space-y-2">
+                        <div className="h-3 bg-paper rounded animate-pulse w-3/4" />
+                        <div className="h-3 bg-paper rounded animate-pulse w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {variants.map((v) => (
+                    <VariantCard
+                      key={v.id}
+                      variant={v}
+                      isSelected={selectedId === v.id}
+                      onSelect={() => setSelectedId(v.id)}
+                      onApprove={() => approve(v.id)}
+                      onReject={() => reject(v.id)}
+                      onRegenerate={() => regenerate(v.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </Section>
           </div>
 
@@ -359,12 +431,28 @@ export default function GenerateCreativePage(): JSX.Element {
                         manifest_id: <span className="text-accent">{selected.c2paId}</span>
                       </div>
                       <div>model: anthropic/claude-3.5-sonnet</div>
+                      <div>image_model: black-forest-labs/flux-1.1-pro</div>
                       <div>seed: 482910</div>
                       <div>temperature: 0.72</div>
                       <div>prompt_hash: 0x9f12c8…</div>
                       <div>cost_cents: {Math.round(selected.cost * 100)}</div>
                       <div>safety_scan: pass</div>
                       <div>signed_at: 2026-05-24T09:42:18Z</div>
+                    </div>
+                    <div className="mt-2.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted font-medium mb-1">
+                        Preview
+                      </div>
+                      <div className="rounded-md overflow-hidden border border-line2 bg-paper aspect-[4/5]">
+                        <img
+                          src={`https://picsum.photos/seed/${selected.seed}/400/500`}
+                          alt={selected.headline}
+                          width={400}
+                          height={500}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="pt-3 border-t border-line2 grid grid-cols-2 gap-2">
@@ -453,26 +541,82 @@ function PillToggle<T extends string>({
   );
 }
 
+function aspectClass(cap: Variant['capability']): string {
+  switch (cap) {
+    case 'image':
+      return 'aspect-[4/5]';
+    case 'carousel':
+      return 'aspect-square';
+    case 'video':
+      return 'aspect-[9/16]';
+    case 'avatar':
+      return 'aspect-[4/5]';
+  }
+}
+
+function aspectDims(cap: Variant['capability']): { w: number; h: number } {
+  switch (cap) {
+    case 'image':
+      return { w: 600, h: 750 };
+    case 'carousel':
+      return { w: 600, h: 600 };
+    case 'video':
+      return { w: 450, h: 800 };
+    case 'avatar':
+      return { w: 600, h: 750 };
+  }
+}
+
+function capabilityPill(cap: Variant['capability']): string {
+  switch (cap) {
+    case 'image':
+      return 'bg-blue-100 text-blue-700';
+    case 'carousel':
+      return 'bg-violet-100 text-violet-700';
+    case 'video':
+      return 'bg-rose-100 text-rose-700';
+    case 'avatar':
+      return 'bg-emerald-100 text-emerald-700';
+  }
+}
+
 function VariantCard({
   variant,
   isSelected,
   onSelect,
   onApprove,
   onReject,
+  onRegenerate,
 }: {
   variant: Variant;
   isSelected: boolean;
   onSelect: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onRegenerate: () => void;
 }): JSX.Element {
   const ring = isSelected ? 'ring-2 ring-accent' : 'ring-1 ring-transparent hover:ring-line2';
+  const dims = aspectDims(variant.capability);
   return (
     <div className={`card overflow-hidden cursor-pointer transition ${ring}`} onClick={onSelect}>
-      <div className={`h-28 bg-gradient-to-br ${variant.gradient} relative flex items-end p-3`}>
+      <div className={`${aspectClass(variant.capability)} relative overflow-hidden bg-paper`}>
+        <img
+          src={`https://picsum.photos/seed/${variant.seed}/${dims.w}/${dims.h}`}
+          alt={variant.headline}
+          width={dims.w}
+          height={dims.h}
+          loading="lazy"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-transparent" />
         <div className="absolute top-2 left-2 flex items-center gap-1">
           <span className="bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-ink">
             {variant.id}
+          </span>
+          <span
+            className={`rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold ${capabilityPill(variant.capability)}`}
+          >
+            {variant.capability}
           </span>
           {!variant.safetyPass && (
             <span className="bg-warn/90 text-surface rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold inline-flex items-center gap-1">
@@ -480,7 +624,7 @@ function VariantCard({
             </span>
           )}
         </div>
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex items-center gap-1">
           {variant.status === 'approved' && (
             <span className="bg-success/95 text-surface rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold inline-flex items-center gap-1">
               <Check size={9} /> approved
@@ -491,17 +635,25 @@ function VariantCard({
               <X size={9} /> rejected
             </span>
           )}
+          <span
+            className="inline-flex items-center gap-1 bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-success"
+            title="C2PA signed"
+          >
+            <FileCheck2 size={9} /> C2PA
+          </span>
         </div>
-        <div className="text-surface text-[12.5px] font-semibold leading-snug drop-shadow-md">
-          {variant.headline}
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <div className="text-surface text-[12.5px] font-semibold leading-snug drop-shadow-md line-clamp-3">
+            {variant.headline}
+          </div>
         </div>
       </div>
       <div className="p-2.5 space-y-2">
-        <div className="text-[11px] text-muted leading-snug">{variant.copy}</div>
+        <div className="text-[11px] text-muted leading-snug line-clamp-2">{variant.copy}</div>
         <div className="flex items-center justify-between pt-1.5 border-t border-line2 text-[10px]">
           <div className="flex items-center gap-1.5 text-muted">
             <FileCheck2 size={10} className="text-success" />
-            <span className="mono">{variant.c2paId}</span>
+            <span className="font-mono">{variant.c2paId}</span>
             <span>· ${variant.cost.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -529,6 +681,17 @@ function VariantCard({
             </button>
             <button
               type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRegenerate();
+              }}
+              className="w-5 h-5 rounded hover:bg-paper flex items-center justify-center text-soft"
+              title="Regenerate"
+            >
+              <RefreshCw size={11} />
+            </button>
+            <button
+              type="button"
               className="w-5 h-5 rounded hover:bg-paper flex items-center justify-center text-soft"
               title="Inspect"
               onClick={(e) => e.stopPropagation()}
@@ -538,6 +701,15 @@ function VariantCard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BriefMeta({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted">{label}</span>
+      <span className="text-ink font-mono">{value}</span>
     </div>
   );
 }

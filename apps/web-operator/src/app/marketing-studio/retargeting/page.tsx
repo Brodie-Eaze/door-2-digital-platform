@@ -84,8 +84,10 @@ const FUNNEL: Stage[] = [
 
 interface Cohort {
   id: string;
+  seedSeed: string;
   audience: string;
   account: string;
+  source: string;
   channel: 'Meta' | 'Google' | 'TikTok' | 'YouTube';
   reach: number;
   servedImpressions: number;
@@ -100,8 +102,10 @@ interface Cohort {
 const COHORTS: Cohort[] = [
   {
     id: 'aud_4421',
+    seedSeed: 'worldvision-au-winter-4954',
     audience: 'WV AU · NSW SEIFA-9 callbacks (14d)',
     account: 'World Vision (AU)',
+    source: '4,812 knocks · CALLBACK + NOT_HOME 14d',
     channel: 'Meta',
     reach: 84_210,
     servedImpressions: 412_300,
@@ -114,8 +118,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4420',
+    seedSeed: 'hopeforward-tx-meals-4960',
     audience: 'Hope Forward · NOT_HOME 7d · TX zips',
     account: 'Hope Forward (US)',
+    source: '8,422 knocks · NOT_HOME 7d',
     channel: 'Meta',
     reach: 142_300,
     servedImpressions: 612_800,
@@ -128,8 +134,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4419',
+    seedSeed: 'pestmax-tx-roach-4958',
     audience: 'PestMax · REFUSED 30d (re-engage offer)',
     account: 'PestMax (US)',
+    source: '1,184 knocks · REFUSED 30d',
     channel: 'TikTok',
     reach: 14_210,
     servedImpressions: 84_100,
@@ -142,8 +150,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4418',
+    seedSeed: 'tampines-fsc-neighbour-4959',
     audience: 'Tampines FSC · NOT_HOME (5-day CPFTA cleared)',
     account: 'Tampines FSC pilot (SG)',
+    source: '2,420 knocks · NOT_HOME · CPFTA-cleared',
     channel: 'Meta',
     reach: 28_400,
     servedImpressions: 142_300,
@@ -156,8 +166,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4417',
+    seedSeed: 'scs-recovery-story-4925',
     audience: 'SCS · Bedok NOT_HOME 14d',
     account: 'SCS pilot (SG)',
+    source: '1,820 knocks · Bedok block 412',
     channel: 'Meta',
     reach: 18_400,
     servedImpressions: 91_400,
@@ -170,8 +182,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4416',
+    seedSeed: 'wv-au-carlton-knock-4916',
     audience: 'World Vision · VIC CALLBACK (won-call air-cover)',
     account: 'World Vision (AU)',
+    source: '1,240 knocks · CALLBACK 21d',
     channel: 'Google',
     reach: 24_310,
     servedImpressions: 84_120,
@@ -184,8 +198,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4415',
+    seedSeed: 'hf-mothers-day-4906',
     audience: 'Hope Forward · Mothers Day re-engage',
     account: 'Hope Forward (US)',
+    source: '12,100 knocks · prior-year sponsors',
     channel: 'YouTube',
     reach: 312_100,
     servedImpressions: 412_800,
@@ -198,8 +214,10 @@ const COHORTS: Cohort[] = [
   },
   {
     id: 'aud_4414',
+    seedSeed: 'pestmax-az-termite-4931',
     audience: 'PestMax · TX CALLBACK 21d',
     account: 'PestMax (US)',
+    source: '420 knocks · CALLBACK 21d',
     channel: 'Google',
     reach: 4_120,
     servedImpressions: 22_400,
@@ -207,8 +225,40 @@ const COHORTS: Cohort[] = [
     returns: 12,
     conversions: 6,
     revenueCents: 534_00n,
-    rakeCents: 26_70n,
+    rakeCents: 27_00n,
     status: 'ended',
+  },
+  {
+    id: 'aud_4413',
+    seedSeed: 'goldcoast-oncology-4937',
+    audience: 'Gold Coast Hospital · NOT_HOME 14d',
+    account: 'Gold Coast Hospital (AU)',
+    source: '820 knocks · QLD high-income',
+    channel: 'Meta',
+    reach: 12_400,
+    servedImpressions: 61_200,
+    ctr: 2.2,
+    returns: 28,
+    conversions: 8,
+    revenueCents: 4_800_00n,
+    rakeCents: 240_00n,
+    status: 'active',
+  },
+  {
+    id: 'aud_4412',
+    seedSeed: 'sunlinkco-boise-solar-4956',
+    audience: 'SunlinkCo · ID + WA REFUSED 30d',
+    account: 'SunlinkCo (US)',
+    source: '1,640 knocks · re-engage post-summer',
+    channel: 'Meta',
+    reach: 18_200,
+    servedImpressions: 71_400,
+    ctr: 1.8,
+    returns: 32,
+    conversions: 14,
+    revenueCents: 2_800_00n,
+    rakeCents: 140_00n,
+    status: 'active',
   },
 ];
 
@@ -273,6 +323,50 @@ export default function RetargetingPage(): JSX.Element {
         </div>
 
         <Section
+          title="Channel match-rate · hashed audience push"
+          subtitle="SHA-256 deterministic match on phone + email · CAPI server-side"
+        >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { ch: 'Meta', rate: 78.4, pushedToday: 4_118, color: 'bg-blue-600' },
+              { ch: 'Google', rate: 72.1, pushedToday: 3_812, color: 'bg-amber-600' },
+              { ch: 'TikTok', rate: 64.8, pushedToday: 1_184, color: 'bg-rose-600' },
+              { ch: 'YouTube', rate: 71.5, pushedToday: 2_410, color: 'bg-red-600' },
+            ].map((r) => (
+              <div key={r.ch} className="border border-line2 rounded-md p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-6 h-6 rounded ${r.color} text-surface flex items-center justify-center text-[9.5px] font-bold uppercase`}
+                    >
+                      {r.ch.slice(0, 2)}
+                    </span>
+                    <span className="text-[12.5px] font-semibold text-ink">{r.ch}</span>
+                  </div>
+                  <span
+                    className={`text-[14px] font-semibold ${r.rate >= 75 ? 'text-success' : r.rate >= 65 ? 'text-accent' : 'text-warn'}`}
+                  >
+                    {r.rate.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-line2 rounded-full overflow-hidden mb-1.5">
+                  <div
+                    className={`h-full ${r.rate >= 75 ? 'bg-success' : r.rate >= 65 ? 'bg-accent' : 'bg-warn'}`}
+                    style={{ width: `${r.rate}%` }}
+                  />
+                </div>
+                <div className="text-[10.5px] text-muted">
+                  pushed today ·{' '}
+                  <span className="text-ink font-semibold numeric">
+                    {r.pushedToday.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section
           title="The roundtrip · today"
           subtitle="One-day snapshot of the 6-stage retargeting loop"
         >
@@ -325,12 +419,13 @@ export default function RetargetingPage(): JSX.Element {
           <table className="tbl">
             <thead>
               <tr>
+                <th></th>
                 <th>Audience ID</th>
                 <th>Cohort</th>
                 <th>Account</th>
+                <th>Source</th>
                 <th>Channel</th>
                 <th>Reach</th>
-                <th>Impressions</th>
                 <th>CTR</th>
                 <th>Returns</th>
                 <th>Conv</th>
@@ -341,17 +436,27 @@ export default function RetargetingPage(): JSX.Element {
             </thead>
             <tbody>
               {COHORTS.map((c) => (
-                <tr key={c.id}>
+                <tr key={c.id} className="cursor-pointer hover:bg-paper">
+                  <td className="!pr-0 w-[60px]">
+                    <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
+                      <img
+                        src={`https://picsum.photos/seed/${c.seedSeed}/96/96`}
+                        alt={c.audience}
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </td>
                   <td>
                     <span className="mono text-[10px] !w-auto !px-2">{c.id}</span>
                   </td>
-                  <td className="text-[12.5px] text-ink">{c.audience}</td>
+                  <td className="text-[12.5px] text-ink leading-snug">{c.audience}</td>
                   <td className="text-[12px] text-muted">{c.account}</td>
+                  <td className="text-[11px] text-muted">{c.source}</td>
                   <td className="text-[12px] text-ink">{c.channel}</td>
                   <td className="text-[12px] text-ink numeric">{c.reach.toLocaleString()}</td>
-                  <td className="text-[12px] text-muted numeric">
-                    {c.servedImpressions.toLocaleString()}
-                  </td>
                   <td className="text-[12px] text-ink numeric">{c.ctr.toFixed(2)}%</td>
                   <td className="text-[12px] text-ink numeric">{c.returns.toLocaleString()}</td>
                   <td className="text-[12px] text-ink numeric font-semibold">

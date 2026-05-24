@@ -11,8 +11,15 @@ import {
   Megaphone,
   Activity,
   AlertTriangle,
+  Eye,
+  PlayCircle,
+  Pause,
+  Ban,
+  UserCheck,
+  RotateCw,
+  Sparkle,
 } from 'lucide-react';
-import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 
 /**
@@ -21,8 +28,8 @@ import { PlatformShell } from '@/components/PlatformShell';
  * Top-of-stack overview of the creative-generation pipeline:
  * Brief → Compose → Variation → Review → Publish → Measure.
  *
- * Volumes per stage today, top-performing creatives across the
- * portfolio, safety + provenance strip, recent jobs.
+ * Real picsum.photos image previews on every creative tile so the
+ * surface feels like a live production product (CSP allows picsum).
  *
  * Per master plan §10: this surface aggregates jobs from
  * services/marketing-studio across all HQ orgs and feeds the
@@ -45,17 +52,11 @@ const PIPELINE: PipelineStage[] = [
     icon: FileCheck2,
     tone: 'info',
   },
-  {
-    label: 'Compose',
-    todayCount: 22,
-    detail: 'Claude + GPT-4.5 fb',
-    icon: Wand2,
-    tone: 'info',
-  },
+  { label: 'Compose', todayCount: 22, detail: 'Claude + GPT-4.5 fb', icon: Wand2, tone: 'info' },
   {
     label: 'Variation',
     todayCount: 184,
-    detail: 'aud × msg × format',
+    detail: 'aud x msg x format',
     icon: Sparkles,
     tone: 'success',
   },
@@ -84,130 +85,181 @@ const PIPELINE: PipelineStage[] = [
 
 interface TopCreative {
   id: string;
+  seed: string;
   headline: string;
   vertical: 'charity' | 'pest' | 'solar' | 'energy';
   region: 'US' | 'AU' | 'SG';
   channel: 'Meta' | 'Google' | 'TikTok' | 'YouTube';
   format: 'image' | 'carousel' | 'video';
+  aspect: 'square' | 'portrait' | 'video' | 'vertical';
   conversionRate: number;
   spendCents: bigint;
   conversions: number;
   roas: number;
-  gradient: string;
+  status: 'live' | 'paused' | 'review';
 }
 
 const TOP_CREATIVES: TopCreative[] = [
   {
     id: 'cr_4912',
-    headline: '"Five dollars covers a meal — every Tuesday."',
+    seed: 'hopeforward-tx-meals-4912',
+    headline: 'Five dollars covers a meal — every Tuesday.',
     vertical: 'charity',
     region: 'US',
     channel: 'Meta',
     format: 'image',
+    aspect: 'square',
     conversionRate: 4.8,
     spendCents: 124_00n,
     conversions: 88,
     roas: 6.4,
-    gradient: 'from-emerald-500 to-teal-700',
+    status: 'live',
   },
   {
     id: 'cr_4908',
-    headline: '"Your neighbour just sponsored a child in Tampines."',
+    seed: 'tampines-fsc-neighbour-4908',
+    headline: 'Your neighbour just sponsored a child in Tampines.',
     vertical: 'charity',
     region: 'SG',
     channel: 'Meta',
     format: 'carousel',
+    aspect: 'square',
     conversionRate: 4.2,
     spendCents: 94_00n,
     conversions: 51,
     roas: 5.8,
-    gradient: 'from-blue-500 to-indigo-700',
+    status: 'live',
   },
   {
     id: 'cr_4901',
-    headline: '"Don\'t share your meal with roaches. Texas-licensed."',
+    seed: 'pestmax-tx-roach-4901',
+    headline: "Don't share your meal with roaches. Texas-licensed.",
     vertical: 'pest',
     region: 'US',
     channel: 'TikTok',
     format: 'video',
+    aspect: 'vertical',
     conversionRate: 3.8,
     spendCents: 184_00n,
     conversions: 42,
     roas: 4.9,
-    gradient: 'from-amber-500 to-orange-700',
+    status: 'live',
   },
   {
     id: 'cr_4897',
-    headline: '"For every child sponsored in Cebu, a Knocker plants one tree."',
+    seed: 'worldvision-cebu-tree-4897',
+    headline: 'For every child sponsored in Cebu, a Knocker plants one tree.',
     vertical: 'charity',
     region: 'AU',
     channel: 'Meta',
     format: 'video',
+    aspect: 'portrait',
     conversionRate: 4.1,
     spendCents: 142_00n,
     conversions: 64,
     roas: 5.4,
-    gradient: 'from-green-500 to-emerald-700',
+    status: 'live',
   },
   {
     id: 'cr_4891',
-    headline: '"Our solar bills shrank 71% in 8 weeks. Boise, ID."',
+    seed: 'sunlinkco-boise-solar-4891',
+    headline: 'Our solar bills shrank 71% in 8 weeks. Boise, ID.',
     vertical: 'solar',
     region: 'US',
     channel: 'Google',
     format: 'image',
+    aspect: 'square',
     conversionRate: 2.9,
     spendCents: 224_00n,
     conversions: 22,
     roas: 4.1,
-    gradient: 'from-orange-500 to-red-700',
+    status: 'live',
   },
   {
     id: 'cr_4884',
-    headline: '"Renew your faith in giving — Hope Forward, 2026."',
+    seed: 'hopeforward-renew-2026-4884',
+    headline: 'Renew your faith in giving — Hope Forward, 2026.',
     vertical: 'charity',
     region: 'US',
     channel: 'YouTube',
     format: 'video',
+    aspect: 'video',
     conversionRate: 3.6,
     spendCents: 312_00n,
     conversions: 71,
     roas: 5.1,
-    gradient: 'from-violet-500 to-purple-700',
+    status: 'live',
   },
   {
     id: 'cr_4877',
-    headline: '"3 in 5 Aussie families need help this winter."',
+    seed: 'worldvision-au-winter-4877',
+    headline: '3 in 5 Aussie families need help this winter.',
     vertical: 'charity',
     region: 'AU',
     channel: 'Meta',
     format: 'image',
+    aspect: 'portrait',
     conversionRate: 3.9,
     spendCents: 104_00n,
     conversions: 48,
     roas: 5.7,
-    gradient: 'from-sky-500 to-blue-700',
+    status: 'live',
   },
   {
     id: 'cr_4862',
-    headline: '"Switch to NextGen Power and pay nothing for 3 months."',
+    seed: 'nextgen-power-switch-4862',
+    headline: 'Switch to NextGen Power and pay nothing for 3 months.',
     vertical: 'energy',
     region: 'US',
     channel: 'Google',
     format: 'carousel',
+    aspect: 'square',
     conversionRate: 2.7,
     spendCents: 194_00n,
     conversions: 18,
     roas: 3.6,
-    gradient: 'from-yellow-500 to-amber-700',
+    status: 'paused',
+  },
+  {
+    id: 'cr_4855',
+    seed: 'scs-bedok-mother-4855',
+    headline: "A neighbour's recovery story. S$45/mo.",
+    vertical: 'charity',
+    region: 'SG',
+    channel: 'Meta',
+    format: 'video',
+    aspect: 'vertical',
+    conversionRate: 4.4,
+    spendCents: 88_00n,
+    conversions: 39,
+    roas: 5.9,
+    status: 'live',
+  },
+  {
+    id: 'cr_4849',
+    seed: 'goldcoast-onc-wing-4849',
+    headline: 'Gold Coast Hospital · new oncology wing · open 2027.',
+    vertical: 'charity',
+    region: 'AU',
+    channel: 'Meta',
+    format: 'image',
+    aspect: 'portrait',
+    conversionRate: 3.4,
+    spendCents: 184_00n,
+    conversions: 36,
+    roas: 4.6,
+    status: 'live',
   },
 ];
 
 interface RecentJob {
   id: string;
+  seed: string;
   type: 'compose' | 'variation' | 'safety_scan' | 'publish' | 'measure';
   account: string;
   brief: string;
+  model: string;
+  costCents: number;
   stage: 'queued' | 'running' | 'completed' | 'blocked' | 'failed';
   durationSec: number;
   ts: string;
@@ -216,93 +268,353 @@ interface RecentJob {
 const RECENT_JOBS: RecentJob[] = [
   {
     id: 'job_9421',
+    seed: 'wv-au-winter-sponsor',
     type: 'compose',
     account: 'World Vision (AU)',
     brief: 'Winter sponsorship · Outer Sydney',
+    model: 'claude-3-5-sonnet',
+    costCents: 6,
     stage: 'completed',
     durationSec: 12.4,
     ts: '2026-05-24 09:42:18',
   },
   {
     id: 'job_9420',
+    seed: 'hf-mothers-day-var',
     type: 'variation',
     account: 'Hope Forward (US)',
     brief: 'Mothers Day · 23 variations',
+    model: 'flux-1.1-pro',
+    costCents: 92,
     stage: 'running',
     durationSec: 38.1,
     ts: '2026-05-24 09:41:02',
   },
   {
     id: 'job_9419',
+    seed: 'pestmax-tx-roach-v2',
     type: 'safety_scan',
     account: 'PestMax (US)',
     brief: 'TX Roach script v2 · YouTube',
+    model: 'anthropic-mod',
+    costCents: 2,
     stage: 'blocked',
     durationSec: 4.8,
     ts: '2026-05-24 09:39:55',
   },
   {
     id: 'job_9418',
+    seed: 'hf-cr4912-meta-publish',
     type: 'publish',
     account: 'Hope Forward (US)',
     brief: 'cr_4912 → Meta US',
+    model: 'meta-marketing',
+    costCents: 0,
     stage: 'completed',
     durationSec: 2.1,
     ts: '2026-05-24 09:38:21',
   },
   {
     id: 'job_9417',
+    seed: 'wv-cr4877-attribution',
     type: 'measure',
     account: 'World Vision (AU)',
     brief: 'cr_4877 attribution sync',
+    model: 'capi-webhook',
+    costCents: 0,
     stage: 'completed',
     durationSec: 1.4,
     ts: '2026-05-24 09:36:09',
   },
   {
     id: 'job_9416',
+    seed: 'goldcoast-oncology-cap',
     type: 'compose',
     account: 'Gold Coast Hospital (AU)',
     brief: 'Cancer wing capital campaign',
+    model: 'claude-3-5-sonnet',
+    costCents: 8,
     stage: 'queued',
     durationSec: 0,
     ts: '2026-05-24 09:34:44',
   },
   {
     id: 'job_9415',
+    seed: 'tampines-fsc-h2h-sg',
     type: 'safety_scan',
     account: 'Tampines FSC (SG)',
     brief: 'House-to-house pitch · SG charity',
+    model: 'anthropic-mod',
+    costCents: 2,
     stage: 'completed',
     durationSec: 5.2,
     ts: '2026-05-24 09:32:11',
   },
   {
     id: 'job_9414',
+    seed: 'pestmax-az-termite-v',
     type: 'variation',
     account: 'PestMax (US)',
     brief: 'AZ Termite script · 12 variations',
+    model: 'higgsfield',
+    costCents: 48,
     stage: 'failed',
     durationSec: 17.4,
     ts: '2026-05-24 09:28:55',
   },
   {
     id: 'job_9413',
+    seed: 'wv-cr4877-meta-au',
     type: 'publish',
     account: 'World Vision (AU)',
     brief: 'cr_4877 → Meta AU',
+    model: 'meta-marketing',
+    costCents: 0,
     stage: 'completed',
     durationSec: 1.9,
     ts: '2026-05-24 09:24:13',
   },
   {
     id: 'job_9412',
+    seed: 'scs-toa-payoh-cancer',
     type: 'compose',
     account: 'SCS pilot (SG)',
     brief: 'Cancer awareness · Toa Payoh',
+    model: 'claude-3-5-sonnet',
+    costCents: 5,
     stage: 'completed',
     durationSec: 11.8,
     ts: '2026-05-24 09:21:08',
+  },
+  {
+    id: 'job_9411',
+    seed: 'sunlinkco-roof-quote',
+    type: 'variation',
+    account: 'SunlinkCo (US)',
+    brief: 'Boise rooftop carousel · 6 variants',
+    model: 'flux-1.1-pro',
+    costCents: 28,
+    stage: 'completed',
+    durationSec: 8.4,
+    ts: '2026-05-24 09:18:42',
+  },
+  {
+    id: 'job_9410',
+    seed: 'hf-charity-nav-badge',
+    type: 'publish',
+    account: 'Hope Forward (US)',
+    brief: 'Charity Navigator badge · 4 cards',
+    model: 'meta-marketing',
+    costCents: 0,
+    stage: 'completed',
+    durationSec: 1.7,
+    ts: '2026-05-24 09:15:11',
+  },
+];
+
+interface ActivityEvent {
+  id: string;
+  kind: 'generated' | 'approved' | 'blocked' | 'published' | 'cohort' | 'attribution' | 'edited';
+  title: string;
+  detail: string;
+  actor: string;
+  ts: string;
+}
+
+const ACTIVITY: ActivityEvent[] = [
+  {
+    id: 'evt_001',
+    kind: 'generated',
+    title: '4 image variants generated',
+    detail: 'World Vision AU · Winter sponsorship brief · flux-1.1-pro',
+    actor: 'studio-agent',
+    ts: '09:42:18',
+  },
+  {
+    id: 'evt_002',
+    kind: 'approved',
+    title: 'cr_4912 approved',
+    detail: 'Brodie approved Hope Forward Tuesday-meal variant for Meta US',
+    actor: 'Brodie',
+    ts: '09:38:21',
+  },
+  {
+    id: 'evt_003',
+    kind: 'blocked',
+    title: 'cr_4937 blocked · safety',
+    detail: 'NextGen Power · "forever" lock-in violates FCC marketing rules',
+    actor: 'safety-engine',
+    ts: '09:36:09',
+  },
+  {
+    id: 'evt_004',
+    kind: 'cohort',
+    title: 'Cohort aud_4421 built',
+    detail: 'WV AU NSW SEIFA-9 callbacks · 84,210 reach · pushed to Meta',
+    actor: 'retargeting',
+    ts: '09:31:18',
+  },
+  {
+    id: 'evt_005',
+    kind: 'published',
+    title: 'cr_4877 went live · Meta AU',
+    detail: 'World Vision AU winter appeal · 14 ad sets · daily cap $1,200',
+    actor: 'meta-marketing',
+    ts: '09:24:13',
+  },
+  {
+    id: 'evt_006',
+    kind: 'attribution',
+    title: '88 conversions attributed to cr_4912',
+    detail: 'CAPI webhooks reconciled · ROAS now 6.4x · 24h window',
+    actor: 'capi-webhook',
+    ts: '09:18:42',
+  },
+  {
+    id: 'evt_007',
+    kind: 'generated',
+    title: '12 video variants generated',
+    detail: 'PestMax AZ Termite script · Higgsfield · 9:16 vertical',
+    actor: 'studio-agent',
+    ts: '09:12:55',
+  },
+  {
+    id: 'evt_008',
+    kind: 'edited',
+    title: 'Brand-safety rule_290 updated',
+    detail: 'Energy/Telco · re-enabled DMO/VDO requirement for locked rates',
+    actor: 'Brodie',
+    ts: '08:54:11',
+  },
+  {
+    id: 'evt_009',
+    kind: 'cohort',
+    title: 'Cohort aud_4420 built',
+    detail: 'Hope Forward NOT_HOME 7d TX zips · 142,300 reach',
+    actor: 'retargeting',
+    ts: '08:42:33',
+  },
+  {
+    id: 'evt_010',
+    kind: 'approved',
+    title: 'cr_4849 approved',
+    detail: 'Compliance team approved Gold Coast Hospital oncology image',
+    actor: 'Compliance team',
+    ts: '08:31:48',
+  },
+  {
+    id: 'evt_011',
+    kind: 'blocked',
+    title: 'cr_4924 critical · legal-hold',
+    detail: 'SunlinkCo "Free solar. Pay nothing. Ever." → FTC inquiry',
+    actor: 'Counsel',
+    ts: '08:14:55',
+  },
+  {
+    id: 'evt_012',
+    kind: 'published',
+    title: 'cr_4901 went live · TikTok US',
+    detail: 'PestMax TX roach video · 8 ad groups · daily cap $640',
+    actor: 'tiktok-marketing',
+    ts: '08:02:18',
+  },
+  {
+    id: 'evt_013',
+    kind: 'attribution',
+    title: '218 click-throughs attributed',
+    detail: 'Meta lead webhook · cr_4877 / cr_4912 / cr_4855 attribution sync',
+    actor: 'capi-webhook',
+    ts: '07:48:09',
+  },
+  {
+    id: 'evt_014',
+    kind: 'generated',
+    title: 'Avatar segment composed · 45s',
+    detail: 'Hope Forward · HeyGen · personal-thanks template · $2.20',
+    actor: 'studio-agent',
+    ts: '07:36:42',
+  },
+  {
+    id: 'evt_015',
+    kind: 'approved',
+    title: 'cr_4855 approved',
+    detail: 'SCS pilot · neighbour recovery story · S$45/mo recurring',
+    actor: 'Brodie',
+    ts: '07:21:11',
+  },
+];
+
+interface ApprovalItem {
+  id: string;
+  seed: string;
+  headline: string;
+  account: string;
+  reviewer: string;
+  reviewerInitials: string;
+  age: string;
+  vertical: string;
+}
+
+const APPROVAL_QUEUE: ApprovalItem[] = [
+  {
+    id: 'cr_4948',
+    seed: 'tampines-quiet-8pct',
+    headline: "Singapore's quiet 8% live below the line.",
+    account: 'Tampines FSC (SG)',
+    reviewer: 'Brodie',
+    reviewerInitials: 'B',
+    age: '14m',
+    vertical: 'charity',
+  },
+  {
+    id: 'cr_4946',
+    seed: 'wv-au-carlton-knockers',
+    headline: 'Knockers walked 312 km in Carlton this week.',
+    account: 'World Vision (AU)',
+    reviewer: 'Compliance',
+    reviewerInitials: 'CT',
+    age: '38m',
+    vertical: 'charity',
+  },
+  {
+    id: 'cr_4945',
+    seed: 'pestmax-az-termite-may',
+    headline: 'AZ summer: termite-season starts in May. We knock at 9am.',
+    account: 'PestMax (US)',
+    reviewer: 'Brodie',
+    reviewerInitials: 'B',
+    age: '1h 12m',
+    vertical: 'pest',
+  },
+  {
+    id: 'cr_4944',
+    seed: 'scs-grandma-28-kids',
+    headline: 'Stayed-at-home grandma · 28 grandkids · 1 PayNow.',
+    account: 'SCS pilot (SG)',
+    reviewer: 'Brodie',
+    reviewerInitials: 'B',
+    age: '1h 48m',
+    vertical: 'charity',
+  },
+  {
+    id: 'cr_4942',
+    seed: 'nextgen-tx-dmo-tablet',
+    headline: 'NextGen Power Texas — Knocker shows DMO live on tablet.',
+    account: 'NextGen Power (US)',
+    reviewer: 'Compliance',
+    reviewerInitials: 'CT',
+    age: '2h 22m',
+    vertical: 'energy',
+  },
+  {
+    id: 'cr_4940',
+    seed: 'hf-tx-townhall',
+    headline: 'Hope Forward · TX Town Hall · Knocker leadership.',
+    account: 'Hope Forward (US)',
+    reviewer: 'Brodie',
+    reviewerInitials: 'B',
+    age: '3h 04m',
+    vertical: 'charity',
   },
 ];
 
@@ -318,6 +630,64 @@ function jobStageTone(s: RecentJob['stage']): 'success' | 'info' | 'warn' | 'dan
       return 'warn';
     case 'failed':
       return 'danger';
+  }
+}
+
+function aspectClass(a: TopCreative['aspect']): string {
+  switch (a) {
+    case 'square':
+      return 'aspect-square';
+    case 'portrait':
+      return 'aspect-[4/5]';
+    case 'vertical':
+      return 'aspect-[9/16]';
+    case 'video':
+      return 'aspect-video';
+  }
+}
+
+function aspectDims(a: TopCreative['aspect']): { w: number; h: number } {
+  switch (a) {
+    case 'square':
+      return { w: 600, h: 600 };
+    case 'portrait':
+      return { w: 600, h: 750 };
+    case 'vertical':
+      return { w: 450, h: 800 };
+    case 'video':
+      return { w: 800, h: 450 };
+  }
+}
+
+function channelBadge(c: TopCreative['channel']): string {
+  switch (c) {
+    case 'Meta':
+      return 'bg-blue-100 text-blue-700';
+    case 'Google':
+      return 'bg-amber-100 text-amber-700';
+    case 'TikTok':
+      return 'bg-rose-100 text-rose-700';
+    case 'YouTube':
+      return 'bg-red-100 text-red-700';
+  }
+}
+
+function activityIcon(k: ActivityEvent['kind']): JSX.Element {
+  switch (k) {
+    case 'generated':
+      return <Sparkle size={13} className="text-accent" />;
+    case 'approved':
+      return <CheckCircle2 size={13} className="text-success" />;
+    case 'blocked':
+      return <Ban size={13} className="text-danger" />;
+    case 'published':
+      return <Megaphone size={13} className="text-accent" />;
+    case 'cohort':
+      return <RotateCw size={13} className="text-accent" />;
+    case 'attribution':
+      return <TrendingUp size={13} className="text-success" />;
+    case 'edited':
+      return <ShieldCheck size={13} className="text-warn" />;
   }
 }
 
@@ -399,135 +769,241 @@ export default function MarketingStudioPage(): JSX.Element {
 
         <Section
           title="Top-performing creatives · last 7 days"
-          subtitle="Ranked by ROAS · click any tile to open creative + delivery log"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {TOP_CREATIVES.map((c) => (
-              <CreativeCard key={c.id} creative={c} />
-            ))}
-          </div>
-        </Section>
-
-        <Section
-          title="Recent jobs"
-          subtitle="Most recent 10 marketing-studio jobs across HQ orgs"
+          subtitle="Ranked by ROAS · scroll horizontally · click any tile to inspect"
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Job</th>
-                <th>Type</th>
-                <th>Account</th>
-                <th>Brief</th>
-                <th>Stage</th>
-                <th>Duration</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RECENT_JOBS.map((j) => (
-                <tr key={j.id}>
-                  <td>
-                    <span className="mono text-[10px] !w-auto !px-2">{j.id}</span>
-                  </td>
-                  <td className="text-[12px] text-ink capitalize">{j.type.replace('_', ' ')}</td>
-                  <td className="text-[12px] text-ink">{j.account}</td>
-                  <td className="text-[12px] text-muted">{j.brief}</td>
-                  <td>
-                    <StatusPill tone={jobStageTone(j.stage)}>{j.stage}</StatusPill>
-                  </td>
-                  <td className="text-[12px] text-muted numeric">
-                    {j.durationSec === 0 ? '—' : `${j.durationSec.toFixed(1)}s`}
-                  </td>
-                  <td className="text-[12px] text-muted numeric">{j.ts}</td>
-                </tr>
+          <div className="overflow-x-auto px-4 py-4">
+            <div className="flex gap-3 min-w-max">
+              {TOP_CREATIVES.map((c) => (
+                <TopCreativeCard key={c.id} creative={c} />
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </Section>
 
-        <Section
-          title="Provenance & safety"
-          subtitle="C2PA manifests · Anthropic moderation · legal-hold queue"
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <ProvCard
-              icon={<Activity size={14} className="text-accent" />}
-              label="Jobs run · 7d"
-              value="2,184"
-              hint="Compose + Variation + Publish"
-            />
-            <ProvCard
-              icon={<ShieldCheck size={14} className="text-success" />}
-              label="Safety blocks today"
-              value="3"
-              hint="2 ACNC · 1 ACL substantiation"
-            />
-            <ProvCard
-              icon={<FileCheck2 size={14} className="text-accent" />}
-              label="C2PA manifests issued"
-              value="412"
-              hint="every img/video signed"
-            />
-            <ProvCard
-              icon={<AlertTriangle size={14} className="text-warn" />}
-              label="Legal-hold items"
-              value="2"
-              hint="awaiting counsel review"
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
+            <Section
+              title="Recent jobs"
+              subtitle="Most recent 12 marketing-studio jobs across HQ orgs"
+              paddedBody={false}
+            >
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Job</th>
+                    <th>Type</th>
+                    <th>Account</th>
+                    <th>Brief</th>
+                    <th>Model</th>
+                    <th>Cost</th>
+                    <th>Stage</th>
+                    <th>Duration</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {RECENT_JOBS.map((j) => (
+                    <tr key={j.id} className="hover:bg-paper">
+                      <td className="!pr-0 w-[60px]">
+                        <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
+                          <img
+                            src={`https://picsum.photos/seed/${j.seed}/96/96`}
+                            alt={j.brief}
+                            width={48}
+                            height={48}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <span className="mono text-[10px] !w-auto !px-2">{j.id}</span>
+                      </td>
+                      <td className="text-[12px] text-ink capitalize">
+                        {j.type.replace('_', ' ')}
+                      </td>
+                      <td className="text-[12px] text-ink">{j.account}</td>
+                      <td className="text-[12px] text-muted">{j.brief}</td>
+                      <td className="text-[11px] text-muted font-mono">{j.model}</td>
+                      <td className="text-[12px] text-ink numeric">
+                        {j.costCents === 0 ? (
+                          '—'
+                        ) : (
+                          <Money cents={BigInt(j.costCents)} region="US" />
+                        )}
+                      </td>
+                      <td>
+                        <StatusPill tone={jobStageTone(j.stage)}>{j.stage}</StatusPill>
+                      </td>
+                      <td className="text-[12px] text-muted numeric">
+                        {j.durationSec === 0 ? '—' : `${j.durationSec.toFixed(1)}s`}
+                      </td>
+                      <td className="text-[12px] text-muted numeric">{j.ts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+
+            <Section
+              title="AI activity feed"
+              subtitle="Live event stream · last 15 events across all orgs"
+            >
+              <ol className="space-y-0">
+                {ACTIVITY.map((evt, idx) => (
+                  <li
+                    key={evt.id}
+                    className={
+                      idx < ACTIVITY.length - 1
+                        ? 'flex items-start gap-3 pb-3 mb-3 border-b border-line2'
+                        : 'flex items-start gap-3'
+                    }
+                  >
+                    <span className="w-7 h-7 rounded-full bg-paper border border-line2 flex items-center justify-center shrink-0 mt-0.5">
+                      {activityIcon(evt.kind)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                        <div className="text-[12.5px] font-semibold text-ink">{evt.title}</div>
+                        <div className="text-[10.5px] text-muted mono shrink-0">{evt.ts}</div>
+                      </div>
+                      <div className="text-[11.5px] text-muted leading-snug">{evt.detail}</div>
+                      <div className="text-[10px] text-soft mt-0.5">
+                        actor: <span className="font-mono text-soft">{evt.actor}</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </Section>
           </div>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <ProvDetail
-              icon={<CheckCircle2 size={13} className="text-success" />}
-              title="Anthropic moderation"
-              detail="Every copy string scanned pre-save · 1.2% block rate this week"
-            />
-            <ProvDetail
-              icon={<ShieldCheck size={13} className="text-accent" />}
-              title="Custom rule engine"
-              detail="Vertical-specific regex + LLM-as-judge · 6 active rule packs"
-            />
-            <ProvDetail
-              icon={<XCircle size={13} className="text-danger" />}
-              title="Image safety (Sightengine)"
-              detail="NSFW + violence + brand-logo collision · 0.4% block rate"
-            />
-            <ProvDetail
-              icon={<Clock size={13} className="text-soft" />}
-              title="Video frame sampling"
-              detail="Every 1.5s sampled + transcription scanned · 18 videos this week"
-            />
-            <ProvDetail
-              icon={<ImageIcon size={13} className="text-accent" />}
-              title="C2PA chain of custody"
-              detail="Model + prompt hash + seed + temp + cost stored per output"
-            />
-            <ProvDetail
-              icon={<TrendingUp size={13} className="text-accent" />}
-              title="ROAS dashboard sync"
-              detail="Meta + Google + TikTok webhooks · &lt;5min attribution lag"
-            />
+
+          <div className="space-y-5">
+            <Section
+              title="Approval queue"
+              subtitle={`${APPROVAL_QUEUE.length} creatives awaiting human review`}
+              action={
+                <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
+                  Review all
+                </Button>
+              }
+            >
+              <ul className="space-y-2.5">
+                {APPROVAL_QUEUE.map((it) => (
+                  <li
+                    key={it.id}
+                    className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
+                  >
+                    <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
+                      <img
+                        src={`https://picsum.photos/seed/${it.seed}/120/120`}
+                        alt={it.headline}
+                        width={56}
+                        height={56}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
+                        {it.headline}
+                      </div>
+                      <div className="text-[10.5px] text-muted mt-0.5">{it.account}</div>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
+                            {it.reviewerInitials}
+                          </span>
+                          <span className="text-[10.5px] text-muted">{it.reviewer}</span>
+                        </div>
+                        <span className="text-[10px] text-soft mono">{it.age}</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+
+            <Section title="Provenance & safety" subtitle="C2PA · Anthropic mod · legal-hold">
+              <div className="grid grid-cols-2 gap-3">
+                <ProvCard
+                  icon={<Activity size={14} className="text-accent" />}
+                  label="Jobs · 7d"
+                  value="2,184"
+                />
+                <ProvCard
+                  icon={<ShieldCheck size={14} className="text-success" />}
+                  label="Blocks today"
+                  value="3"
+                />
+                <ProvCard
+                  icon={<FileCheck2 size={14} className="text-accent" />}
+                  label="C2PA issued"
+                  value="412"
+                />
+                <ProvCard
+                  icon={<AlertTriangle size={14} className="text-warn" />}
+                  label="Legal-hold"
+                  value="2"
+                />
+              </div>
+              <div className="mt-4 space-y-2">
+                <ProvDetail
+                  icon={<CheckCircle2 size={13} className="text-success" />}
+                  title="Anthropic moderation"
+                  detail="Every copy string scanned pre-save · 1.2% block rate this week"
+                />
+                <ProvDetail
+                  icon={<XCircle size={13} className="text-danger" />}
+                  title="Image safety (Sightengine)"
+                  detail="NSFW + violence + brand-logo collision · 0.4% block rate"
+                />
+                <ProvDetail
+                  icon={<Clock size={13} className="text-soft" />}
+                  title="Video frame sampling"
+                  detail="Every 1.5s sampled + transcript scanned · 18 videos this week"
+                />
+                <ProvDetail
+                  icon={<ImageIcon size={13} className="text-accent" />}
+                  title="C2PA chain of custody"
+                  detail="Model + prompt hash + seed + temp + cost stored per output"
+                />
+              </div>
+            </Section>
           </div>
-        </Section>
+        </div>
       </div>
     </PlatformShell>
   );
 }
 
-function CreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
+function TopCreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
+  const dims = aspectDims(creative.aspect);
   return (
-    <div className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden">
-      <div className={`h-32 bg-gradient-to-br ${creative.gradient} relative flex items-end p-3`}>
+    <div className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0">
+      <div className={`${aspectClass(creative.aspect)} relative overflow-hidden bg-paper`}>
+        <img
+          src={`https://picsum.photos/seed/${creative.seed}/${dims.w}/${dims.h}`}
+          alt={creative.headline}
+          width={dims.w}
+          height={dims.h}
+          loading="lazy"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-transparent" />
         <div className="absolute top-2 left-2 flex items-center gap-1">
-          <span className="bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-ink">
+          <span
+            className={`rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold ${channelBadge(creative.channel)}`}
+          >
             {creative.channel}
           </span>
           <span className="bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-ink">
             {creative.format}
           </span>
         </div>
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex items-center gap-1">
           <span
             className="inline-flex items-center gap-1 bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-success"
             title="C2PA provenance manifest signed"
@@ -535,8 +1011,10 @@ function CreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
             <FileCheck2 size={9} /> C2PA
           </span>
         </div>
-        <div className="text-surface text-[12.5px] font-semibold leading-snug drop-shadow-md">
-          {creative.headline}
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <div className="text-surface text-[12.5px] font-semibold leading-snug drop-shadow-md line-clamp-3">
+            {creative.headline}
+          </div>
         </div>
       </div>
       <div className="p-3 space-y-1.5">
@@ -547,9 +1025,31 @@ function CreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
           <span className="text-success font-semibold">{creative.roas.toFixed(1)}x ROAS</span>
         </div>
         <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-line2">
-          <Mini label="Conv rate" value={`${creative.conversionRate.toFixed(1)}%`} />
+          <Mini label="Conv %" value={`${creative.conversionRate.toFixed(1)}%`} />
           <Mini label="Spend" value={<Money cents={creative.spendCents} region="US" />} />
-          <Mini label="Conversions" value={creative.conversions.toString()} />
+          <Mini label="Conv" value={creative.conversions.toString()} />
+        </div>
+        <div className="flex items-center justify-between pt-1.5 border-t border-line2">
+          <StatusPill
+            tone={
+              creative.status === 'live'
+                ? 'success'
+                : creative.status === 'paused'
+                  ? 'warn'
+                  : 'info'
+            }
+          >
+            {creative.status === 'live' && <PlayCircle size={9} className="-ml-0.5" />}
+            {creative.status === 'paused' && <Pause size={9} className="-ml-0.5" />}
+            {creative.status}
+          </StatusPill>
+          <button
+            type="button"
+            className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
+            title="Inspect"
+          >
+            <Eye size={12} />
+          </button>
         </div>
       </div>
     </div>
@@ -569,12 +1069,10 @@ function ProvCard({
   icon,
   label,
   value,
-  hint,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  hint: string;
 }): JSX.Element {
   return (
     <div className="card card-pad">
@@ -585,7 +1083,6 @@ function ProvCard({
       <div className="mt-1.5 text-[18px] font-semibold text-ink tracking-tight numeric">
         {value}
       </div>
-      <div className="text-[11px] text-muted mt-0.5">{hint}</div>
     </div>
   );
 }
@@ -600,15 +1097,12 @@ function ProvDetail({
   detail: string;
 }): JSX.Element {
   return (
-    <div className="border border-line2 rounded-lg p-3">
-      <div className="flex items-center gap-1.5 mb-1">
+    <div className="border border-line2 rounded-md p-2.5">
+      <div className="flex items-center gap-1.5 mb-0.5">
         {icon}
-        <div className="text-[12.5px] font-semibold text-ink">{title}</div>
+        <div className="text-[12px] font-semibold text-ink">{title}</div>
       </div>
-      <div
-        className="text-[11px] text-muted leading-snug"
-        dangerouslySetInnerHTML={{ __html: detail }}
-      />
+      <div className="text-[10.5px] text-muted leading-snug">{detail}</div>
     </div>
   );
 }

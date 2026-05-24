@@ -269,6 +269,7 @@ interface WebhookEntry {
   eventType: string;
   signatureValid: boolean;
   bodySnippet: string;
+  creativeSeed?: string;
 }
 
 const WEBHOOK_LOG: WebhookEntry[] = [
@@ -287,6 +288,7 @@ const WEBHOOK_LOG: WebhookEntry[] = [
     eventType: 'higgsfield.video.ready',
     signatureValid: true,
     bodySnippet: '{"job_id":"hfj_8a7c","status":"ready","url":"https://..."}',
+    creativeSeed: 'hopeforward-renew-2026-4955',
   },
   {
     id: 'whk_lh4tg63',
@@ -311,6 +313,7 @@ const WEBHOOK_LOG: WebhookEntry[] = [
     eventType: 'higgsfield.video.failed',
     signatureValid: true,
     bodySnippet: '{"job_id":"hfj_8a76","status":"failed","reason":"prompt_blocked"}',
+    creativeSeed: 'pestmax-az-termite-4931',
   },
   {
     id: 'whk_lh4tff6',
@@ -343,6 +346,7 @@ const WEBHOOK_LOG: WebhookEntry[] = [
     eventType: 'higgsfield.video.ready',
     signatureValid: true,
     bodySnippet: '{"job_id":"hfj_8a75","status":"ready","url":"https://..."}',
+    creativeSeed: 'scs-recovery-story-4925',
   },
   {
     id: 'whk_lh4tezz',
@@ -677,6 +681,7 @@ export default function IntegrationsPage(): JSX.Element {
           <table className="tbl">
             <thead>
               <tr>
+                <th></th>
                 <th>Event id</th>
                 <th>Provider</th>
                 <th>Type</th>
@@ -688,11 +693,27 @@ export default function IntegrationsPage(): JSX.Element {
             <tbody>
               {WEBHOOK_LOG.map((e) => (
                 <tr key={e.id}>
+                  <td className="!pr-0 w-[44px]">
+                    {e.creativeSeed ? (
+                      <div className="w-8 h-8 rounded overflow-hidden border border-line2 bg-paper">
+                        <img
+                          src={`https://picsum.photos/seed/${e.creativeSeed}/64/64`}
+                          alt="creative thumb"
+                          width={32}
+                          height={32}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-paper border border-line2" />
+                    )}
+                  </td>
                   <td>
                     <span className="mono text-[10px] !w-auto !px-2">{e.id}</span>
                   </td>
                   <td className="text-[12px] text-ink">{providerKindLabel(e.providerKind)}</td>
-                  <td className="text-[12px] text-muted mono">{e.eventType}</td>
+                  <td className="text-[12px] text-muted font-mono">{e.eventType}</td>
                   <td>
                     {e.signatureValid ? (
                       <span className="inline-flex items-center gap-1 text-success text-[11px]">
@@ -704,7 +725,7 @@ export default function IntegrationsPage(): JSX.Element {
                       </span>
                     )}
                   </td>
-                  <td className="text-[11px] text-muted mono truncate max-w-[420px]">
+                  <td className="text-[11px] text-muted font-mono truncate max-w-[420px]">
                     {e.bodySnippet}
                   </td>
                   <td className="text-[11px] text-muted numeric">{e.receivedAt}</td>

@@ -141,10 +141,12 @@ const RULE_PACKS: RulePack[] = [
 interface SafetyBlock {
   id: string;
   creativeId: string;
+  creativeSeed: string;
   creativeHeadline: string;
   ruleViolated: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   reviewer: string;
+  reviewerInitials: string;
   status: 'open' | 'in_review' | 'resolved' | 'escalated';
   ts: string;
   account: string;
@@ -154,10 +156,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4821',
     creativeId: 'cr_4948',
-    creativeHeadline: '"Singapore\'s quiet 8% live below the line."',
+    creativeSeed: 'tampines-quiet-8pct-4948',
+    creativeHeadline: "Singapore's quiet 8% live below the line.",
     ruleViolated: 'Charity SG · ambiguous stat claim · requires source',
     severity: 'medium',
     reviewer: 'Brodie',
+    reviewerInitials: 'B',
     status: 'in_review',
     ts: '2026-05-24 09:31:18',
     account: 'Tampines FSC pilot (SG)',
@@ -165,10 +169,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4820',
     creativeId: 'cr_4937',
-    creativeHeadline: '"NextGen Power locks in your rate forever."',
+    creativeSeed: 'nextgen-forever-lock-4937',
+    creativeHeadline: 'NextGen Power locks in your rate forever.',
     ruleViolated: 'Energy US · FCC · "forever" lock-in misleading',
     severity: 'high',
     reviewer: 'Brodie',
+    reviewerInitials: 'B',
     status: 'escalated',
     ts: '2026-05-24 08:14:55',
     account: 'NextGen Power (US)',
@@ -176,10 +182,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4819',
     creativeId: 'cr_4924',
-    creativeHeadline: '"Free solar. Pay nothing. Ever."',
+    creativeSeed: 'sunlinkco-free-solar-4924',
+    creativeHeadline: 'Free solar. Pay nothing. Ever.',
     ruleViolated: 'Solar US · FTC Green Guides · finance terms missing',
     severity: 'critical',
     reviewer: 'Counsel (assigned)',
+    reviewerInitials: 'CN',
     status: 'escalated',
     ts: '2026-05-24 06:32:09',
     account: 'SunlinkCo (US)',
@@ -187,10 +195,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4818',
     creativeId: 'cr_4914',
-    creativeHeadline: '"You walked past 4 cancer survivors today. SCS."',
+    creativeSeed: 'scs-survivor-walk-4924',
+    creativeHeadline: 'You walked past 4 cancer survivors today. SCS.',
     ruleViolated: 'Charity SG · COC · unverified personal-impact claim',
     severity: 'medium',
     reviewer: 'Brodie',
+    reviewerInitials: 'B',
     status: 'open',
     ts: '2026-05-23 22:54:33',
     account: 'SCS pilot (SG)',
@@ -198,10 +208,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4817',
     creativeId: 'cr_4906',
-    creativeHeadline: '"World Vision impact guaranteed."',
+    creativeSeed: 'wv-impact-guarantee-4906',
+    creativeHeadline: 'World Vision impact guaranteed.',
     ruleViolated: 'Charity AU · ACNC · "guaranteed" not permitted',
     severity: 'high',
     reviewer: 'Compliance team',
+    reviewerInitials: 'CT',
     status: 'resolved',
     ts: '2026-05-23 16:42:11',
     account: 'World Vision (AU)',
@@ -209,10 +221,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4816',
     creativeId: 'cr_4892',
-    creativeHeadline: '"PestMax kills 100% of roaches in one visit."',
+    creativeSeed: 'pestmax-100-roach-4892',
+    creativeHeadline: 'PestMax kills 100% of roaches in one visit.',
     ruleViolated: 'Pest US · ACL substantiation · efficacy claim',
     severity: 'medium',
     reviewer: 'Brodie',
+    reviewerInitials: 'B',
     status: 'resolved',
     ts: '2026-05-23 14:22:08',
     account: 'PestMax (US)',
@@ -220,10 +234,12 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4815',
     creativeId: 'cr_4881',
-    creativeHeadline: '"Donate a coffee, save a child."',
+    creativeSeed: 'hf-coffee-save-child-4881',
+    creativeHeadline: 'Donate a coffee, save a child.',
     ruleViolated: 'Charity US · NY · annual-report boilerplate missing',
     severity: 'low',
     reviewer: 'Auto-resolved',
+    reviewerInitials: 'AI',
     status: 'resolved',
     ts: '2026-05-23 11:18:55',
     account: 'Hope Forward (US)',
@@ -231,13 +247,41 @@ const RECENT_BLOCKS: SafetyBlock[] = [
   {
     id: 'sb_4814',
     creativeId: 'cr_4877',
-    creativeHeadline: '"AZ summer: termite-season starts in May."',
+    creativeSeed: 'pestmax-az-termite-4931',
+    creativeHeadline: 'AZ summer · termite-season starts in May.',
     ruleViolated: 'Pest US · EPA chemical disclosure absent',
     severity: 'low',
     reviewer: 'Auto-resolved',
+    reviewerInitials: 'AI',
     status: 'resolved',
     ts: '2026-05-22 17:48:21',
     account: 'PestMax (US)',
+  },
+  {
+    id: 'sb_4813',
+    creativeId: 'cr_4870',
+    creativeSeed: 'wv-au-last-chance-4870',
+    creativeHeadline: 'Last chance · 24h · sponsor before midnight.',
+    ruleViolated: 'Charity AU · ACNC · false-scarcity language',
+    severity: 'high',
+    reviewer: 'Compliance team',
+    reviewerInitials: 'CT',
+    status: 'in_review',
+    ts: '2026-05-22 14:38:09',
+    account: 'World Vision (AU)',
+  },
+  {
+    id: 'sb_4812',
+    creativeId: 'cr_4862',
+    creativeSeed: 'nextgen-power-switch-4862',
+    creativeHeadline: 'Switch to NextGen Power and pay nothing for 3 months.',
+    ruleViolated: 'Energy US · DMO/VDO disclosure missing',
+    severity: 'medium',
+    reviewer: 'Brodie',
+    reviewerInitials: 'B',
+    status: 'open',
+    ts: '2026-05-22 11:18:42',
+    account: 'NextGen Power (US)',
   },
 ];
 
@@ -351,6 +395,8 @@ interface LegalHold {
   openedAt: string;
   counsel: string;
   itemCount: number;
+  reviewStatus: 'awaiting_counsel' | 'counsel_reviewing' | 'response_drafted';
+  thumbs: Array<{ seed: string; headline: string }>;
 }
 
 const LEGAL_HOLDS: LegalHold[] = [
@@ -361,6 +407,12 @@ const LEGAL_HOLDS: LegalHold[] = [
     openedAt: '2026-05-18',
     counsel: 'Davis Wright Tremaine LLP',
     itemCount: 14,
+    reviewStatus: 'counsel_reviewing',
+    thumbs: [
+      { seed: 'sunlinkco-free-solar-4924', headline: 'Free solar. Pay nothing. Ever.' },
+      { seed: 'sunlinkco-free-math-4919', headline: 'We will never say "free solar".' },
+      { seed: 'sunlinkco-boise-solar-4956', headline: 'Solar bills shrank 71%.' },
+    ],
   },
   {
     id: 'lh_0028',
@@ -369,8 +421,45 @@ const LEGAL_HOLDS: LegalHold[] = [
     openedAt: '2026-05-22',
     counsel: 'Vinson & Elkins LLP',
     itemCount: 8,
+    reviewStatus: 'awaiting_counsel',
+    thumbs: [
+      { seed: 'nextgen-forever-lock-4937', headline: 'Forever-rate lock.' },
+      { seed: 'nextgen-power-switch-4862', headline: 'Pay nothing for 3 months.' },
+    ],
+  },
+  {
+    id: 'lh_0029',
+    account: 'PestMax (US)',
+    reason: 'TX AG complaint · efficacy substantiation request',
+    openedAt: '2026-05-24',
+    counsel: 'Jackson Walker LLP',
+    itemCount: 3,
+    reviewStatus: 'response_drafted',
+    thumbs: [{ seed: 'pestmax-100-roach-4892', headline: 'Kills 100% of roaches in one visit.' }],
   },
 ];
+
+function reviewStatusLabel(s: LegalHold['reviewStatus']): string {
+  switch (s) {
+    case 'awaiting_counsel':
+      return 'Awaiting counsel';
+    case 'counsel_reviewing':
+      return 'Counsel reviewing';
+    case 'response_drafted':
+      return 'Response drafted';
+  }
+}
+
+function reviewStatusTone(s: LegalHold['reviewStatus']): 'warn' | 'info' | 'success' {
+  switch (s) {
+    case 'awaiting_counsel':
+      return 'warn';
+    case 'counsel_reviewing':
+      return 'info';
+    case 'response_drafted':
+      return 'success';
+  }
+}
 
 function severityTone(s: SafetyBlock['severity']): 'muted' | 'info' | 'warn' | 'danger' {
   switch (s) {
@@ -499,6 +588,7 @@ export default function BrandSafetyPage(): JSX.Element {
           <table className="tbl">
             <thead>
               <tr>
+                <th></th>
                 <th>Block ID</th>
                 <th>Creative</th>
                 <th>Account</th>
@@ -507,27 +597,50 @@ export default function BrandSafetyPage(): JSX.Element {
                 <th>Reviewer</th>
                 <th>Status</th>
                 <th>Time</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {RECENT_BLOCKS.map((b) => (
                 <tr key={b.id} className="cursor-pointer hover:bg-paper">
+                  <td className="!pr-0 w-[60px]">
+                    <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
+                      <img
+                        src={`https://picsum.photos/seed/${b.creativeSeed}/96/96`}
+                        alt={b.creativeHeadline}
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-danger/40" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <AlertTriangle size={14} className="text-surface drop-shadow" />
+                      </div>
+                    </div>
+                  </td>
                   <td>
                     <span className="mono text-[10px] !w-auto !px-2">{b.id}</span>
                   </td>
                   <td>
                     <div className="text-[12.5px] font-medium text-ink leading-snug">
-                      {b.creativeHeadline}
+                      &ldquo;{b.creativeHeadline}&rdquo;
                     </div>
-                    <div className="text-[10px] text-muted mono">{b.creativeId}</div>
+                    <div className="text-[10px] text-muted font-mono">{b.creativeId}</div>
                   </td>
                   <td className="text-[12px] text-ink">{b.account}</td>
                   <td className="text-[12px] text-muted">{b.ruleViolated}</td>
                   <td>
                     <StatusPill tone={severityTone(b.severity)}>{b.severity}</StatusPill>
                   </td>
-                  <td className="text-[12px] text-ink">{b.reviewer}</td>
+                  <td className="text-[12px] text-ink">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
+                        {b.reviewerInitials}
+                      </span>
+                      {b.reviewer}
+                    </span>
+                  </td>
                   <td>
                     <StatusPill tone={blockStatusTone(b.status)}>
                       {b.status.replace('_', ' ')}
@@ -535,13 +648,36 @@ export default function BrandSafetyPage(): JSX.Element {
                   </td>
                   <td className="text-[11px] text-muted numeric">{b.ts}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
-                      title="Inspect"
-                    >
-                      <Eye size={12} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-ink hover:bg-paper"
+                        title="Override block"
+                      >
+                        Override
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-warn hover:bg-paper"
+                        title="Hold for review"
+                      >
+                        Hold
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-danger hover:bg-paper"
+                        title="Discard"
+                      >
+                        Discard
+                      </button>
+                      <button
+                        type="button"
+                        className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
+                        title="Inspect"
+                      >
+                        <Eye size={12} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -609,7 +745,7 @@ export default function BrandSafetyPage(): JSX.Element {
           title={`Legal-hold queue · ${LEGAL_HOLDS.length}`}
           subtitle="Counsel-routed items · creative + delivery frozen pending review"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {LEGAL_HOLDS.map((h) => (
               <div key={h.id} className="card card-pad">
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -618,18 +754,53 @@ export default function BrandSafetyPage(): JSX.Element {
                       <Lock size={13} className="text-warn" />
                       <div className="text-[13.5px] font-semibold text-ink">{h.account}</div>
                     </div>
-                    <div className="text-[10.5px] text-muted mt-0.5 mono">
+                    <div className="text-[10.5px] text-muted mt-0.5 font-mono">
                       {h.id} · opened {h.openedAt}
                     </div>
                   </div>
                   <StatusPill tone="warn">{h.itemCount} items</StatusPill>
                 </div>
-                <div className="text-[12px] text-muted leading-snug mb-2">{h.reason}</div>
-                <div className="pt-2 border-t border-line2 flex items-center justify-between text-[11px]">
-                  <span className="inline-flex items-center gap-1 text-muted">
-                    <FileText size={11} /> Counsel
-                  </span>
-                  <span className="text-ink font-medium">{h.counsel}</span>
+                <div className="text-[12px] text-muted leading-snug mb-2.5">{h.reason}</div>
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  {h.thumbs.map((t) => (
+                    <div
+                      key={t.seed}
+                      className="w-14 h-14 rounded-md overflow-hidden border border-line2 bg-paper relative"
+                      title={t.headline}
+                    >
+                      <img
+                        src={`https://picsum.photos/seed/${t.seed}/120/120`}
+                        alt={t.headline}
+                        width={56}
+                        height={56}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-warn/20" />
+                      <div className="absolute bottom-0.5 right-0.5">
+                        <Lock size={9} className="text-surface drop-shadow" />
+                      </div>
+                    </div>
+                  ))}
+                  {h.itemCount > h.thumbs.length && (
+                    <div className="w-14 h-14 rounded-md border border-dashed border-line2 flex items-center justify-center text-[11px] text-muted font-semibold">
+                      +{h.itemCount - h.thumbs.length}
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 border-t border-line2 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="inline-flex items-center gap-1 text-muted">
+                      <FileText size={11} /> Counsel
+                    </span>
+                    <span className="text-ink font-medium">{h.counsel}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted">Status</span>
+                    <StatusPill tone={reviewStatusTone(h.reviewStatus)}>
+                      {reviewStatusLabel(h.reviewStatus)}
+                    </StatusPill>
+                  </div>
                 </div>
               </div>
             ))}

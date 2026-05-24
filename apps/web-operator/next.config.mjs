@@ -43,6 +43,12 @@ function buildCsp() {
       'https://c.tile.openstreetmap.org',
       // Carto basemaps (optional fallback)
       'https://*.basemaps.cartocdn.com',
+      // Demo creative previews (Marketing Studio) — free seeded placeholder images.
+      // Real creative storage will be S3/R2 in Phase 1.3 (per ADR-0008).
+      'https://picsum.photos',
+      'https://fastly.picsum.photos',
+      'https://i.pravatar.cc',
+      'https://images.unsplash.com',
     ],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
