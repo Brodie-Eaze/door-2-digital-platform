@@ -18,12 +18,13 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
  * Marketing campaigns dashboard.
  *
  * Live campaigns across Meta + Google + TikTok + YouTube with creative
- * thumbnails (real picsum images), spend / impressions / clicks /
+ * thumbnails (theme-matched Unsplash images), spend / impressions / clicks /
  * conversions / ROAS / CPM / CTR / attribution. Click a row → side panel
  * with all creatives in that campaign + daily spend SVG sparkline +
  * delivery log.
@@ -649,7 +650,11 @@ export default function CampaignsPage(): JSX.Element {
                     <td className="!pr-0 w-[88px]">
                       <div className="w-16 h-16 rounded-md overflow-hidden border border-line2 bg-paper">
                         <img
-                          src={`https://picsum.photos/seed/${c.heroSeed}/160/160`}
+                          src={pickCreativeImage(
+                            inferTheme({ name: c.name, account: c.account }),
+                            c.id,
+                            { w: 160, h: 160 },
+                          )}
                           alt={c.name}
                           width={64}
                           height={64}
@@ -944,7 +949,15 @@ function CampaignDrawer({
                 <div key={cr.id} className="card overflow-hidden">
                   <div className={`${aspectClass(cr.aspect)} relative overflow-hidden bg-paper`}>
                     <img
-                      src={`https://picsum.photos/seed/${cr.seed}/300/300`}
+                      src={pickCreativeImage(
+                        inferTheme({
+                          headline: cr.headline,
+                          name: campaign.name,
+                          account: campaign.account,
+                        }),
+                        cr.id,
+                        { w: 300, h: 300 },
+                      )}
                       alt={cr.headline}
                       loading="lazy"
                       className="w-full h-full object-cover"

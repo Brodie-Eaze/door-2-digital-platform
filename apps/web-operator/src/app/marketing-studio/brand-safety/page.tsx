@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
  * Brand-safety control room.
@@ -606,7 +607,11 @@ export default function BrandSafetyPage(): JSX.Element {
                   <td className="!pr-0 w-[60px]">
                     <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
                       <img
-                        src={`https://picsum.photos/seed/${b.creativeSeed}/96/96`}
+                        src={pickCreativeImage(
+                          inferTheme({ headline: b.creativeHeadline, account: b.account }),
+                          b.creativeId,
+                          { w: 96, h: 96 },
+                        )}
                         alt={b.creativeHeadline}
                         width={48}
                         height={48}
@@ -769,7 +774,11 @@ export default function BrandSafetyPage(): JSX.Element {
                       title={t.headline}
                     >
                       <img
-                        src={`https://picsum.photos/seed/${t.seed}/120/120`}
+                        src={pickCreativeImage(
+                          inferTheme({ headline: t.headline, account: h.account }),
+                          t.seed,
+                          { w: 120, h: 120 },
+                        )}
                         alt={t.headline}
                         width={56}
                         height={56}

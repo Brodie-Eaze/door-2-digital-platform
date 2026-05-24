@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
  * Creative generator UI — 3-pane layout.
@@ -445,7 +446,15 @@ export default function GenerateCreativePage(): JSX.Element {
                       </div>
                       <div className="rounded-md overflow-hidden border border-line2 bg-paper aspect-[4/5]">
                         <img
-                          src={`https://picsum.photos/seed/${selected.seed}/400/500`}
+                          src={pickCreativeImage(
+                            inferTheme({
+                              vertical,
+                              headline: selected.headline,
+                              copy: selected.copy,
+                            }),
+                            selected.id,
+                            { w: 400, h: 500 },
+                          )}
                           alt={selected.headline}
                           width={400}
                           height={500}
@@ -601,7 +610,11 @@ function VariantCard({
     <div className={`card overflow-hidden cursor-pointer transition ${ring}`} onClick={onSelect}>
       <div className={`${aspectClass(variant.capability)} relative overflow-hidden bg-paper`}>
         <img
-          src={`https://picsum.photos/seed/${variant.seed}/${dims.w}/${dims.h}`}
+          src={pickCreativeImage(
+            inferTheme({ vertical: 'charity', headline: variant.headline, copy: variant.copy }),
+            variant.id,
+            { w: dims.w, h: dims.h },
+          )}
           alt={variant.headline}
           width={dims.w}
           height={dims.h}

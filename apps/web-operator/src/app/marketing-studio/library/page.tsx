@@ -21,11 +21,12 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
  * Creative library.
  *
- * Responsive grid of 60 creatives with REAL picsum image previews in
+ * Responsive grid of 60 creatives with theme-matched Unsplash previews in
  * mixed aspect ratios (square / portrait / vertical / video). Interactive
  * filters (vertical, region, channel, status) wire through useState.
  * Bulk-actions bar with select-all checkbox. Click any card → side panel
@@ -1399,7 +1400,15 @@ function LibraryCard({
     >
       <div className={`${aspectClass(creative.aspect)} relative overflow-hidden bg-paper`}>
         <img
-          src={`https://picsum.photos/seed/${creative.seed}/${dims.w}/${dims.h}`}
+          src={pickCreativeImage(
+            inferTheme({
+              vertical: creative.vertical,
+              headline: creative.headline,
+              copy: creative.copy,
+            }),
+            creative.id,
+            { w: dims.w, h: dims.h },
+          )}
           alt={creative.headline}
           width={dims.w}
           height={dims.h}
@@ -1525,7 +1534,15 @@ function DetailDrawer({
             className={`${aspectClass(creative.aspect)} relative overflow-hidden bg-paper rounded-lg`}
           >
             <img
-              src={`https://picsum.photos/seed/${creative.seed}/${dims.w}/${dims.h}`}
+              src={pickCreativeImage(
+                inferTheme({
+                  vertical: creative.vertical,
+                  headline: creative.headline,
+                  copy: creative.copy,
+                }),
+                creative.id,
+                { w: dims.w, h: dims.h },
+              )}
               alt={creative.headline}
               width={dims.w}
               height={dims.h}
@@ -1604,7 +1621,11 @@ function DetailDrawer({
                     className="aspect-square rounded overflow-hidden border border-line2"
                   >
                     <img
-                      src={`https://picsum.photos/seed/${s.seed}/${sdims.w}/${sdims.h}`}
+                      src={pickCreativeImage(
+                        inferTheme({ vertical: s.vertical, headline: s.headline, copy: s.copy }),
+                        s.id,
+                        { w: sdims.w, h: sdims.h },
+                      )}
                       alt={s.headline}
                       width={120}
                       height={120}

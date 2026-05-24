@@ -9,6 +9,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 import { PlatformShell } from '@/components/PlatformShell';
 
 /**
@@ -440,7 +441,11 @@ export default function RetargetingPage(): JSX.Element {
                   <td className="!pr-0 w-[60px]">
                     <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
                       <img
-                        src={`https://picsum.photos/seed/${c.seedSeed}/96/96`}
+                        src={pickCreativeImage(
+                          inferTheme({ headline: c.audience, account: c.account }),
+                          c.id,
+                          { w: 96, h: 96 },
+                        )}
                         alt={c.audience}
                         width={48}
                         height={48}

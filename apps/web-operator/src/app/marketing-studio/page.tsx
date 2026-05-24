@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { pickCreativeImage, inferTheme, type CreativeTheme } from '@/lib/creative-images';
 
 /**
  * AI Marketing Studio — command centre.
@@ -28,8 +29,9 @@ import { PlatformShell } from '@/components/PlatformShell';
  * Top-of-stack overview of the creative-generation pipeline:
  * Brief → Compose → Variation → Review → Publish → Measure.
  *
- * Real picsum.photos image previews on every creative tile so the
- * surface feels like a live production product (CSP allows picsum).
+ * Curated Unsplash image previews on every creative tile (see
+ * @/lib/creative-images) — deterministic photo pick per creative id,
+ * matched to the campaign vertical + copy intent (no random photos).
  *
  * Per master plan §10: this surface aggregates jobs from
  * services/marketing-studio across all HQ orgs and feeds the
@@ -88,6 +90,7 @@ interface TopCreative {
   seed: string;
   headline: string;
   vertical: 'charity' | 'pest' | 'solar' | 'energy';
+  theme: CreativeTheme;
   region: 'US' | 'AU' | 'SG';
   channel: 'Meta' | 'Google' | 'TikTok' | 'YouTube';
   format: 'image' | 'carousel' | 'video';
@@ -105,6 +108,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'hopeforward-tx-meals-4912',
     headline: 'Five dollars covers a meal — every Tuesday.',
     vertical: 'charity',
+    theme: 'charity_food',
     region: 'US',
     channel: 'Meta',
     format: 'image',
@@ -120,6 +124,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'tampines-fsc-neighbour-4908',
     headline: 'Your neighbour just sponsored a child in Tampines.',
     vertical: 'charity',
+    theme: 'charity_children',
     region: 'SG',
     channel: 'Meta',
     format: 'carousel',
@@ -135,6 +140,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'pestmax-tx-roach-4901',
     headline: "Don't share your meal with roaches. Texas-licensed.",
     vertical: 'pest',
+    theme: 'pest_control',
     region: 'US',
     channel: 'TikTok',
     format: 'video',
@@ -150,6 +156,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'worldvision-cebu-tree-4897',
     headline: 'For every child sponsored in Cebu, a Knocker plants one tree.',
     vertical: 'charity',
+    theme: 'charity_children',
     region: 'AU',
     channel: 'Meta',
     format: 'video',
@@ -165,6 +172,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'sunlinkco-boise-solar-4891',
     headline: 'Our solar bills shrank 71% in 8 weeks. Boise, ID.',
     vertical: 'solar',
+    theme: 'solar',
     region: 'US',
     channel: 'Google',
     format: 'image',
@@ -180,6 +188,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'hopeforward-renew-2026-4884',
     headline: 'Renew your faith in giving — Hope Forward, 2026.',
     vertical: 'charity',
+    theme: 'charity_food',
     region: 'US',
     channel: 'YouTube',
     format: 'video',
@@ -195,6 +204,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'worldvision-au-winter-4877',
     headline: '3 in 5 Aussie families need help this winter.',
     vertical: 'charity',
+    theme: 'charity_food',
     region: 'AU',
     channel: 'Meta',
     format: 'image',
@@ -210,6 +220,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'nextgen-power-switch-4862',
     headline: 'Switch to NextGen Power and pay nothing for 3 months.',
     vertical: 'energy',
+    theme: 'energy_telco',
     region: 'US',
     channel: 'Google',
     format: 'carousel',
@@ -225,6 +236,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'scs-bedok-mother-4855',
     headline: "A neighbour's recovery story. S$45/mo.",
     vertical: 'charity',
+    theme: 'charity_medical',
     region: 'SG',
     channel: 'Meta',
     format: 'video',
@@ -240,6 +252,7 @@ const TOP_CREATIVES: TopCreative[] = [
     seed: 'goldcoast-onc-wing-4849',
     headline: 'Gold Coast Hospital · new oncology wing · open 2027.',
     vertical: 'charity',
+    theme: 'charity_medical',
     region: 'AU',
     channel: 'Meta',
     format: 'image',
@@ -809,7 +822,11 @@ export default function MarketingStudioPage(): JSX.Element {
                       <td className="!pr-0 w-[60px]">
                         <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
                           <img
-                            src={`https://picsum.photos/seed/${j.seed}/96/96`}
+                            src={pickCreativeImage(
+                              inferTheme({ brief: j.brief, account: j.account }),
+                              j.id,
+                              { w: 96, h: 96 },
+                            )}
                             alt={j.brief}
                             width={48}
                             height={48}
@@ -898,7 +915,15 @@ export default function MarketingStudioPage(): JSX.Element {
                   >
                     <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
                       <img
-                        src={`https://picsum.photos/seed/${it.seed}/120/120`}
+                        src={pickCreativeImage(
+                          inferTheme({
+                            vertical: it.vertical,
+                            headline: it.headline,
+                            account: it.account,
+                          }),
+                          it.id,
+                          { w: 120, h: 120 },
+                        )}
                         alt={it.headline}
                         width={56}
                         height={56}
@@ -985,7 +1010,7 @@ function TopCreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
     <div className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0">
       <div className={`${aspectClass(creative.aspect)} relative overflow-hidden bg-paper`}>
         <img
-          src={`https://picsum.photos/seed/${creative.seed}/${dims.w}/${dims.h}`}
+          src={pickCreativeImage(creative.theme, creative.id, { w: dims.w, h: dims.h })}
           alt={creative.headline}
           width={dims.w}
           height={dims.h}
