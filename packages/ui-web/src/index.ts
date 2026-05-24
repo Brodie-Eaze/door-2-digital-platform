@@ -36,4 +36,5 @@ export { KnockCard } from './components/KnockCard';
 export { cn } from './lib/cn';
 
 // Types
-export type { Tone } from './types';
+export type { Tone, RegionCode, Vertical } from './types';
+export type { NavGroup, NavItem } from './components/Sidebar';

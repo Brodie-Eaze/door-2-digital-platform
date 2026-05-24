@@ -10,7 +10,7 @@ interface KpiCardProps {
   /** Optional sparkline or small chart slot. */
   sparkline?: ReactNode;
   /** Optional sub-label below the value. */
-  hint?: string;
+  hint?: ReactNode;
 }
 
 /**
