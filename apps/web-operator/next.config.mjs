@@ -49,6 +49,13 @@ function buildCsp() {
       'https://fastly.picsum.photos',
       'https://i.pravatar.cc',
       'https://images.unsplash.com',
+      // LoremFlickr — keyword-driven photo lookup from Flickr's pool (e.g. /food,
+      // /solar-panels, /pest-control). Each call returns a real themed photo. Used
+      // by creative-images.ts picker for relevant Marketing Studio previews.
+      'https://loremflickr.com',
+      'https://*.loremflickr.com',
+      'https://live.staticflickr.com',
+      'https://*.staticflickr.com',
     ],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
