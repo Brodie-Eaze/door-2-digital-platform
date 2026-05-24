@@ -15,12 +15,19 @@ function buildCsp() {
   } catch {
     /* defaults above */
   }
-  // Next.js dev mode uses eval() for React Refresh / HMR + source maps.
-  // Without 'unsafe-eval' in dev, the whole client bundle fails to evaluate
-  // and the page never hydrates. In production, the bundler emits no eval
-  // calls so we tighten back to 'self' only.
+  // Next.js script-src requirements:
+  //   - dev: 'unsafe-eval' (React Refresh / HMR) + 'unsafe-inline' (source maps)
+  //   - prod: 'unsafe-inline' (RSC streaming payload — Next 14 App Router emits
+  //     inline <script> tags that carry the React Server Components hydration
+  //     data and the chunk-loading bootstrap. Without 'unsafe-inline' all
+  //     client components stay blank because hydration never starts.)
+  //
+  // Tightening back to 'self' only requires a middleware-injected nonce, which
+  // is Phase 1.1 hardening (per master plan §9.4 A02).
   const isDev = process.env.NODE_ENV !== 'production';
-  const scriptSrc = isDev ? ["'self'", "'unsafe-eval'", "'unsafe-inline'"] : ["'self'"];
+  const scriptSrc = isDev
+    ? ["'self'", "'unsafe-eval'", "'unsafe-inline'"]
+    : ["'self'", "'unsafe-inline'"];
   const directives = {
     'default-src': ["'self'"],
     'script-src': scriptSrc,
