@@ -177,6 +177,20 @@ export interface ProviderWebhookEvent {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Async job polling — for adapters that return a `jobId` from a
+// long-running operation (video / avatar generation). The marketing
+// service polls on GET to surface readiness without forcing the caller
+// to maintain a worker.
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface JobStatus {
+  status: 'pending' | 'running' | 'ready' | 'failed';
+  /** Output payload — shape matches the originating capability's *Output type. */
+  output?: unknown;
+  error?: string;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Adapter contract
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -229,6 +243,14 @@ export interface ProviderAdapter {
     headers: Record<string, string | string[] | undefined>,
     config: ProviderConfig,
   ): Promise<Result<ProviderWebhookEvent>>;
+
+  /**
+   * Optional — poll an async job's status. Adapters that return a `jobId`
+   * from `generateVideo` / `generateAvatar` implement this so callers can
+   * track readiness. In stub mode, return `ready` once 30s have elapsed
+   * since job creation (signalled by `createdAtMs`).
+   */
+  pollJob?(jobId: string, config: ProviderConfig, createdAtMs?: number): Promise<Result<JobStatus>>;
 }
 
 /** Snapshot of an adapter's metadata — used by `GET /v1/marketing/providers`. */

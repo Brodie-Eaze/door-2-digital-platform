@@ -14,11 +14,12 @@ import { InvalidConfigError, ProviderError } from '../errors';
 import type {
   GenerateVideoInput,
   GenerateVideoOutput,
+  JobStatus,
   ProviderAdapter,
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubPing, stubVideo } from './stub';
+import { isStubMode, stubJobStatus, stubPing, stubVideo } from './stub';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1' as const;
 const RUNWAY_VERSION = '2024-11-06' as const;
@@ -106,6 +107,51 @@ export function createRunwayAdapter(): ProviderAdapter {
             estimatedReadyAt: new Date(Date.now() + input.durationSec * 20_000).toISOString(),
           },
         };
+      } catch (e) {
+        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      }
+    },
+
+    async pollJob(
+      jobId: string,
+      config: ProviderConfig,
+      createdAtMs?: number,
+    ): Promise<Result<JobStatus>> {
+      if (isStubMode(config)) {
+        const s = stubJobStatus(jobId, createdAtMs);
+        return { ok: true, data: s };
+      }
+      const apiKey = config.credentials.apiKey;
+      if (!apiKey) {
+        return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
+      }
+      try {
+        const r = await fetch(`${RUNWAY_BASE}/tasks/${jobId}`, {
+          headers: { authorization: `Bearer ${apiKey}`, 'x-runway-version': RUNWAY_VERSION },
+        });
+        if (!r.ok) {
+          return {
+            ok: false,
+            error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
+          };
+        }
+        const json = (await r.json()) as {
+          status: string;
+          output?: unknown;
+          failure?: string;
+        };
+        // Runway: PENDING | RUNNING | SUCCEEDED | FAILED | THROTTLED | CANCELLED
+        const upper = json.status?.toUpperCase?.();
+        if (upper === 'SUCCEEDED') {
+          return { ok: true, data: { status: 'ready', output: json.output } };
+        }
+        if (upper === 'FAILED' || upper === 'CANCELLED') {
+          return {
+            ok: true,
+            data: { status: 'failed', error: json.failure ?? json.status },
+          };
+        }
+        return { ok: true, data: { status: 'running' } };
       } catch (e) {
         return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }

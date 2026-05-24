@@ -22,6 +22,9 @@ import { registerDonation } from '../../src/domains/donation/routes';
 import { registerSale } from '../../src/domains/sale/routes';
 import { registerWebhook } from '../../src/domains/webhook/routes';
 import { registerNotification } from '../../src/domains/notification/routes';
+import { registerMarketing } from '../../src/domains/marketing/routes';
+import { registerContentStudio } from '../../src/domains/content-studio/routes';
+import { registerIntegrations } from '../../src/integrations';
 import { prisma, shutdownDb } from '../../src/config/db';
 import { newId } from '@d2d/shared-utils';
 
@@ -48,6 +51,9 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await app.register(registerSale, { prefix: '/v1/sales' });
   await app.register(registerWebhook, { prefix: '/v1/webhooks' });
   await app.register(registerNotification, { prefix: '/v1/notifications' });
+  await registerIntegrations(app);
+  await app.register(registerMarketing, { prefix: '/v1/marketing' });
+  await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
   await app.ready();
   return app;
 }
@@ -87,6 +93,10 @@ export async function truncateAll(): Promise<void> {
     'SsoConfiguration',
     'OrgBilling',
     'BrandKit',
+    // Marketing studio — must drop jobs + events before connections (FK).
+    'ContentGenerationJob',
+    'ProviderWebhookEvent',
+    'ProviderConnection',
     'User',
     'Org',
     'Address',

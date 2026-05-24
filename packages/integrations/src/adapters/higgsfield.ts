@@ -15,12 +15,13 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { InvalidConfigError, ProviderError, SignatureFailError, StubModeError } from '../errors';
 import type {
   GenerateVideoInput,
+  JobStatus,
   ProviderAdapter,
   ProviderConfig,
   ProviderWebhookEvent,
   Result,
 } from '../types';
-import { isStubMode, stubPing, stubVideo } from './stub';
+import { isStubMode, stubJobStatus, stubPing, stubVideo } from './stub';
 
 const HIGGSFIELD_BASE = 'https://api.higgsfield.ai/v1' as const;
 
@@ -95,6 +96,43 @@ export function createHiggsfieldAdapter(): ProviderAdapter {
               json.estimated_ready_at ?? new Date(Date.now() + 120_000).toISOString(),
           },
         };
+      } catch (e) {
+        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      }
+    },
+
+    async pollJob(
+      jobId: string,
+      config: ProviderConfig,
+      createdAtMs?: number,
+    ): Promise<Result<JobStatus>> {
+      if (isStubMode(config)) {
+        const s = stubJobStatus(jobId, createdAtMs);
+        return { ok: true, data: s };
+      }
+      const apiKey = config.credentials.apiKey;
+      if (!apiKey) {
+        return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
+      }
+      try {
+        const r = await fetch(`${HIGGSFIELD_BASE}/jobs/${jobId}`, {
+          headers: { 'x-api-key': apiKey },
+        });
+        if (!r.ok) {
+          return {
+            ok: false,
+            error: new ProviderError('PROVIDER_5XX', `Higgsfield ${r.status}`, kind, r.status),
+          };
+        }
+        const json = (await r.json()) as { status: string; url?: string; error?: string };
+        // Higgsfield: queued | running | ready | failed
+        if (json.status === 'ready') {
+          return { ok: true, data: { status: 'ready', output: { url: json.url } } };
+        }
+        if (json.status === 'failed') {
+          return { ok: true, data: { status: 'failed', error: json.error ?? 'unknown' } };
+        }
+        return { ok: true, data: { status: 'running' } };
       } catch (e) {
         return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }

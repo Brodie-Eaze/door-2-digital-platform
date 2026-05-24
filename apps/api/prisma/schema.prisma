@@ -194,6 +194,9 @@ model Org {
   billing                 OrgBilling?
   ssoConfiguration        SsoConfiguration?
   paidSolicitorRegistrations PaidSolicitorRegistration[]
+  providerConnections     ProviderConnection[]
+  contentGenerationJobs   ContentGenerationJob[]
+  providerWebhookEvents   ProviderWebhookEvent[]
 
   @@index([regionCode, status])
   @@index([type, status])
@@ -945,4 +948,90 @@ model NotificationLog {
 
   @@index([orgId, channel, status])
   @@index([orgId, createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Marketing Studio — provider connections, generation jobs, inbound events
+// (Agent 16). One ProviderConnection per (orgId, kind); credentials sealed
+// in PII vault JSON. ContentGenerationJob captures every adapter dispatch
+// (sync or async) and links to the connection used. ProviderWebhookEvent
+// stores HMAC-verified inbound events with replay protection.
+// ───────────────────────────────────────────────────────────────────────────
+
+model ProviderConnection {
+  id                String   @id // prc_*
+  orgId             String
+  org               Org      @relation(fields: [orgId], references: [id])
+  kind              String   // ProviderKind enum value (meta_marketing, claude_copy, etc.)
+  displayName       String
+  mode              String   // 'sandbox' | 'production'
+  status            String   // 'connected' | 'error' | 'disconnected'
+  /// PII — encrypted via PII Vault. JSONB.
+  credentialsVault  Json?
+  accountLabel      String?
+  accountId         String?
+  /// PII — webhook signing secret (stored as bcrypt-style hash; ProviderConnection
+  /// returns plaintext once on connect, then only the hash is kept)
+  webhookSecretHash String?
+  lastPingAt        DateTime?
+  lastPingStatus    String?  // 'ok' | 'fail'
+  lastPingError     String?
+  connectedAt       DateTime @default(now())
+  disconnectedAt    DateTime?
+
+  contentGenerationJobs ContentGenerationJob[]
+  providerWebhookEvents ProviderWebhookEvent[]
+
+  @@unique([orgId, kind])
+  @@index([orgId, status])
+}
+
+model ContentGenerationJob {
+  id                  String   @id // cgj_*
+  orgId               String
+  org                 Org      @relation(fields: [orgId], references: [id])
+  providerConnectionId String
+  providerConnection  ProviderConnection @relation(fields: [providerConnectionId], references: [id])
+  providerKind        String
+  capability          String   // ProviderCapability enum value
+  status              String   // 'pending' | 'running' | 'ready' | 'failed' | 'cancelled'
+  /// Input JSON sent to the adapter.
+  inputJson           Json
+  /// Output JSON returned by the adapter (or error).
+  outputJson          Json?
+  costCents           BigInt   @default(0)
+  modelId             String?
+  promptHash          String?
+  safetyScanResult    String?  // 'pass' | 'fail' | 'review'
+  c2paManifestId      String?
+  externalJobId       String?  // for async providers (Runway, Higgsfield, HeyGen)
+  createdById         String
+  createdAt           DateTime @default(now())
+  completedAt         DateTime?
+  errorCode           String?
+  errorMessage        String?
+
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@index([orgId, providerKind, createdAt(sort: Desc)])
+  @@index([externalJobId])
+}
+
+model ProviderWebhookEvent {
+  id                  String   @id // pwe_*
+  orgId               String
+  org                 Org      @relation(fields: [orgId], references: [id])
+  providerConnectionId String?
+  providerConnection  ProviderConnection? @relation(fields: [providerConnectionId], references: [id])
+  providerKind        String
+  eventType           String
+  externalId          String
+  occurredAt          DateTime
+  /// Verified inbound payload.
+  payloadJson         Json
+  verifiedSignature   Boolean
+  receivedAt          DateTime @default(now())
+  processedAt         DateTime?
+
+  @@index([orgId, providerKind, receivedAt(sort: Desc)])
+  @@unique([providerKind, externalId])
 }

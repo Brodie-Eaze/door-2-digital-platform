@@ -18,11 +18,12 @@ import { InvalidConfigError, ProviderError } from '../errors';
 import type {
   GenerateAvatarInput,
   GenerateAvatarOutput,
+  JobStatus,
   ProviderAdapter,
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubAvatar, stubPing } from './stub';
+import { isStubMode, stubAvatar, stubJobStatus, stubPing } from './stub';
 
 const HEYGEN_BASE_V2 = 'https://api.heygen.com/v2' as const;
 const HEYGEN_BASE_V1 = 'https://api.heygen.com/v1' as const;
@@ -107,6 +108,53 @@ export function createHeyGenAdapter(): ProviderAdapter {
             estimatedReadyAt: new Date(Date.now() + 150_000).toISOString(),
           },
         };
+      } catch (e) {
+        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      }
+    },
+
+    async pollJob(
+      jobId: string,
+      config: ProviderConfig,
+      createdAtMs?: number,
+    ): Promise<Result<JobStatus>> {
+      if (isStubMode(config)) {
+        const s = stubJobStatus(jobId, createdAtMs);
+        return { ok: true, data: s };
+      }
+      const apiKey = config.credentials.apiKey;
+      if (!apiKey) {
+        return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
+      }
+      try {
+        const r = await fetch(
+          `${HEYGEN_BASE_V1}/video_status.get?video_id=${encodeURIComponent(jobId)}`,
+          { headers: { 'x-api-key': apiKey } },
+        );
+        if (!r.ok) {
+          return {
+            ok: false,
+            error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
+          };
+        }
+        const json = (await r.json()) as {
+          data?: { status?: string; video_url?: string; error?: { message?: string } };
+        };
+        const st = json.data?.status;
+        // HeyGen: pending | processing | completed | failed
+        if (st === 'completed') {
+          return {
+            ok: true,
+            data: { status: 'ready', output: { url: json.data?.video_url } },
+          };
+        }
+        if (st === 'failed') {
+          return {
+            ok: true,
+            data: { status: 'failed', error: json.data?.error?.message ?? 'unknown' },
+          };
+        }
+        return { ok: true, data: { status: 'running' } };
       } catch (e) {
         return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }

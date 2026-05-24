@@ -91,3 +91,35 @@ export function stubPing(
 } {
   return { accountLabel: stubAccountLabel(providerName), accountId };
 }
+
+/**
+ * Stub-mode job poller — returns `ready` once `STUB_READY_AFTER_MS` (default
+ * 30s) has elapsed since the job was created. The marketing service tracks
+ * `createdAt` per job in Postgres and forwards `createdAtMs` so the adapter
+ * doesn't need to maintain its own state.
+ */
+export const STUB_READY_AFTER_MS = 30_000 as const;
+
+export function stubJobStatus(
+  jobId: string,
+  createdAtMs: number | undefined,
+  now: number = Date.now(),
+): {
+  status: 'running' | 'ready';
+  output?: { jobId: string; readyAt: string };
+} {
+  if (createdAtMs === undefined) {
+    return { status: 'running' };
+  }
+  const ageMs = now - createdAtMs;
+  if (ageMs >= STUB_READY_AFTER_MS) {
+    return {
+      status: 'ready',
+      output: {
+        jobId,
+        readyAt: new Date(createdAtMs + STUB_READY_AFTER_MS).toISOString(),
+      },
+    };
+  }
+  return { status: 'running' };
+}
