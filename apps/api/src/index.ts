@@ -24,6 +24,29 @@ import { registerHealthRoutes } from './shared/health';
 import { registerCorrelationId } from './shared/middleware/correlation';
 import { registerAuth } from './domains/auth/routes';
 import { registerOrg } from './domains/org/routes';
+import { registerUser } from './domains/user/routes';
+import { registerTerritory } from './domains/territory/routes';
+import { registerKnock } from './domains/knock/routes';
+import { registerLead } from './domains/lead/routes';
+import { registerCrm } from './domains/crm/routes';
+import { registerConversion } from './domains/conversion/routes';
+import { registerDonation } from './domains/donation/routes';
+import { registerSale } from './domains/sale/routes';
+import { registerCommission } from './domains/commission/routes';
+import { registerPayout } from './domains/payout/routes';
+import { registerBilling } from './domains/billing/routes';
+import { registerCompliance } from './domains/compliance/routes';
+import { registerDoNotKnock } from './domains/do-not-knock/routes';
+import { registerDoNotCall } from './domains/do-not-call/routes';
+import { registerConsent } from './domains/consent/routes';
+import { registerPiiVault } from './domains/pii-vault/routes';
+import { registerAudit } from './domains/audit/routes';
+import { registerNotification } from './domains/notification/routes';
+import { registerWebhook } from './domains/webhook/routes';
+import { registerDsar } from './domains/dsar/routes';
+import { registerMarketing } from './domains/marketing/routes';
+import { registerContentStudio } from './domains/content-studio/routes';
+import { registerRealtime } from './domains/realtime/routes';
 
 async function buildServer() {
   const e = env();
@@ -98,12 +121,44 @@ async function buildServer() {
   // Health checks (unauthenticated)
   await registerHealthRoutes(app);
 
-  // Domain routes — auth first, then everything else
+  // Domain routes — auth first, then identity, then field-capture, CRM,
+  // money, compliance / privacy, infrastructure, marketing. All return
+  // RFC 7807 501 stubs until their Phase 1.X owner lands implementation.
+
+  // Identity / tenancy (Phase 1.1)
   await app.register(registerAuth, { prefix: '/v1/auth' });
   await app.register(registerOrg, { prefix: '/v1/orgs' });
-  // TODO Phase 1.1+: user, territory, knock, lead, conversion, donation,
-  // sale, commission, payout, marketing, compliance, audit, webhook,
-  // api-key, dsar routes here as each domain module lands.
+  await app.register(registerUser, { prefix: '/v1/users' });
+  await app.register(registerPiiVault, { prefix: '/v1/pii' });
+  await app.register(registerAudit, { prefix: '/v1/audit/events' });
+
+  // Field capture + CRM (Phase 1.2)
+  await app.register(registerTerritory, { prefix: '/v1/territories' });
+  await app.register(registerKnock, { prefix: '/v1/knocks' });
+  await app.register(registerLead, { prefix: '/v1/leads' });
+  await app.register(registerConsent, { prefix: '/v1/consent' });
+  await app.register(registerDoNotKnock, { prefix: '/v1/do-not-knock' });
+  await app.register(registerDoNotCall, { prefix: '/v1/do-not-call' });
+  await app.register(registerCompliance, { prefix: '/v1/compliance' });
+  await app.register(registerNotification, { prefix: '/v1/notifications' });
+
+  // CRM + money (Phase 1.3)
+  await app.register(registerCrm, { prefix: '/v1/crm' });
+  await app.register(registerConversion, { prefix: '/v1/conversions' });
+  await app.register(registerDonation, { prefix: '/v1/donations' });
+  await app.register(registerSale, { prefix: '/v1/sales' });
+  await app.register(registerCommission, { prefix: '/v1/commissions' });
+  await app.register(registerPayout, { prefix: '/v1/payout-batches' });
+  await app.register(registerBilling, { prefix: '/v1/billing' });
+  await app.register(registerWebhook, { prefix: '/v1/webhooks/endpoints' });
+  await app.register(registerRealtime, { prefix: '/v1/realtime' });
+
+  // Privacy ops (Phase 1.4)
+  await app.register(registerDsar, { prefix: '/v1/dsar/requests' });
+
+  // Marketing + AI content (Phase 3)
+  await app.register(registerMarketing, { prefix: '/v1/marketing' });
+  await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
