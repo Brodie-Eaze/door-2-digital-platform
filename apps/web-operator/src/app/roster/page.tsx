@@ -1,365 +1,1539 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
-  CalendarClock,
   Coffee,
   Clock,
   Plus,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  X,
+  CalendarDays,
+  CalendarRange,
+  LayoutGrid,
+  CheckCircle2,
+  LogOut,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 
-// 7-day calendar with shifts per rep
-const REPS = [
-  {
-    initials: 'JM',
-    name: 'Jordan Mosley',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Austin East', lunch: '12:00-12:45' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Austin East', lunch: '12:00-12:45' },
-      { d: 2, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 3, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Austin East' },
-    ],
-  },
-  {
-    initials: 'JD',
-    name: 'Jada Davis',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 2, s: '09:00', e: '17:00', t: 'Austin North' },
-      { d: 3, s: '09:00', e: '17:00', t: 'Austin North' },
-      { d: 5, s: '10:00', e: '16:00', t: 'Austin East' },
-    ],
-  },
-  {
-    initials: 'AR',
-    name: 'Aaliyah Reed',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Austin North' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Austin North' },
-      { d: 3, s: '09:00', e: '17:00', t: 'Austin North' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Austin North' },
-    ],
-  },
-  {
-    initials: 'TM',
-    name: 'Tomás Mendez',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Austin East', lunch: '12:48-CURRENT' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 2, s: '09:00', e: '17:00', t: 'Austin East' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Austin East' },
-    ],
-  },
-  {
-    initials: 'AM',
-    name: 'Asha Mehta',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:30', e: '17:30', t: 'Dallas Metro' },
-      { d: 1, s: '09:30', e: '17:30', t: 'Dallas Metro' },
-      { d: 2, s: '09:30', e: '17:30', t: 'Dallas Metro' },
-      { d: 3, s: '09:30', e: '17:30', t: 'Dallas Metro' },
-    ],
-  },
-  {
-    initials: 'BC',
-    name: 'Bianca Costa',
-    account: 'PestMax',
-    shifts: [
-      { d: 0, s: '08:00', e: '16:00', t: 'Dallas North' },
-      { d: 1, s: '08:00', e: '16:00', t: 'Dallas North' },
-      { d: 2, s: '08:00', e: '16:00', t: 'Dallas North' },
-    ],
-  },
-  {
-    initials: 'HK',
-    name: 'Hiroshi Kato',
-    account: 'PestMax',
-    shifts: [
-      { d: 0, s: '08:00', e: '16:00', t: 'Dallas North' },
-      { d: 2, s: '08:00', e: '16:00', t: 'Dallas North' },
-      { d: 4, s: '08:00', e: '16:00', t: 'Dallas North' },
-    ],
-  },
-  {
-    initials: 'KP',
-    name: 'Kim Park',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 3, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Houston SE' },
-    ],
-  },
-  {
-    initials: 'DR',
-    name: 'Devon Russell',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Houston SE', missing: true },
-      { d: 2, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Houston SE' },
-    ],
-  },
-  {
-    initials: 'ML',
-    name: 'Marcus Lee',
-    account: 'Hope Forward',
-    shifts: [
-      { d: 0, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 1, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 2, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 3, s: '09:00', e: '17:00', t: 'Houston SE' },
-      { d: 4, s: '09:00', e: '17:00', t: 'Houston SE' },
-    ],
-  },
+type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
+
+interface Shift {
+  id: string;
+  repInitials: string;
+  repName: string;
+  account: string;
+  day: number; // 0 = Mon ... 6 = Sun
+  start: string; // 'HH:MM'
+  end: string; // 'HH:MM'
+  territory: string;
+  lunch?: string; // 'HH:MM-HH:MM' or 'HH:MM-CURRENT'
+  status: ShiftStatus;
+}
+
+interface Rep {
+  initials: string;
+  name: string;
+  account: string;
+}
+
+const REPS: Rep[] = [
+  { initials: 'JM', name: 'Jordan Mosley', account: 'Hope Forward' },
+  { initials: 'JD', name: 'Jada Davis', account: 'Hope Forward' },
+  { initials: 'AR', name: 'Aaliyah Reed', account: 'Hope Forward' },
+  { initials: 'TM', name: 'Tomás Mendez', account: 'Hope Forward' },
+  { initials: 'AM', name: 'Asha Mehta', account: 'Hope Forward' },
+  { initials: 'BC', name: 'Bianca Costa', account: 'PestMax' },
+  { initials: 'HK', name: 'Hiroshi Kato', account: 'PestMax' },
+  { initials: 'KP', name: 'Kim Park', account: 'Hope Forward' },
+  { initials: 'DR', name: 'Devon Russell', account: 'Hope Forward' },
+  { initials: 'ML', name: 'Marcus Lee', account: 'Hope Forward' },
 ];
 
-const DAYS = ['Mon 19', 'Tue 20', 'Wed 21', 'Thu 22', 'Fri 23', 'Sat 24', 'Sun 25'];
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function repByInitials(initials: string): Rep {
+  return REPS.find((r) => r.initials === initials) ?? REPS[0]!;
+}
+
+function buildSeed(): Shift[] {
+  const raw: Array<Omit<Shift, 'id' | 'repName' | 'account'>> = [
+    // JM
+    {
+      repInitials: 'JM',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      lunch: '12:00-12:45',
+      status: 'active',
+    },
+    {
+      repInitials: 'JM',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      lunch: '12:00-12:45',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JM',
+      day: 2,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JM',
+      day: 3,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JM',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    // JD
+    {
+      repInitials: 'JD',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'active',
+    },
+    {
+      repInitials: 'JD',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JD',
+      day: 2,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JD',
+      day: 3,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'JD',
+      day: 5,
+      start: '10:00',
+      end: '16:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    // AR
+    {
+      repInitials: 'AR',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'active',
+    },
+    {
+      repInitials: 'AR',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'AR',
+      day: 3,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'AR',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin North',
+      status: 'scheduled',
+    },
+    // TM
+    {
+      repInitials: 'TM',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      lunch: '12:48-CURRENT',
+      status: 'lunch',
+    },
+    {
+      repInitials: 'TM',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'TM',
+      day: 2,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'TM',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Austin East',
+      status: 'scheduled',
+    },
+    // AM
+    {
+      repInitials: 'AM',
+      day: 0,
+      start: '09:30',
+      end: '17:30',
+      territory: 'Dallas Metro',
+      status: 'active',
+    },
+    {
+      repInitials: 'AM',
+      day: 1,
+      start: '09:30',
+      end: '17:30',
+      territory: 'Dallas Metro',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'AM',
+      day: 2,
+      start: '09:30',
+      end: '17:30',
+      territory: 'Dallas Metro',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'AM',
+      day: 3,
+      start: '09:30',
+      end: '17:30',
+      territory: 'Dallas Metro',
+      status: 'scheduled',
+    },
+    // BC
+    {
+      repInitials: 'BC',
+      day: 0,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'active',
+    },
+    {
+      repInitials: 'BC',
+      day: 1,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'BC',
+      day: 2,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'scheduled',
+    },
+    // HK
+    {
+      repInitials: 'HK',
+      day: 0,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'active',
+    },
+    {
+      repInitials: 'HK',
+      day: 2,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'HK',
+      day: 4,
+      start: '08:00',
+      end: '16:00',
+      territory: 'Dallas North',
+      status: 'scheduled',
+    },
+    // KP
+    {
+      repInitials: 'KP',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'active',
+    },
+    {
+      repInitials: 'KP',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'KP',
+      day: 3,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'KP',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    // DR
+    {
+      repInitials: 'DR',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'missed',
+    },
+    {
+      repInitials: 'DR',
+      day: 2,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'DR',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    // ML
+    {
+      repInitials: 'ML',
+      day: 0,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'active',
+    },
+    {
+      repInitials: 'ML',
+      day: 1,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'ML',
+      day: 2,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'ML',
+      day: 3,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+    {
+      repInitials: 'ML',
+      day: 4,
+      start: '09:00',
+      end: '17:00',
+      territory: 'Houston SE',
+      status: 'scheduled',
+    },
+  ];
+  return raw.map((s, i) => {
+    const rep = repByInitials(s.repInitials);
+    return {
+      ...s,
+      id: `sh_${i}`,
+      repName: rep.name,
+      account: rep.account,
+    };
+  });
+}
+
+function hoursOf(shift: Shift): number {
+  const [sh, sm] = shift.start.split(':').map(Number) as [number, number];
+  const [eh, em] = shift.end.split(':').map(Number) as [number, number];
+  return Math.max(0, eh + em / 60 - (sh + sm / 60));
+}
+
+function weekDates(offset: number): Date[] {
+  // Anchor on Mon May 19, 2026
+  const base = new Date(2026, 4, 19);
+  base.setDate(base.getDate() + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return d;
+  });
+}
+
+const TERRITORIES = ['Austin East', 'Austin North', 'Dallas Metro', 'Dallas North', 'Houston SE'];
 
 export default function RosterPage(): JSX.Element {
-  const todayHrs = REPS.reduce((s, r) => s + (r.shifts.find((sh) => sh.d === 0) ? 8 : 0), 0);
+  const [shifts, setShifts] = useState<Shift[]>(() => buildSeed());
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  const [dayIndex, setDayIndex] = useState(0);
+
+  // Edit panel
+  const [editShiftId, setEditShiftId] = useState<string | null>(null);
+  // Rep summary panel
+  const [summaryRep, setSummaryRep] = useState<string | null>(null);
+  // Add-shift modal
+  const [addOpen, setAddOpen] = useState(false);
+  // Quick-add inline (per cell key `repInitials:day`)
+  const [quickAddKey, setQuickAddKey] = useState<string | null>(null);
+  // Live timecard clock-out tracking
+  const [clockedOut, setClockedOut] = useState<Record<string, string>>({});
+
+  const dragId = useRef<string | null>(null);
+  const justDraggedRef = useRef(false);
+  const [hoverCell, setHoverCell] = useState<string | null>(null);
+
+  const dates = useMemo(() => weekDates(weekOffset), [weekOffset]);
+  const weekLabel = useMemo(() => {
+    const start = dates[0]!;
+    return `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }, [dates]);
+  const dayLabels = useMemo(() => dates.map((d, i) => `${DAY_LABELS[i]} ${d.getDate()}`), [dates]);
+
+  // Live KPIs — "today" = weekOffset 0, day 0 (Mon)
+  const todayShifts = shifts.filter((s) => s.day === 0 && weekOffset === 0);
+  const scheduledToday = todayShifts.length;
+  const hoursToday = todayShifts.reduce((a, s) => a + hoursOf(s), 0);
+  const onLunchNow = todayShifts.filter((s) => s.status === 'lunch').length;
+  const missedToday = todayShifts.filter((s) => s.status === 'missed').length;
+  const activeNow = todayShifts.filter((s) => s.status === 'active' && !clockedOut[s.id]).length;
+
+  // ESC handler
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        setEditShiftId(null);
+        setSummaryRep(null);
+        setAddOpen(false);
+        setQuickAddKey(null);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  function moveShift(id: string, targetRepInitials: string, targetDay: number): void {
+    setShifts((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const rep = repByInitials(targetRepInitials);
+        return {
+          ...s,
+          repInitials: rep.initials,
+          repName: rep.name,
+          account: rep.account,
+          day: targetDay,
+        };
+      }),
+    );
+  }
+
+  function updateShift(id: string, patch: Partial<Shift>): void {
+    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+
+  function addShift(s: Omit<Shift, 'id' | 'repName' | 'account'>): void {
+    const rep = repByInitials(s.repInitials);
+    setShifts((prev) => [
+      ...prev,
+      {
+        ...s,
+        id: `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        repName: rep.name,
+        account: rep.account,
+      },
+    ]);
+  }
+
+  function deleteShift(id: string): void {
+    setShifts((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  function clockOut(id: string): void {
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setClockedOut((prev) => ({ ...prev, [id]: stamp }));
+    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, status: 'completed' } : s)));
+  }
+
+  // Drag handlers
+  function onDragStart(id: string) {
+    return (e: DragEvent<HTMLDivElement>) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', id);
+      dragId.current = id;
+      justDraggedRef.current = true;
+    };
+  }
+  function onDragEnd(): void {
+    dragId.current = null;
+    setHoverCell(null);
+    setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 50);
+  }
+  function onDragOverCell(cellKey: string) {
+    return (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setHoverCell(cellKey);
+    };
+  }
+  function onDropCell(repInitials: string, day: number) {
+    return (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = e.dataTransfer.getData('text/plain') || dragId.current;
+      if (id) moveShift(id, repInitials, day);
+      dragId.current = null;
+      setHoverCell(null);
+    };
+  }
+
+  const editingShift = shifts.find((s) => s.id === editShiftId) ?? null;
+  const summaryShifts = summaryRep ? shifts.filter((s) => s.repInitials === summaryRep) : [];
 
   return (
     <PlatformShell pageTitle="Roster & shifts">
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Full rostering for every Knocker iOS user. Hours auto-logged from app clock-in. Lunch
-            breaks tracked. Drag-drop to reassign shifts. Pushes changes instantly to the rep&apos;s
-            iPad.
+            Full rostering for every Knocker iOS user. Hours auto-logged from app clock-in. Drag
+            shifts between cells to reassign. Click any shift to edit. Pushes changes instantly to
+            the rep&apos;s iPad.
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <KpiCard
             label="Scheduled today"
-            value={REPS.filter((r) => r.shifts.some((s) => s.d === 0)).length}
+            value={scheduledToday}
             hint={`of ${REPS.length} total`}
           />
           <KpiCard
             label="Hours today"
-            value={`${todayHrs}h`}
-            hint={`${todayHrs * 8} expected knocks`}
+            value={`${hoursToday.toFixed(1)}h`}
+            hint={`${Math.round(hoursToday * 8)} expected knocks`}
           />
-          <KpiCard label="On lunch now" value="1" hint="Tomás · 38m" />
-          <KpiCard label="Missed shifts" value="1" hint="Devon · auto-SMS sent" />
-          <KpiCard label="Overtime risk" value="0" hint="all within 40h cap" />
+          <KpiCard
+            label="On lunch now"
+            value={onLunchNow}
+            hint={onLunchNow > 0 ? 'live' : 'none'}
+          />
+          <KpiCard
+            label="Missed shifts"
+            value={missedToday}
+            hint={missedToday > 0 ? 'auto-SMS sent' : 'all on time'}
+          />
+          <KpiCard label="Active now" value={activeNow} hint="clocked in" />
         </div>
 
-        {/* Week selector */}
-        <div className="flex items-center justify-between">
+        {/* Week selector + view switcher */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <button className="w-8 h-8 rounded-lg border border-line2 hover:bg-paper flex items-center justify-center">
+            <button
+              onClick={() => setWeekOffset((w) => w - 1)}
+              className="w-8 h-8 rounded-lg border border-line2 hover:bg-paper flex items-center justify-center"
+              title="Previous week"
+            >
               <ChevronLeft size={14} className="text-soft" />
             </button>
-            <div className="text-[15px] font-semibold text-ink">Week of May 19, 2026</div>
-            <button className="w-8 h-8 rounded-lg border border-line2 hover:bg-paper flex items-center justify-center">
+            <div className="text-[15px] font-semibold text-ink">{weekLabel}</div>
+            <button
+              onClick={() => setWeekOffset((w) => w + 1)}
+              className="w-8 h-8 rounded-lg border border-line2 hover:bg-paper flex items-center justify-center"
+              title="Next week"
+            >
               <ChevronRight size={14} className="text-soft" />
             </button>
-            <button className="ml-2 text-[12px] text-accent font-medium">This week</button>
+            <button
+              onClick={() => setWeekOffset(0)}
+              className={`ml-2 text-[12px] font-medium ${weekOffset === 0 ? 'text-soft' : 'text-accent hover:underline'}`}
+              disabled={weekOffset === 0}
+            >
+              This week
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm">
-              Day view
-            </Button>
-            <Button variant="ghost" size="sm">
-              Month view
-            </Button>
-            <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center bg-paper rounded-lg p-0.5 border border-line2">
+              {[
+                { v: 'day' as const, icon: CalendarDays, label: 'Day' },
+                { v: 'week' as const, icon: LayoutGrid, label: 'Week' },
+                { v: 'month' as const, icon: CalendarRange, label: 'Month' },
+              ].map((opt) => (
+                <button
+                  key={opt.v}
+                  onClick={() => setView(opt.v)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium transition ${view === opt.v ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+                >
+                  <opt.icon size={13} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={13} />}
+              onClick={() => setAddOpen(true)}
+            >
               Add shift
             </Button>
           </div>
         </div>
 
-        {/* Roster calendar */}
-        <Section title="Week schedule" subtitle="All accounts · all Knockers" paddedBody={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr>
-                  <th
-                    className="text-left px-4 py-3 border-b border-line2 text-[11px] uppercase tracking-wider text-muted font-medium"
-                    style={{ minWidth: 180 }}
-                  >
-                    Knocker
-                  </th>
-                  {DAYS.map((d, i) => (
+        {view === 'week' && (
+          <Section
+            title="Week schedule"
+            subtitle="All accounts · all Knockers · drag to reassign"
+            paddedBody={false}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr>
                     <th
-                      key={d}
-                      className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
-                      style={{ minWidth: 130 }}
+                      className="text-left px-4 py-3 border-b border-line2 text-[11px] uppercase tracking-wider text-muted font-medium"
+                      style={{ minWidth: 180 }}
                     >
-                      {d} {i === 0 && <span className="text-[9px] text-accent">· TODAY</span>}
+                      Knocker
                     </th>
-                  ))}
-                  <th className="text-right px-4 py-3 border-b border-line2 text-[11px] uppercase tracking-wider text-muted font-medium">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {REPS.map((r) => {
-                  const totalHrs = r.shifts.reduce((s, sh) => s + 8, 0);
-                  return (
-                    <tr key={r.initials} className="hover:bg-paper/40">
-                      <td className="px-4 py-3 border-b border-line2">
-                        <div className="flex items-center gap-2">
-                          <span className="mono">{r.initials}</span>
-                          <div>
-                            <div className="text-[13px] font-medium text-ink">{r.name}</div>
-                            <div className="text-[10px] text-muted">{r.account}</div>
-                          </div>
-                        </div>
-                      </td>
-                      {DAYS.map((_, di) => {
-                        const shift = r.shifts.find((s) => s.d === di);
-                        if (!shift)
-                          return (
-                            <td key={di} className="px-3 py-3 border-b border-line2">
-                              <div className="h-12 bg-paper/40 border border-dashed border-line2 rounded-md flex items-center justify-center text-[10px] text-soft">
-                                Off
+                    {dayLabels.map((d, i) => (
+                      <th
+                        key={d}
+                        className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === 0 && weekOffset === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
+                        style={{ minWidth: 130 }}
+                      >
+                        {d}{' '}
+                        {i === 0 && weekOffset === 0 && (
+                          <span className="text-[9px] text-accent">· TODAY</span>
+                        )}
+                      </th>
+                    ))}
+                    <th className="text-right px-4 py-3 border-b border-line2 text-[11px] uppercase tracking-wider text-muted font-medium">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {REPS.map((r) => {
+                    const repShifts = shifts.filter((s) => s.repInitials === r.initials);
+                    const totalHrs = repShifts.reduce((a, s) => a + hoursOf(s), 0);
+                    return (
+                      <tr key={r.initials} className="hover:bg-paper/40">
+                        <td className="px-4 py-3 border-b border-line2">
+                          <button
+                            onClick={() => setSummaryRep(r.initials)}
+                            className="flex items-center gap-2 text-left hover:opacity-80"
+                          >
+                            <span className="mono">{r.initials}</span>
+                            <div>
+                              <div className="text-[13px] font-medium text-ink hover:text-accent">
+                                {r.name}
                               </div>
+                              <div className="text-[10px] text-muted">{r.account}</div>
+                            </div>
+                          </button>
+                        </td>
+                        {dayLabels.map((_, di) => {
+                          const cellKey = `${r.initials}:${di}`;
+                          const cellShifts = repShifts.filter((s) => s.day === di);
+                          const isHover = hoverCell === cellKey;
+                          const isToday = di === 0 && weekOffset === 0;
+                          return (
+                            <td
+                              key={di}
+                              className="px-3 py-3 border-b border-line2 align-top"
+                              onDragOver={onDragOverCell(cellKey)}
+                              onDragLeave={(e) => {
+                                const rt = e.relatedTarget as Node | null;
+                                if (!rt || !(e.currentTarget as Node).contains(rt))
+                                  setHoverCell((h) => (h === cellKey ? null : h));
+                              }}
+                              onDrop={onDropCell(r.initials, di)}
+                            >
+                              {cellShifts.length === 0 ? (
+                                quickAddKey === cellKey ? (
+                                  <QuickAddInline
+                                    onCancel={() => setQuickAddKey(null)}
+                                    onSubmit={(s) => {
+                                      addShift({
+                                        repInitials: r.initials,
+                                        day: di,
+                                        start: s.start,
+                                        end: s.end,
+                                        territory: s.territory,
+                                        status: 'scheduled',
+                                      });
+                                      setQuickAddKey(null);
+                                    }}
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() => setQuickAddKey(cellKey)}
+                                    className={`w-full h-12 border border-dashed rounded-md flex items-center justify-center text-[10px] transition ${
+                                      isHover
+                                        ? 'ring-2 ring-accent bg-accentSoft/40 border-accent text-accent font-semibold'
+                                        : 'bg-paper/40 border-line2 text-soft hover:text-accent hover:border-accent/40'
+                                    }`}
+                                  >
+                                    {isHover ? '↓ Drop here ↓' : '+ Off'}
+                                  </button>
+                                )
+                              ) : (
+                                <div
+                                  className={`space-y-1.5 rounded-md transition ${isHover ? 'ring-2 ring-accent bg-accentSoft/40 p-1' : ''}`}
+                                >
+                                  {cellShifts.map((sh) => {
+                                    const isDragging = dragId.current === sh.id;
+                                    const onLunch = sh.status === 'lunch';
+                                    const missed = sh.status === 'missed';
+                                    const completed =
+                                      sh.status === 'completed' || !!clockedOut[sh.id];
+                                    return (
+                                      <div
+                                        key={sh.id}
+                                        draggable
+                                        onDragStart={onDragStart(sh.id)}
+                                        onDragEnd={onDragEnd}
+                                        onClick={() => {
+                                          if (justDraggedRef.current) return;
+                                          setEditShiftId(sh.id);
+                                        }}
+                                        className={`p-2 rounded-md border cursor-grab active:cursor-grabbing hover:shadow-sm transition ${
+                                          missed
+                                            ? 'bg-rose-50 border-rose-300'
+                                            : onLunch
+                                              ? 'bg-amber-50 border-amber-300'
+                                              : completed
+                                                ? 'bg-emerald-50 border-emerald-300'
+                                                : isToday
+                                                  ? 'bg-accentSoft border-accent/30'
+                                                  : 'bg-paper border-line2'
+                                        } ${isDragging ? 'opacity-30 scale-95 rotate-1' : ''}`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div className="text-[11px] font-semibold text-ink numeric">
+                                            {sh.start}–{sh.end}
+                                          </div>
+                                          {missed && (
+                                            <AlertCircle size={11} className="text-rose-500" />
+                                          )}
+                                          {onLunch && (
+                                            <Coffee size={11} className="text-amber-600" />
+                                          )}
+                                          {completed && (
+                                            <CheckCircle2 size={11} className="text-emerald-600" />
+                                          )}
+                                        </div>
+                                        <div className="text-[10px] text-muted truncate mt-0.5">
+                                          {sh.territory}
+                                        </div>
+                                        {sh.lunch && (
+                                          <div
+                                            className={`text-[9px] mt-1 font-medium ${onLunch ? 'text-amber-700' : 'text-soft'}`}
+                                          >
+                                            🍽 {sh.lunch}
+                                          </div>
+                                        )}
+                                        {missed && (
+                                          <div className="text-[9px] mt-1 font-medium text-rose-700">
+                                            No clock-in · SMS sent
+                                          </div>
+                                        )}
+                                        {clockedOut[sh.id] && (
+                                          <div className="text-[9px] mt-1 font-medium text-emerald-700">
+                                            Clocked out · {clockedOut[sh.id]}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </td>
                           );
-                        const sh = shift as {
-                          d: number;
-                          s: string;
-                          e: string;
-                          t: string;
-                          lunch?: string;
-                          missing?: boolean;
-                        };
-                        const missing = sh.missing === true;
-                        const onLunch = !!sh.lunch && sh.lunch.includes('CURRENT');
-                        return (
-                          <td key={di} className="px-3 py-3 border-b border-line2">
-                            <div
-                              className={`p-2 rounded-md border ${
-                                missing
-                                  ? 'bg-rose-50 border-rose-300'
-                                  : onLunch
-                                    ? 'bg-amber-50 border-amber-300'
-                                    : di === 0
-                                      ? 'bg-accentSoft border-accent/30'
-                                      : 'bg-paper border-line2'
-                              } cursor-grab hover:shadow-sm transition`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="text-[11px] font-semibold text-ink numeric">
-                                  {sh.s}–{sh.e}
-                                </div>
-                                {missing && <AlertCircle size={11} className="text-rose-500" />}
-                                {onLunch && <Coffee size={11} className="text-amber-600" />}
-                              </div>
-                              <div className="text-[10px] text-muted truncate mt-0.5">{sh.t}</div>
-                              {sh.lunch && (
-                                <div
-                                  className={`text-[9px] mt-1 font-medium ${onLunch ? 'text-amber-700' : 'text-soft'}`}
-                                >
-                                  🍽 {sh.lunch}
-                                </div>
-                              )}
-                              {missing && (
-                                <div className="text-[9px] mt-1 font-medium text-rose-700">
-                                  No clock-in · SMS sent
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-3 border-b border-line2 text-right">
-                        <div className="text-[13px] font-semibold text-ink numeric">
-                          {totalHrs}h
-                        </div>
-                        <div className="text-[10px] text-soft">{r.shifts.length} shifts</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Section>
+                        })}
+                        <td className="px-4 py-3 border-b border-line2 text-right">
+                          <div className="text-[13px] font-semibold text-ink numeric">
+                            {totalHrs.toFixed(1)}h
+                          </div>
+                          <div className="text-[10px] text-soft">{repShifts.length} shifts</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        )}
 
-        {/* Time tracking detail */}
+        {view === 'day' && (
+          <DayView
+            dayIndex={dayIndex}
+            setDayIndex={setDayIndex}
+            dayLabels={dayLabels}
+            shifts={shifts}
+            onClickShift={(id) => setEditShiftId(id)}
+            clockedOut={clockedOut}
+          />
+        )}
+
+        {view === 'month' && <MonthView shifts={shifts} weekOffset={weekOffset} />}
+
+        {/* Today live time tracking */}
         <Section
           title="Today · live time tracking"
           subtitle="Clock-in / out + lunch breaks · auto-captured from Knocker iOS"
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {[
-              {
-                who: 'Tomás Mendez',
-                initials: 'TM',
-                clockIn: '09:00',
-                lunchStart: '12:48',
-                lunchDuration: '38m',
-                status: 'On lunch',
-                tone: 'warn',
-              },
-              {
-                who: 'Devon Russell',
-                initials: 'DR',
-                clockIn: 'Missed',
-                lunchStart: '—',
-                lunchDuration: '—',
-                status: 'No clock-in',
-                tone: 'danger',
-              },
-              {
-                who: 'Jordan Mosley',
-                initials: 'JM',
-                clockIn: '09:00',
-                lunchStart: 'Pending',
-                lunchDuration: '—',
-                status: 'Active · 4h 12m',
-                tone: 'success',
-              },
-            ].map((t, i) => (
-              <div key={i} className="card card-pad">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="mono">{t.initials}</span>
-                  <div className="flex-1">
-                    <div className="text-[13px] font-semibold text-ink">{t.who}</div>
-                    <StatusPill tone={t.tone as 'success' | 'warn' | 'danger'}>
-                      {t.status}
-                    </StatusPill>
+            {todayShifts.slice(0, 6).map((t) => {
+              const tone: 'success' | 'warn' | 'danger' =
+                t.status === 'missed' ? 'danger' : t.status === 'lunch' ? 'warn' : 'success';
+              const out = clockedOut[t.id];
+              return (
+                <div key={t.id} className="card card-pad">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="mono">{t.repInitials}</span>
+                    <div className="flex-1">
+                      <div className="text-[13px] font-semibold text-ink">{t.repName}</div>
+                      <StatusPill tone={tone}>
+                        {out
+                          ? `Clocked out · ${out}`
+                          : t.status === 'lunch'
+                            ? 'On lunch'
+                            : t.status === 'missed'
+                              ? 'No clock-in'
+                              : t.status === 'completed'
+                                ? 'Completed'
+                                : `Active · ${t.start}`}
+                      </StatusPill>
+                    </div>
                   </div>
+                  <div className="space-y-1.5 text-[12px]">
+                    <div className="flex justify-between">
+                      <span className="text-muted flex items-center gap-1">
+                        <Clock size={11} /> Clock-in
+                      </span>
+                      <span className="text-ink numeric font-medium">
+                        {t.status === 'missed' ? 'Missed' : t.start}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted flex items-center gap-1">
+                        <Coffee size={11} /> Lunch
+                      </span>
+                      <span className="text-ink numeric font-medium">{t.lunch ?? '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted">Territory</span>
+                      <span className="text-ink font-medium">{t.territory}</span>
+                    </div>
+                  </div>
+                  {!out && t.status !== 'missed' && (
+                    <button
+                      onClick={() => clockOut(t.id)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-ink text-surface text-[11px] font-medium hover:bg-ink/90"
+                    >
+                      <LogOut size={12} /> Clock out
+                    </button>
+                  )}
                 </div>
-                <div className="space-y-1.5 text-[12px]">
-                  <div className="flex justify-between">
-                    <span className="text-muted flex items-center gap-1">
-                      <Clock size={11} /> Clock-in
-                    </span>
-                    <span className="text-ink numeric font-medium">{t.clockIn}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted flex items-center gap-1">
-                      <Coffee size={11} /> Lunch start
-                    </span>
-                    <span className="text-ink numeric font-medium">{t.lunchStart}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Lunch duration</span>
-                    <span className="text-ink numeric font-medium">{t.lunchDuration}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Section>
       </div>
+
+      {/* Edit shift side panel */}
+      {editingShift && (
+        <EditShiftPanel
+          shift={editingShift}
+          onClose={() => setEditShiftId(null)}
+          onSave={(patch) => {
+            updateShift(editingShift.id, patch);
+            setEditShiftId(null);
+          }}
+          onDelete={() => {
+            deleteShift(editingShift.id);
+            setEditShiftId(null);
+          }}
+        />
+      )}
+
+      {/* Rep weekly summary panel */}
+      {summaryRep && (
+        <RepSummaryPanel
+          rep={repByInitials(summaryRep)}
+          shifts={summaryShifts}
+          onClose={() => setSummaryRep(null)}
+        />
+      )}
+
+      {/* Add shift modal */}
+      {addOpen && (
+        <AddShiftModal
+          onClose={() => setAddOpen(false)}
+          onAdd={(s) => {
+            addShift(s);
+            setAddOpen(false);
+          }}
+        />
+      )}
     </PlatformShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick add inline
+// ─────────────────────────────────────────────────────────────────────────────
+
+function QuickAddInline({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (s: { start: string; end: string; territory: string }) => void;
+}): JSX.Element {
+  const [start, setStart] = useState('09:00');
+  const [end, setEnd] = useState('17:00');
+  const [territory, setTerritory] = useState(TERRITORIES[0]!);
+  return (
+    <div className="p-1.5 bg-surface border border-accent rounded-md space-y-1">
+      <div className="flex gap-1">
+        <input
+          value={start}
+          onChange={(e) => setStart(e.target.value)}
+          className="w-full text-[10px] px-1 py-0.5 border border-line2 rounded numeric"
+          placeholder="09:00"
+        />
+        <input
+          value={end}
+          onChange={(e) => setEnd(e.target.value)}
+          className="w-full text-[10px] px-1 py-0.5 border border-line2 rounded numeric"
+          placeholder="17:00"
+        />
+      </div>
+      <select
+        value={territory}
+        onChange={(e) => setTerritory(e.target.value)}
+        className="w-full text-[10px] px-1 py-0.5 border border-line2 rounded"
+      >
+        {TERRITORIES.map((t) => (
+          <option key={t}>{t}</option>
+        ))}
+      </select>
+      <div className="flex gap-1">
+        <button
+          onClick={() => onSubmit({ start, end, territory })}
+          className="flex-1 text-[10px] py-0.5 bg-accent text-surface rounded font-medium"
+        >
+          Add
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-1.5 text-[10px] py-0.5 bg-paper text-muted rounded"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit shift panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EditShiftPanel({
+  shift,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  shift: Shift;
+  onClose: () => void;
+  onSave: (patch: Partial<Shift>) => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const [start, setStart] = useState(shift.start);
+  const [end, setEnd] = useState(shift.end);
+  const [territory, setTerritory] = useState(shift.territory);
+  const [lunchStart, setLunchStart] = useState(() => {
+    if (!shift.lunch) return '12:00';
+    return shift.lunch.split('-')[0] ?? '12:00';
+  });
+  const [lunchDur, setLunchDur] = useState('45');
+  const [status, setStatus] = useState<ShiftStatus>(shift.status);
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-[420px] bg-surface border-l border-line2 shadow-2xl z-50 overflow-y-auto">
+      <div className="sticky top-0 bg-surface border-b border-line2 px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CalendarDays size={14} className="text-accent" />
+          <div className="text-[13px] font-semibold text-ink">Edit shift</div>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+        >
+          <X size={14} className="text-muted" />
+        </button>
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="mono">{shift.repInitials}</span>
+          <div>
+            <div className="text-[14px] font-semibold text-ink">{shift.repName}</div>
+            <div className="text-[11px] text-muted">
+              {shift.account} · {DAY_LABELS[shift.day]}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Start time">
+            <input
+              type="time"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+            />
+          </Field>
+          <Field label="End time">
+            <input
+              type="time"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+            />
+          </Field>
+        </div>
+
+        <Field label="Territory">
+          <select
+            value={territory}
+            onChange={(e) => setTerritory(e.target.value)}
+            className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+          >
+            {TERRITORIES.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Lunch start">
+            <input
+              type="time"
+              value={lunchStart}
+              onChange={(e) => setLunchStart(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+            />
+          </Field>
+          <Field label="Lunch duration (min)">
+            <input
+              type="number"
+              value={lunchDur}
+              onChange={(e) => setLunchDur(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+            />
+          </Field>
+        </div>
+
+        <Field label="Status">
+          <div className="flex flex-wrap gap-1.5">
+            {(['scheduled', 'active', 'lunch', 'missed', 'completed'] as ShiftStatus[]).map(
+              (st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatus(st)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition capitalize ${status === st ? 'bg-ink text-surface' : 'bg-paper text-muted hover:bg-line2 hover:text-ink'}`}
+                >
+                  {st}
+                </button>
+              ),
+            )}
+          </div>
+        </Field>
+
+        <div className="flex items-center gap-2 pt-2">
+          <Button
+            variant="primary"
+            size="md"
+            className="flex-1"
+            onClick={() => {
+              // build lunch string
+              const dur = parseInt(lunchDur, 10);
+              let lunch: string | undefined = undefined;
+              if (!Number.isNaN(dur) && dur > 0) {
+                const [lh, lm] = lunchStart.split(':').map(Number) as [number, number];
+                const totalMin = lh * 60 + lm + dur;
+                const eh = Math.floor(totalMin / 60);
+                const em = totalMin % 60;
+                lunch = `${lunchStart}-${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+              }
+              onSave({ start, end, territory, lunch, status });
+            }}
+          >
+            Save
+          </Button>
+          <Button variant="ghost" size="md" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+        <button
+          onClick={onDelete}
+          className="w-full text-[11px] text-rose-600 hover:underline pt-2"
+        >
+          Delete shift
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted uppercase tracking-wider font-medium">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rep summary panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RepSummaryPanel({
+  rep,
+  shifts,
+  onClose,
+}: {
+  rep: Rep;
+  shifts: Shift[];
+  onClose: () => void;
+}): JSX.Element {
+  const totalHrs = shifts.reduce((a, s) => a + hoursOf(s), 0);
+  const lunches = shifts.filter((s) => !!s.lunch).length;
+  const attended = shifts.filter((s) => s.status !== 'missed').length;
+  const attendancePct = shifts.length > 0 ? Math.round((attended / shifts.length) * 100) : 100;
+  return (
+    <div className="fixed inset-y-0 right-0 w-[420px] bg-surface border-l border-line2 shadow-2xl z-50 overflow-y-auto">
+      <div className="sticky top-0 bg-surface border-b border-line2 px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="mono">{rep.initials}</span>
+          <div className="text-[13px] font-semibold text-ink">{rep.name}</div>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+        >
+          <X size={14} className="text-muted" />
+        </button>
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <SummaryStat label="Total hours" value={`${totalHrs.toFixed(1)}h`} />
+          <SummaryStat label="Shifts" value={String(shifts.length)} />
+          <SummaryStat label="Lunch breaks" value={String(lunches)} />
+          <SummaryStat label="Attendance" value={`${attendancePct}%`} />
+        </div>
+        <div>
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-2">
+            Week shifts
+          </div>
+          <div className="space-y-1.5">
+            {shifts.length === 0 && (
+              <div className="text-[12px] text-soft">No shifts this week.</div>
+            )}
+            {shifts
+              .sort((a, b) => a.day - b.day)
+              .map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between px-3 py-2 bg-paper border border-line2 rounded-md"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="text-[11px] font-semibold text-ink w-8">
+                      {DAY_LABELS[s.day]}
+                    </div>
+                    <div className="text-[11px] text-ink numeric">
+                      {s.start}–{s.end}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted">{s.territory}</span>
+                    <StatusPill
+                      tone={
+                        s.status === 'missed'
+                          ? 'danger'
+                          : s.status === 'lunch'
+                            ? 'warn'
+                            : s.status === 'active'
+                              ? 'success'
+                              : 'muted'
+                      }
+                    >
+                      {s.status}
+                    </StatusPill>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="bg-paper border border-line2 rounded-lg p-3">
+      <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-[18px] font-semibold text-ink numeric mt-1">{value}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add shift modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddShiftModal({
+  onClose,
+  onAdd,
+}: {
+  onClose: () => void;
+  onAdd: (s: Omit<Shift, 'id' | 'repName' | 'account'>) => void;
+}): JSX.Element {
+  const [repInitials, setRepInitials] = useState(REPS[0]!.initials);
+  const [day, setDay] = useState(0);
+  const [start, setStart] = useState('09:00');
+  const [end, setEnd] = useState('17:00');
+  const [territory, setTerritory] = useState(TERRITORIES[0]!);
+
+  return (
+    <div
+      className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-6"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-[15px] font-semibold text-ink mb-4">Add shift</div>
+        <div className="space-y-3 mb-4">
+          <Field label="Knocker">
+            <select
+              value={repInitials}
+              onChange={(e) => setRepInitials(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+            >
+              {REPS.map((r) => (
+                <option key={r.initials} value={r.initials}>
+                  {r.initials} · {r.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Day">
+            <select
+              value={day}
+              onChange={(e) => setDay(parseInt(e.target.value, 10))}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+            >
+              {DAY_LABELS.map((d, i) => (
+                <option key={d} value={i}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start">
+              <input
+                type="time"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+              />
+            </Field>
+            <Field label="End">
+              <input
+                type="time"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
+              />
+            </Field>
+          </div>
+          <Field label="Territory">
+            <select
+              value={territory}
+              onChange={(e) => setTerritory(e.target.value)}
+              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+            >
+              {TERRITORIES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => onAdd({ repInitials, day, start, end, territory, status: 'scheduled' })}
+          >
+            Add shift
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day view
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DayView({
+  dayIndex,
+  setDayIndex,
+  dayLabels,
+  shifts,
+  onClickShift,
+  clockedOut,
+}: {
+  dayIndex: number;
+  setDayIndex: (d: number) => void;
+  dayLabels: string[];
+  shifts: Shift[];
+  onClickShift: (id: string) => void;
+  clockedOut: Record<string, string>;
+}): JSX.Element {
+  const HOUR_START = 7;
+  const HOUR_END = 18;
+  const totalHours = HOUR_END - HOUR_START;
+  const dayShifts = shifts.filter((s) => s.day === dayIndex);
+
+  function positionFor(time: string): number {
+    const [h, m] = time.split(':').map(Number) as [number, number];
+    const offset = h + m / 60 - HOUR_START;
+    return (offset / totalHours) * 100;
+  }
+
+  return (
+    <Section
+      title={`Day view · ${dayLabels[dayIndex]}`}
+      subtitle="Timeline 07:00–18:00 · click a shift to edit"
+      paddedBody={false}
+    >
+      <div className="px-4 py-3 border-b border-line2 flex items-center gap-2">
+        {dayLabels.map((d, i) => (
+          <button
+            key={d}
+            onClick={() => setDayIndex(i)}
+            className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
+              dayIndex === i
+                ? 'bg-ink text-surface'
+                : 'bg-paper text-muted hover:bg-line2 hover:text-ink'
+            }`}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 900 }}>
+          {/* Time axis */}
+          <div className="flex border-b border-line2 bg-paper/40">
+            <div className="w-32 shrink-0 px-3 py-2 text-[11px] text-muted uppercase tracking-wider font-medium">
+              Knocker
+            </div>
+            <div className="flex-1 relative h-8">
+              {Array.from({ length: totalHours + 1 }, (_, i) => (
+                <div
+                  key={i}
+                  className="absolute top-0 bottom-0 border-l border-line2 text-[10px] text-soft pl-1 numeric"
+                  style={{ left: `${(i / totalHours) * 100}%` }}
+                >
+                  {String(HOUR_START + i).padStart(2, '0')}:00
+                </div>
+              ))}
+            </div>
+          </div>
+          {REPS.map((r) => {
+            const repShifts = dayShifts.filter((s) => s.repInitials === r.initials);
+            return (
+              <div key={r.initials} className="flex border-b border-line2 hover:bg-paper/30">
+                <div className="w-32 shrink-0 px-3 py-3 flex items-center gap-2">
+                  <span className="mono">{r.initials}</span>
+                  <div className="text-[11px] text-ink truncate">{r.name}</div>
+                </div>
+                <div className="flex-1 relative h-14">
+                  {Array.from({ length: totalHours + 1 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 border-l border-line2/50"
+                      style={{ left: `${(i / totalHours) * 100}%` }}
+                    />
+                  ))}
+                  {repShifts.map((s) => {
+                    const left = positionFor(s.start);
+                    const right = positionFor(s.end);
+                    const width = Math.max(2, right - left);
+                    const tone =
+                      s.status === 'missed'
+                        ? 'bg-rose-100 border-rose-300 text-rose-800'
+                        : s.status === 'lunch'
+                          ? 'bg-amber-100 border-amber-300 text-amber-800'
+                          : clockedOut[s.id]
+                            ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                            : 'bg-accentSoft border-accent/30 text-ink';
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => onClickShift(s.id)}
+                        className={`absolute top-1.5 bottom-1.5 rounded-md border px-2 text-[10px] font-medium overflow-hidden text-left hover:shadow-md transition ${tone}`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      >
+                        <div className="numeric">
+                          {s.start}–{s.end}
+                        </div>
+                        <div className="truncate text-[9px] opacity-80">{s.territory}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Month view
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MonthView({ shifts, weekOffset }: { shifts: Shift[]; weekOffset: number }): JSX.Element {
+  // 5 weeks × 7 days mini grid. Count shifts per (week, day).
+  const weeks = Array.from({ length: 5 }, (_, w) => w);
+  return (
+    <Section
+      title="Month view"
+      subtitle="5-week overview · shifts scheduled per day"
+      paddedBody={false}
+    >
+      <div className="p-4">
+        <div className="grid grid-cols-7 gap-2 mb-2">
+          {DAY_LABELS.map((d) => (
+            <div
+              key={d}
+              className="text-[10px] uppercase tracking-wider text-muted font-medium text-center"
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {weeks.flatMap((w) =>
+            DAY_LABELS.map((_, di) => {
+              // Only the current week (offset 0) has real data; show count for that one, others = 0
+              const isCurrentWeek = w === Math.max(0, Math.min(4, weekOffset + 2));
+              const count = isCurrentWeek
+                ? shifts.filter((s) => s.day === di).length
+                : Math.round(shifts.filter((s) => s.day === di).length * (0.7 + w * 0.1));
+              const dayNum = w * 7 + di + 1;
+              return (
+                <div
+                  key={`${w}-${di}`}
+                  className={`aspect-square rounded-md border p-2 flex flex-col ${
+                    isCurrentWeek ? 'bg-accentSoft/30 border-accent/30' : 'bg-paper border-line2'
+                  }`}
+                >
+                  <div className="text-[10px] text-muted numeric">{dayNum}</div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-[18px] font-bold text-ink numeric">{count}</div>
+                  </div>
+                  <div className="text-[9px] text-soft text-center">shifts</div>
+                </div>
+              );
+            }),
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }

@@ -29,6 +29,14 @@ function buildCsp() {
       'https://api.mapbox.com',
       'https://server.arcgisonline.com', // Esri World Imagery satellite tiles
       'https://services.arcgisonline.com',
+      // OpenStreetMap streets tiles (Leaflet base layer)
+      'https://tile.openstreetmap.org',
+      'https://*.tile.openstreetmap.org',
+      'https://a.tile.openstreetmap.org',
+      'https://b.tile.openstreetmap.org',
+      'https://c.tile.openstreetmap.org',
+      // Carto basemaps (optional fallback)
+      'https://*.basemaps.cartocdn.com',
     ],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
@@ -39,6 +47,12 @@ function buildCsp() {
       'https://events.mapbox.com',
       'https://server.arcgisonline.com',
       'https://services.arcgisonline.com',
+      'https://tile.openstreetmap.org',
+      'https://*.tile.openstreetmap.org',
+      'https://a.tile.openstreetmap.org',
+      'https://b.tile.openstreetmap.org',
+      'https://c.tile.openstreetmap.org',
+      'https://*.basemaps.cartocdn.com',
     ],
     'frame-ancestors': ["'none'"],
     'base-uri': ["'self'"],

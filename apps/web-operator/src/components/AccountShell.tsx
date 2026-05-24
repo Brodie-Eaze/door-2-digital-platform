@@ -15,6 +15,13 @@ import {
   Search,
   Smartphone,
   Map as MapIcon,
+  Calendar,
+  FileText,
+  Globe,
+  Heart,
+  CheckSquare,
+  Workflow,
+  FolderOpen,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
@@ -56,6 +63,18 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       items: [
         { href: `${base}/campaigns`, label: 'Marketing', icon: Megaphone },
         { href: `${base}/reports`, label: 'Reports', icon: BarChart3 },
+      ],
+    },
+    {
+      label: 'Operate',
+      items: [
+        { href: `${base}/calendars`, label: 'Calendars', icon: Calendar },
+        { href: `${base}/forms`, label: 'Forms', icon: FileText },
+        { href: `${base}/sites`, label: 'Sites & Funnels', icon: Globe },
+        { href: `${base}/memberships`, label: 'Memberships', icon: Heart },
+        { href: `${base}/tasks`, label: 'Tasks', icon: CheckSquare },
+        { href: `${base}/workflows`, label: 'Workflows', icon: Workflow },
+        { href: `${base}/files`, label: 'Files', icon: FolderOpen },
       ],
     },
     {

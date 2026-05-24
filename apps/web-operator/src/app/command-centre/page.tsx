@@ -3,7 +3,8 @@
 import { Radio, Sparkles, AlertTriangle, TrendingUp, Coffee, MapPin } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
-import { HQFleetMap, FLEET_REPS } from '@/components/HQFleetMap';
+import { HQLiveMap } from '@/components/HQLiveMap';
+import { FLEET_REPS } from '@/lib/fleet-reps';
 
 export default function CommandCentrePage(): JSX.Element {
   const active = FLEET_REPS.filter((r) => r.status === 'active').length;
@@ -50,7 +51,7 @@ export default function CommandCentrePage(): JSX.Element {
         </div>
 
         {/* The main live map */}
-        <HQFleetMap />
+        <HQLiveMap />
 
         {/* AI Insights + alerts row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
