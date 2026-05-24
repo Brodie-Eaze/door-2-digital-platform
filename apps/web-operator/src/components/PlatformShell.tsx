@@ -8,6 +8,7 @@
  * preview surface. Clicking any account in /accounts drops you into THAT
  * sub-account's self-contained workspace (rendered by AccountShell).
  */
+import { useEffect, useState } from 'react';
 import {
   Building2,
   CreditCard,
@@ -23,6 +24,7 @@ import {
   Target,
   UserPlus,
   Image as ImageIcon,
+  Globe2,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 
@@ -63,6 +65,15 @@ const NAV: NavGroup[] = [
     items: [{ href: '/mobile-preview', label: 'Knocker iOS preview', icon: Smartphone }],
   },
   {
+    label: 'Regions',
+    items: [
+      { href: '/regions/au', label: 'AU · operations', icon: Globe2 },
+      { href: '/regions/au/compliance', label: 'AU · compliance', icon: ShieldCheck },
+      { href: '/regions/au/payments', label: 'AU · payments', icon: CreditCard },
+      { href: '/regions/au/territory-intel', label: 'AU · territory intel', icon: Map },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { href: '/screens', label: 'Screens gallery', icon: ImageIcon, roles: ['super_admin'] },
@@ -71,6 +82,65 @@ const NAV: NavGroup[] = [
     ],
   },
 ];
+
+type RegionFilter = 'ALL' | 'US' | 'AU' | 'SG';
+const REGION_CHOICES: { value: RegionFilter; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'US', label: 'US' },
+  { value: 'AU', label: 'AU' },
+  { value: 'SG', label: 'SG' },
+];
+
+function RegionToggle(): JSX.Element {
+  const [region, setRegion] = useState<RegionFilter>('ALL');
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('d2d.region');
+      if (raw === 'ALL' || raw === 'US' || raw === 'AU' || raw === 'SG') {
+        setRegion(raw);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function pick(next: RegionFilter): void {
+    setRegion(next);
+    try {
+      window.localStorage.setItem('d2d.region', next);
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div
+      className="hidden md:inline-flex items-center gap-0.5 p-0.5 rounded-full border border-line2 bg-paper"
+      role="group"
+      aria-label="Region filter"
+    >
+      {REGION_CHOICES.map((choice) => {
+        const active = choice.value === region;
+        return (
+          <button
+            key={choice.value}
+            type="button"
+            onClick={() => pick(choice.value)}
+            className={
+              active
+                ? 'text-[10.5px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-ink text-surface transition'
+                : 'text-[10.5px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full text-muted hover:text-ink transition'
+            }
+            aria-pressed={active}
+          >
+            {choice.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface PlatformShellProps {
   children: React.ReactNode;
@@ -100,11 +170,14 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
           title={pageTitle}
           env={process.env.NEXT_PUBLIC_ENV ?? 'local'}
           rightSlot={
-            <div className="flex items-center gap-2">
-              <span className="mono">BR</span>
-              <div className="text-xs leading-tight hidden sm:block">
-                <div className="font-medium text-ink truncate max-w-[180px]">Brodie</div>
-                <div className="text-muted text-[10px] uppercase tracking-wider">super_admin</div>
+            <div className="flex items-center gap-3">
+              <RegionToggle />
+              <div className="flex items-center gap-2">
+                <span className="mono">BR</span>
+                <div className="text-xs leading-tight hidden sm:block">
+                  <div className="font-medium text-ink truncate max-w-[180px]">Brodie</div>
+                  <div className="text-muted text-[10px] uppercase tracking-wider">super_admin</div>
+                </div>
               </div>
             </div>
           }

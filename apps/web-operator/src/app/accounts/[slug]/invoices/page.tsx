@@ -102,7 +102,12 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
   const daysOverdue = invoices.find((i) => i.status === 'overdue')?.daysOverdue ?? 0;
 
   const region = account.region === 'AU' ? 'AU' : 'US';
-  const processor = account.region === 'US' ? 'MiCamp' : 'Stripe';
+  const processor =
+    account.region === 'AU'
+      ? 'Stripe AU + GoCardless'
+      : account.region === 'US'
+        ? 'MiCamp'
+        : 'Stripe';
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Invoices">
@@ -356,63 +361,132 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
           title="Payment method"
           subtitle={`On file with ${processor} for ${account.shortName}`}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="card card-pad">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                    Primary
+          {account.region === 'AU' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="card card-pad">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
+                      Primary · Stripe AU
+                    </div>
+                    <div className="text-[14px] font-semibold text-ink mt-1">
+                      Visa · Corporate (AUD)
+                    </div>
                   </div>
-                  <div className="text-[14px] font-semibold text-ink mt-1">
-                    {account.region === 'US' ? 'ACH · Bank of America' : 'Direct Debit · CommBank'}
-                  </div>
+                  <span className="tag !text-[9px]">Stripe AU</span>
                 </div>
-                <span className="tag !text-[9px]">{processor}</span>
+                <div className="space-y-2 text-[12px]">
+                  <Row label="Card ending" value={<span className="numeric">••••4421</span>} />
+                  <Row label="Expires" value={<span className="numeric">11/27</span>} />
+                  <Row
+                    label="Billing postcode"
+                    value={<span className="numeric">2000 (NSW)</span>}
+                  />
+                  <Row
+                    label="Account ref"
+                    value={
+                      <span className="mono text-[10px] !w-auto !px-2">acct_1NQFxxxAUauxx</span>
+                    }
+                  />
+                  <Row
+                    label="Status"
+                    value={<StatusPill tone="success">Verified · auto-charge</StatusPill>}
+                  />
+                </div>
               </div>
-              <div className="space-y-2 text-[12px]">
-                <Row label="Account ending" value={<span className="numeric">••••3412</span>} />
-                <Row label="Routing" value={<span className="numeric">••••0091</span>} />
-                <Row
-                  label="Added"
-                  value={<span className="numeric">{account.contractedAt}</span>}
-                />
-                <Row
-                  label="Status"
-                  value={<StatusPill tone="success">Verified · auto-debit</StatusPill>}
-                />
+              <div className="card card-pad">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
+                      Backup · GoCardless (BPAY / PayTo)
+                    </div>
+                    <div className="text-[14px] font-semibold text-ink mt-1">
+                      CommBank Direct Debit · NPP
+                    </div>
+                  </div>
+                  {account.health === 'attention' && (
+                    <span className="text-warn">
+                      <AlertTriangle size={14} />
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2 text-[12px]">
+                  <Row label="BSB" value={<span className="numeric">062-001</span>} />
+                  <Row label="Account ending" value={<span className="numeric">••••8821</span>} />
+                  <Row
+                    label="PayTo agreement"
+                    value={<span className="mono text-[10px] !w-auto !px-2">PA-2026-04-0421</span>}
+                  />
+                  <Row
+                    label="ABN"
+                    value={<span className="mono text-[10px] !w-auto !px-2">53 004 085 616</span>}
+                  />
+                  <Row
+                    label="Status"
+                    value={<StatusPill tone="success">Active · NPP-cleared</StatusPill>}
+                  />
+                </div>
               </div>
             </div>
-            <div className="card card-pad">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                    Backup card
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="card card-pad">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
+                      Primary
+                    </div>
+                    <div className="text-[14px] font-semibold text-ink mt-1">
+                      ACH · Bank of America
+                    </div>
                   </div>
-                  <div className="text-[14px] font-semibold text-ink mt-1">Visa · Corporate</div>
+                  <span className="tag !text-[9px]">{processor}</span>
                 </div>
-                {account.health === 'attention' && (
-                  <span className="text-warn">
-                    <AlertTriangle size={14} />
-                  </span>
-                )}
+                <div className="space-y-2 text-[12px]">
+                  <Row label="Account ending" value={<span className="numeric">••••3412</span>} />
+                  <Row label="Routing" value={<span className="numeric">••••0091</span>} />
+                  <Row
+                    label="Added"
+                    value={<span className="numeric">{account.contractedAt}</span>}
+                  />
+                  <Row
+                    label="Status"
+                    value={<StatusPill tone="success">Verified · auto-debit</StatusPill>}
+                  />
+                </div>
               </div>
-              <div className="space-y-2 text-[12px]">
-                <Row label="Card ending" value={<span className="numeric">••••8821</span>} />
-                <Row label="Expires" value={<span className="numeric">09/27</span>} />
-                <Row label="Billing zip" value={<span className="numeric">78704</span>} />
-                <Row
-                  label="Status"
-                  value={
-                    account.health === 'attention' ? (
-                      <StatusPill tone="warn">Expires in 18mo</StatusPill>
-                    ) : (
-                      <StatusPill tone="muted">Backup only</StatusPill>
-                    )
-                  }
-                />
+              <div className="card card-pad">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
+                      Backup card
+                    </div>
+                    <div className="text-[14px] font-semibold text-ink mt-1">Visa · Corporate</div>
+                  </div>
+                  {account.health === 'attention' && (
+                    <span className="text-warn">
+                      <AlertTriangle size={14} />
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2 text-[12px]">
+                  <Row label="Card ending" value={<span className="numeric">••••8821</span>} />
+                  <Row label="Expires" value={<span className="numeric">09/27</span>} />
+                  <Row label="Billing zip" value={<span className="numeric">78704</span>} />
+                  <Row
+                    label="Status"
+                    value={
+                      account.health === 'attention' ? (
+                        <StatusPill tone="warn">Expires in 18mo</StatusPill>
+                      ) : (
+                        <StatusPill tone="muted">Backup only</StatusPill>
+                      )
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </Section>
       </div>
     </AccountShell>
