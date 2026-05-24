@@ -2,24 +2,20 @@
 
 import {
   LayoutDashboard,
-  Users,
-  Map,
+  MessageCircle,
   Inbox,
   Kanban,
-  ListChecks,
   Megaphone,
-  MailPlus,
   Phone,
-  DollarSign,
-  Trophy,
-  Sparkles,
-  Workflow,
+  BarChart3,
+  Users,
   Settings,
   Bell,
+  Search,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
-import { getAccount } from '@/lib/accounts';
+import { getAccount, accountMonogram } from '@/lib/accounts';
 
 interface AccountShellProps {
   accountSlug: string;
@@ -27,50 +23,41 @@ interface AccountShellProps {
   children: React.ReactNode;
 }
 
+/**
+ * Consolidated GHL-style nav — 9 items grouped into single-line groups.
+ * Matches Brodie's brief: simplified IA so the sales team can navigate fast.
+ */
 export function AccountShell({ accountSlug, pageTitle, children }: AccountShellProps): JSX.Element {
   const account = getAccount(accountSlug);
   const base = `/accounts/${accountSlug}`;
 
   const NAV: NavGroup[] = [
     {
-      label: 'Mission control',
-      items: [{ href: `${base}/today`, label: 'Today', icon: LayoutDashboard }],
-    },
-    {
-      label: 'Field',
+      label: 'Overview',
       items: [
-        { href: `${base}/noctuas`, label: 'Noctuas', icon: Users },
-        { href: `${base}/territories`, label: 'Territories', icon: Map },
+        { href: `${base}/today`, label: 'Dashboard', icon: LayoutDashboard },
+        { href: `${base}/conversations`, label: 'Conversations', icon: MessageCircle },
       ],
     },
     {
-      label: 'CRM',
+      label: 'Sales',
       items: [
-        { href: `${base}/leads`, label: 'Leads inbox', icon: Inbox },
-        { href: `${base}/pipeline`, label: 'Pipeline (drag-drop)', icon: Kanban },
-        { href: `${base}/lead-lists`, label: 'Smart lead lists', icon: ListChecks },
-        { href: `${base}/inside-sales`, label: 'Inside sales dialer', icon: Phone },
+        { href: `${base}/leads`, label: 'Leads', icon: Inbox },
+        { href: `${base}/pipeline`, label: 'Pipeline', icon: Kanban },
+        { href: `${base}/inside-sales`, label: 'Calls', icon: Phone },
       ],
     },
     {
-      label: 'Marketing',
+      label: 'Growth',
       items: [
-        { href: `${base}/campaigns`, label: 'Campaigns', icon: Megaphone },
-        { href: `${base}/drip`, label: 'Email drips', icon: MailPlus },
-        { href: `${base}/marketing-studio`, label: 'AI creative studio', icon: Sparkles },
+        { href: `${base}/campaigns`, label: 'Marketing', icon: Megaphone },
+        { href: `${base}/reports`, label: 'Reports', icon: BarChart3 },
       ],
     },
     {
-      label: 'Revenue',
+      label: 'Workspace',
       items: [
-        { href: `${base}/conversions`, label: 'Conversions', icon: DollarSign },
-        { href: `${base}/commissions`, label: 'Commissions', icon: Trophy },
-      ],
-    },
-    {
-      label: 'Ops',
-      items: [
-        { href: `${base}/automations`, label: 'Automations', icon: Workflow },
+        { href: `${base}/team`, label: 'Team', icon: Users },
         { href: `${base}/settings`, label: 'Settings', icon: Settings, roles: ['org_admin'] },
       ],
     },
@@ -87,8 +74,9 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
           userRole="org_admin"
           footer={
             <>
-              <div>
-                {account?.logo} {account?.shortName}
+              <div className="flex items-center gap-2">
+                {account && <Monogram letters={accountMonogram(account.shortName)} small />}
+                <span>{account?.shortName}</span>
               </div>
               <div className="text-soft">
                 {account?.vertical} · {account?.region}
@@ -103,8 +91,17 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
           env={process.env.NEXT_PUBLIC_ENV ?? 'local'}
           rightSlot={
             <div className="flex items-center gap-3">
+              <button
+                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
+                title="Search"
+              >
+                <Search size={16} className="text-soft" />
+              </button>
               <AccountSwitcher currentSlug={accountSlug} />
-              <button className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center">
+              <button
+                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
+                title="Notifications"
+              >
                 <Bell size={16} className="text-soft" />
               </button>
               <span className="mono">BR</span>
@@ -115,5 +112,20 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
     >
       {children}
     </AppShell>
+  );
+}
+
+function Monogram({ letters, small }: { letters: string; small?: boolean }): JSX.Element {
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded bg-ink text-surface font-semibold tracking-tight"
+      style={{
+        width: small ? 16 : 20,
+        height: small ? 16 : 20,
+        fontSize: small ? 8 : 10,
+      }}
+    >
+      {letters}
+    </span>
   );
 }

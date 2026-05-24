@@ -15,7 +15,10 @@ export interface Account {
   shortName: string;
   vertical: Vertical;
   region: 'AU' | 'US' | 'SG';
-  logo: string; // emoji standin
+  /** Background colour for the monogram avatar. */
+  avatarBg: string;
+  /** Foreground (text) colour for the monogram avatar. */
+  avatarFg: string;
   plan: 'Enterprise' | 'Growth' | 'Trial';
   health: AccountHealth;
   noctuas: number;
@@ -29,6 +32,13 @@ export interface Account {
   notes: string;
 }
 
+/** Build a 2-letter monogram from an account's short name. */
+export function accountMonogram(shortName: string): string {
+  const parts = shortName.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
+  return (parts[0]?.slice(0, 2) ?? '??').toUpperCase();
+}
+
 export const ACCOUNTS: Account[] = [
   {
     slug: 'hope-forward',
@@ -36,7 +46,8 @@ export const ACCOUNTS: Account[] = [
     shortName: 'Hope Forward',
     vertical: 'charity',
     region: 'US',
-    logo: '💧',
+    avatarBg: '#0F172A',
+    avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
     noctuas: 218,
@@ -55,7 +66,8 @@ export const ACCOUNTS: Account[] = [
     shortName: 'World Vision',
     vertical: 'charity',
     region: 'AU',
-    logo: '🌍',
+    avatarBg: '#1E293B',
+    avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
     noctuas: 162,
@@ -74,7 +86,8 @@ export const ACCOUNTS: Account[] = [
     shortName: 'PestMax',
     vertical: 'commercial',
     region: 'US',
-    logo: '🐜',
+    avatarBg: '#475569',
+    avatarFg: '#FFFFFF',
     plan: 'Growth',
     health: 'attention',
     noctuas: 32,
@@ -93,7 +106,8 @@ export const ACCOUNTS: Account[] = [
     shortName: 'Gold Coast Hospital',
     vertical: 'healthcare',
     region: 'AU',
-    logo: '🏥',
+    avatarBg: '#3B82F6',
+    avatarFg: '#FFFFFF',
     plan: 'Trial',
     health: 'healthy',
     noctuas: 8,

@@ -1,6 +1,8 @@
 'use client';
 
-import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip } from 'react-leaflet';
+import { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // Austin East Residential — sample territory polygon (real lat/lng)
@@ -15,7 +17,6 @@ const TERRITORY: [number, number][] = [
 
 const CENTER: [number, number] = [30.2456, -97.7415];
 
-// Knock pins with disposition colours
 const KNOCKS: Array<{ pos: [number, number]; color: string; label: string }> = [
   { pos: [30.2475, -97.7405], color: '#1D4ED8', label: 'Maria Santos · SALE' },
   { pos: [30.2467, -97.7445], color: '#1D4ED8', label: 'David Chen · LEAD' },
@@ -27,92 +28,109 @@ const KNOCKS: Array<{ pos: [number, number]; color: string; label: string }> = [
   { pos: [30.2412, -97.739], color: '#F59E0B', label: 'Callback Tue 3pm' },
 ];
 
-// Current Noctua position
 const ME: [number, number] = [30.2461, -97.7418];
 
+/**
+ * Forces Leaflet to re-measure its container after mount. Required because
+ * the phone-mock parent uses % heights and Leaflet initialises before its
+ * container has its final pixel size.
+ */
+function InvalidateOnMount(): null {
+  const map = useMap();
+  useEffect(() => {
+    const t = setTimeout(() => map.invalidateSize(), 50);
+    const t2 = setTimeout(() => map.invalidateSize(), 300);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(t2);
+    };
+  }, [map]);
+  return null;
+}
+
 export default function NoctuaPhoneMapImpl(): JSX.Element {
+  const mapRef = useRef<LeafletMap | null>(null);
+
   return (
-    <MapContainer
-      center={CENTER}
-      zoom={17}
-      style={{ height: '100%', width: '100%' }}
-      zoomControl={false}
-      attributionControl={false}
-      scrollWheelZoom={false}
-      dragging={true}
-      doubleClickZoom={true}
-    >
-      {/* Esri World Imagery — real satellite tiles, no API key needed */}
-      <TileLayer
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        attribution="Esri"
-        maxZoom={19}
-      />
+    <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+      <MapContainer
+        ref={mapRef as unknown as React.RefObject<LeafletMap>}
+        center={CENTER}
+        zoom={17}
+        style={{ height: '100%', width: '100%', background: '#0F172A' }}
+        zoomControl={false}
+        attributionControl={false}
+        scrollWheelZoom={false}
+        dragging={true}
+        doubleClickZoom={true}
+      >
+        <InvalidateOnMount />
 
-      {/* Hybrid labels (street names + boundaries) overlaid on satellite */}
-      <TileLayer
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-        attribution=""
-        maxZoom={19}
-        opacity={0.85}
-      />
+        {/* Esri World Imagery — real satellite tiles, no API key */}
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          attribution="&copy; Esri"
+          maxZoom={19}
+        />
 
-      {/* Assigned territory polygon */}
-      <Polygon
-        positions={TERRITORY}
-        pathOptions={{
-          color: '#3B82F6',
-          weight: 2.5,
-          opacity: 0.95,
-          fillColor: '#3B82F6',
-          fillOpacity: 0.18,
-        }}
-      />
+        {/* Street labels + boundaries overlay */}
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
+          opacity={0.85}
+        />
 
-      {/* Knock pins */}
-      {KNOCKS.map((k, i) => (
+        {/* Assigned territory polygon */}
+        <Polygon
+          positions={TERRITORY}
+          pathOptions={{
+            color: '#3B82F6',
+            weight: 2.5,
+            opacity: 0.95,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.18,
+          }}
+        />
+
+        {/* Knock pins */}
+        {KNOCKS.map((k, i) => (
+          <CircleMarker
+            key={i}
+            center={k.pos}
+            radius={5}
+            pathOptions={{
+              color: 'white',
+              weight: 2,
+              fillColor: k.color,
+              fillOpacity: 1,
+            }}
+          >
+            <Tooltip>{k.label}</Tooltip>
+          </CircleMarker>
+        ))}
+
+        {/* Noctua "me" location with halo */}
         <CircleMarker
-          key={i}
-          center={k.pos}
-          radius={5}
+          center={ME}
+          radius={18}
+          pathOptions={{
+            color: '#3B82F6',
+            weight: 1,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.15,
+          }}
+        />
+        <CircleMarker
+          center={ME}
+          radius={7}
           pathOptions={{
             color: 'white',
-            weight: 2,
-            fillColor: k.color,
+            weight: 3,
+            fillColor: '#3B82F6',
             fillOpacity: 1,
           }}
-        >
-          <Tooltip>{k.label}</Tooltip>
-        </CircleMarker>
-      ))}
-
-      {/* Noctua current location (pulsing accent dot) */}
-      <CircleMarker
-        center={ME}
-        radius={8}
-        pathOptions={{
-          color: 'white',
-          weight: 3,
-          fillColor: '#3B82F6',
-          fillOpacity: 1,
-        }}
-      >
-        <Tooltip permanent direction="top" offset={[0, -8]} className="noctua-me-tooltip">
-          You
-        </Tooltip>
-      </CircleMarker>
-
-      {/* Outer halo for the "me" dot */}
-      <CircleMarker
-        center={ME}
-        radius={16}
-        pathOptions={{
-          color: '#3B82F6',
-          weight: 1,
-          fillColor: '#3B82F6',
-          fillOpacity: 0.15,
-        }}
-      />
-    </MapContainer>
+        />
+      </MapContainer>
+    </div>
   );
 }

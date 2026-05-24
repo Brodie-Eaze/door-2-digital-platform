@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, Plus } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { AccountAvatar } from '@/components/AccountAvatar';
 import { ACCOUNTS } from '@/lib/accounts';
 
 export default function AccountsPage(): JSX.Element {
@@ -60,9 +61,7 @@ export default function AccountsPage(): JSX.Element {
                 className="card card-pad hover:shadow-md transition group cursor-pointer block"
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-paper border border-line2 flex items-center justify-center text-2xl shrink-0">
-                    {a.logo}
-                  </div>
+                  <AccountAvatar account={a} size={56} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -130,9 +129,10 @@ export default function AccountsPage(): JSX.Element {
                   <td>
                     <Link
                       href={`/accounts/${a.slug}/today`}
-                      className="text-[13px] text-ink hover:text-accent font-medium"
+                      className="text-[13px] text-ink hover:text-accent font-medium inline-flex items-center gap-2"
                     >
-                      {a.logo} {a.name}
+                      <AccountAvatar account={a} size={24} />
+                      {a.name}
                     </Link>
                   </td>
                   <td className="text-[12px] text-muted capitalize">{a.vertical}</td>

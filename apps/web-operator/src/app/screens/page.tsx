@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { Banner, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { AccountAvatar } from '@/components/AccountAvatar';
 import { ACCOUNTS } from '@/lib/accounts';
 
 interface ScreenEntry {
@@ -228,10 +229,10 @@ export default function ScreensPage(): JSX.Element {
               <Link
                 key={a.slug}
                 href={`/accounts/${a.slug}/today`}
-                className="card card-pad text-center hover:shadow-md transition cursor-pointer"
+                className="card card-pad text-center hover:shadow-md transition cursor-pointer flex flex-col items-center"
               >
-                <div className="text-3xl">{a.logo}</div>
-                <div className="text-[12px] font-semibold text-ink mt-1">{a.shortName}</div>
+                <AccountAvatar account={a} size={40} />
+                <div className="text-[12px] font-semibold text-ink mt-2">{a.shortName}</div>
                 <div className="text-[10px] text-muted capitalize mt-0.5">
                   {a.vertical} · {a.region}
                 </div>

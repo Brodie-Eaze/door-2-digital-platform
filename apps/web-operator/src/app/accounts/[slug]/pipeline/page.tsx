@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { PipelineLeadConversation } from '@/components/PipelineLeadConversation';
 import { accountData, PIPELINE_STAGES, type LeadRow } from '@/lib/account-fixtures';
 
 interface PipelineLead extends LeadRow {
@@ -580,7 +581,7 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
 
       {/* Lead detail side panel */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-surface border-l border-line2 shadow-2xl z-40 overflow-y-auto">
+        <div className="fixed inset-y-0 right-0 w-[480px] bg-surface border-l border-line2 shadow-2xl z-40 overflow-y-auto">
           <div className="sticky top-0 bg-surface border-b border-line2 px-5 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck size={14} className="text-success" />
@@ -704,6 +705,11 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
             >
               Open full lead journey
             </Button>
+
+            {/* Team conversation thread — chat + poll + multi-user */}
+            <div className="pt-4 border-t border-line2">
+              <PipelineLeadConversation />
+            </div>
           </div>
         </div>
       )}

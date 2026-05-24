@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ChevronsUpDown, Building2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { ACCOUNTS, getAccount, type Account } from '@/lib/accounts';
+import { AccountAvatar } from './AccountAvatar';
 
 export function AccountSwitcher({ currentSlug }: { currentSlug: string }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -30,9 +31,9 @@ export function AccountSwitcher({ currentSlug }: { currentSlug: string }): JSX.E
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-line2 bg-paper hover:bg-surface hover:border-line transition min-w-[260px]"
+        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-line2 bg-paper hover:bg-surface hover:border-line transition min-w-[260px]"
       >
-        <span className="text-base">{current.logo}</span>
+        <AccountAvatar account={current} size={28} />
         <div className="flex-1 text-left min-w-0">
           <div className="text-[12px] font-semibold text-ink truncate">{current.name}</div>
           <div className="text-[10px] text-muted uppercase tracking-wider">
@@ -59,7 +60,7 @@ export function AccountSwitcher({ currentSlug }: { currentSlug: string }): JSX.E
                 a.slug === currentSlug ? 'bg-accentSoft/50' : ''
               }`}
             >
-              <span className="text-base">{a.logo}</span>
+              <AccountAvatar account={a} size={32} />
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-medium text-ink truncate">{a.name}</div>
                 <div className="text-[10px] text-muted">

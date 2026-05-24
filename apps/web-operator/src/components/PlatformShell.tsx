@@ -35,7 +35,7 @@ const NAV: NavGroup[] = [
     label: 'Design',
     items: [
       { href: '/screens', label: 'Screens gallery', icon: ImageIcon },
-      { href: '/mobile-preview', label: 'Noctua mobile preview', icon: Smartphone },
+      { href: '/mobile-preview', label: 'NoctuaOS app preview', icon: Smartphone },
     ],
   },
   {

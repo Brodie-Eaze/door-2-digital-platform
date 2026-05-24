@@ -21,9 +21,25 @@ function buildCsp() {
     // Next static optimisation injects inline critical CSS without nonce.
     // unsafe-inline scoped to styles only is the standard mitigation.
     'style-src': ["'self'", "'unsafe-inline'"],
-    'img-src': ["'self'", 'data:', 'blob:', 'https://*.tile.mapbox.com', 'https://api.mapbox.com'],
+    'img-src': [
+      "'self'",
+      'data:',
+      'blob:',
+      'https://*.tile.mapbox.com',
+      'https://api.mapbox.com',
+      'https://server.arcgisonline.com', // Esri World Imagery satellite tiles
+      'https://services.arcgisonline.com',
+    ],
     'font-src': ["'self'", 'data:'],
-    'connect-src': ["'self'", apiHttp, apiWs, 'https://api.mapbox.com', 'https://events.mapbox.com'],
+    'connect-src': [
+      "'self'",
+      apiHttp,
+      apiWs,
+      'https://api.mapbox.com',
+      'https://events.mapbox.com',
+      'https://server.arcgisonline.com',
+      'https://services.arcgisonline.com',
+    ],
     'frame-ancestors': ["'none'"],
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
