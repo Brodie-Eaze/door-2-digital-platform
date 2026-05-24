@@ -539,11 +539,20 @@ function categoryIcon(c: ProviderCard['category']): typeof Sparkles {
   }
 }
 
+const CAP_LABEL: Record<Capability, string> = {
+  'audience.build': 'Audience build',
+  'audience.push': 'Audience push',
+  'campaign.deliver': 'Campaign deliver',
+  'campaign.status': 'Campaign status',
+  'conversion.ingest': 'Conv. ingest',
+  'creative.generate.text': 'Text gen',
+  'creative.generate.image': 'Image gen',
+  'creative.generate.video': 'Video gen',
+  'creative.generate.avatar': 'Avatar gen',
+  'mcp.server.expose': 'MCP server',
+};
 function shortCap(c: Capability): string {
-  return c
-    .replace('creative.generate.', '')
-    .replace('campaign.', 'cmp.')
-    .replace('audience.', 'aud.');
+  return CAP_LABEL[c] ?? c;
 }
 
 function outboundTone(s: OutboundCall['status']): 'success' | 'warn' | 'danger' {
@@ -830,27 +839,34 @@ function ProviderTile({
 }): JSX.Element {
   const Icon = categoryIcon(provider.category);
   return (
-    <div className="card overflow-hidden hover:ring-1 hover:ring-accent transition">
-      <div
-        className={`h-20 bg-gradient-to-br ${provider.gradient} relative flex items-center justify-between px-4`}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-surface/95 backdrop-blur flex items-center justify-center font-bold text-[14px] text-ink">
-            {provider.initials}
-          </div>
-          <div>
-            <div className="text-[13px] font-semibold text-surface leading-tight">
-              {provider.displayName}
+    <div className="card overflow-hidden hover:ring-1 hover:ring-accent transition flex flex-col">
+      {/* Header — calm navy chrome with a thin brand-color top accent bar */}
+      <div className="relative">
+        <div className={`h-1 bg-gradient-to-r ${provider.gradient}`} />
+        <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-line2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`w-9 h-9 rounded-lg bg-gradient-to-br ${provider.gradient} flex items-center justify-center font-bold text-[13px] text-white shrink-0`}
+              aria-hidden
+            >
+              {provider.initials}
             </div>
-            <div className="flex items-center gap-1 mt-0.5">
-              <Icon size={10} className="text-surface/80" />
-              <span className="text-[10px] uppercase tracking-wider text-surface/80 font-medium">
-                {provider.category}
-              </span>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-ink leading-tight truncate">
+                {provider.displayName}
+              </div>
+              <div className="flex items-center gap-1 mt-0.5">
+                <Icon size={10} className="text-soft" />
+                <span className="text-[10px] uppercase tracking-wider text-muted font-medium">
+                  {provider.category}
+                </span>
+              </div>
             </div>
           </div>
+          <StatusPill tone={statusToTone(provider.status)}>
+            {statusLabel(provider.status)}
+          </StatusPill>
         </div>
-        <StatusPill tone={statusToTone(provider.status)}>{statusLabel(provider.status)}</StatusPill>
       </div>
       <div className="p-3 space-y-2.5">
         <div className="text-[11px] text-muted">
@@ -861,7 +877,7 @@ function ProviderTile({
           {provider.capabilities.map((c) => (
             <span
               key={c}
-              className="text-[9.5px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded bg-accentSoft text-accent mono"
+              className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accentSoft text-accent border border-accent/15 whitespace-nowrap"
             >
               {shortCap(c)}
             </span>
@@ -965,23 +981,33 @@ function ConnectModal({
         className="card w-[520px] max-w-[92vw] max-h-[88vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className={`h-16 bg-gradient-to-br ${provider.gradient} relative flex items-center justify-between px-4`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-surface/95 flex items-center justify-center font-bold text-[13px] text-ink">
-              {provider.initials}
-            </div>
-            <div>
-              <div className="text-[14px] font-semibold text-surface">{provider.displayName}</div>
-              <div className="text-[10px] text-surface/80 uppercase tracking-wider">
-                {provider.kind}
+        <div className="relative">
+          <div className={`h-1 bg-gradient-to-r ${provider.gradient}`} />
+          <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-line2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-9 h-9 rounded-lg bg-gradient-to-br ${provider.gradient} flex items-center justify-center font-bold text-[13px] text-white shrink-0`}
+                aria-hidden
+              >
+                {provider.initials}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-ink truncate">
+                  {provider.displayName}
+                </div>
+                <div className="text-[10px] text-muted uppercase tracking-wider truncate">
+                  {provider.kind}
+                </div>
               </div>
             </div>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-md text-muted hover:text-ink hover:bg-paper flex items-center justify-center shrink-0"
+              aria-label="Close"
+            >
+              <XCircle size={18} />
+            </button>
           </div>
-          <button onClick={onClose} className="text-surface/80 hover:text-surface">
-            <XCircle size={20} />
-          </button>
         </div>
         <div className="p-4 space-y-3">
           <div>
@@ -992,9 +1018,9 @@ function ConnectModal({
               {provider.capabilities.map((c) => (
                 <span
                   key={c}
-                  className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded bg-accentSoft text-accent mono"
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accentSoft text-accent border border-accent/15 whitespace-nowrap"
                 >
-                  {c}
+                  {shortCap(c)}
                 </span>
               ))}
             </div>
