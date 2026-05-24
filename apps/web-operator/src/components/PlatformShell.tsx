@@ -25,6 +25,9 @@ import {
   UserPlus,
   Image as ImageIcon,
   Globe2,
+  Sparkles,
+  Wand2,
+  Megaphone,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 
@@ -65,12 +68,27 @@ const NAV: NavGroup[] = [
     items: [{ href: '/mobile-preview', label: 'Knocker iOS preview', icon: Smartphone }],
   },
   {
+    label: 'Marketing Studio',
+    items: [
+      { href: '/marketing-studio', label: 'Overview', icon: Sparkles },
+      { href: '/marketing-studio/generate', label: 'Generator', icon: Wand2 },
+      { href: '/marketing-studio/library', label: 'Library', icon: ImageIcon },
+      { href: '/marketing-studio/campaigns', label: 'Campaigns', icon: Megaphone },
+      { href: '/marketing-studio/brand-safety', label: 'Brand safety', icon: ShieldCheck },
+      { href: '/marketing-studio/retargeting', label: 'Retargeting', icon: Target },
+    ],
+  },
+  {
     label: 'Regions',
     items: [
       { href: '/regions/au', label: 'AU · operations', icon: Globe2 },
       { href: '/regions/au/compliance', label: 'AU · compliance', icon: ShieldCheck },
       { href: '/regions/au/payments', label: 'AU · payments', icon: CreditCard },
       { href: '/regions/au/territory-intel', label: 'AU · territory intel', icon: Map },
+      { href: '/regions/sg', label: 'SG · operations', icon: Globe2 },
+      { href: '/regions/sg/compliance', label: 'SG · compliance', icon: ShieldCheck },
+      { href: '/regions/sg/payments', label: 'SG · payments', icon: CreditCard },
+      { href: '/regions/sg/territory-intel', label: 'SG · territory intel', icon: Map },
     ],
   },
   {

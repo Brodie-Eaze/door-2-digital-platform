@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   ArrowLeft,
   Compass,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
@@ -71,6 +72,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       label: 'Growth',
       items: [
         { href: `${base}/campaigns`, label: 'Marketing', icon: Megaphone },
+        { href: `${base}/marketing-studio`, label: 'Marketing Studio', icon: Sparkles },
         { href: `${base}/reports`, label: 'Reports', icon: BarChart3 },
       ],
     },
