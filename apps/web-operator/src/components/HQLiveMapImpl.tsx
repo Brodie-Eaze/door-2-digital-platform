@@ -10,6 +10,7 @@
  *  - Built-in zoom + scale + attribution controls
  */
 
+import { Fragment } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -105,12 +106,13 @@ export function HQLiveMapImpl(): JSX.Element {
             </CircleMarker>
           ))}
 
-          {/* Rep pins */}
+          {/* Rep pins — react-leaflet requires Leaflet components as direct children,
+              so we use Fragment (no DOM wrapper) for the active-pulse halo + pin pair. */}
           {FLEET_REPS.map((r) => {
             const color = STATUS_COLORS[r.status];
             const isActive = r.status === 'active';
             return (
-              <div key={r.id}>
+              <Fragment key={r.id}>
                 {isActive && (
                   <CircleMarker
                     center={[r.lat, r.lng]}
@@ -143,7 +145,7 @@ export function HQLiveMapImpl(): JSX.Element {
                     <RepPopupCard rep={r} />
                   </Popup>
                 </CircleMarker>
-              </div>
+              </Fragment>
             );
           })}
 
