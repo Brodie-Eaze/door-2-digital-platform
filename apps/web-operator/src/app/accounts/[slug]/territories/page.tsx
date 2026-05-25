@@ -1,6 +1,7 @@
 import { Sparkles, MapPin, Eye, Plus, Filter, Send } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { AccountLiveMap } from '@/components/AccountLiveMap';
 import { getAccount, type Account } from '@/lib/accounts';
 
 type ZoneStatus = 'AI suggested' | 'Active' | 'Low-yield' | 'Blocked';
@@ -455,6 +456,13 @@ export default function AccountTerritoriesPage({
             hint={`across ${account.region}`}
           />
         </div>
+
+        <Section
+          title={`Live territory map · ${account.shortName}`}
+          subtitle="Real reps on real ground · AI zones flagged with blue halos · toggle Satellite ↔ Streets top-right"
+        >
+          <AccountLiveMap accountSlug={params.slug} />
+        </Section>
 
         <Section
           title={`Propensity heatmap · ${regionLabel(account.region)}`}

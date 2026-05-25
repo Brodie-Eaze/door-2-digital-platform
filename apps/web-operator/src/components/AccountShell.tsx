@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   Compass,
   Sparkles,
+  Radio,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
@@ -79,6 +80,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
     {
       label: 'Field ops',
       items: [
+        { href: `${base}/live-map`, label: 'Live field map', icon: Radio },
         { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
         { href: `${base}/territories`, label: 'Territories', icon: Compass },
         { href: `${base}/roster`, label: 'Roster & shifts', icon: CalendarClock },
