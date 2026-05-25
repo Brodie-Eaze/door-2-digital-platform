@@ -30,7 +30,7 @@ import { ALL_CELLS, type CellStatus, type ZoneSelection } from './territoryCells
 
 const DEFAULT_CENTER: [number, number] = [31.0, -97.5];
 const DEFAULT_ZOOM = 6;
-const MIN_ZOOM = 5;
+const MIN_ZOOM = 4;
 const MAX_ZOOM = 18;
 
 export type { CellStatus, ZoneSelection };
@@ -50,15 +50,31 @@ type Props = {
   onSelect: (cell: ZoneSelection | null) => void;
   assignedSet: Set<string>;
   statusFilter?: StatusFilter;
+  /** Override cell set (defaults to HQ Texas ALL_CELLS). */
+  cells?: ZoneSelection[];
+  /** Override map center (defaults to Texas). */
+  center?: [number, number];
+  /** Override default zoom (defaults to 6). */
+  defaultZoom?: number;
+  /** Optional scope label shown in the legend. */
+  scopeLabel?: string;
 };
 
 export function TerritoryHeatmapImpl({
   onSelect,
   assignedSet: _assignedSet,
   statusFilter = 'all',
+  cells,
+  center,
+  defaultZoom,
+  scopeLabel,
 }: Props): JSX.Element {
+  const sourceCells = cells ?? ALL_CELLS;
+  const mapCenter = center ?? DEFAULT_CENTER;
+  const mapZoom = defaultZoom ?? DEFAULT_ZOOM;
+
   const counts = useMemo(() => {
-    return ALL_CELLS.reduce(
+    return sourceCells.reduce(
       (acc, c) => {
         if (c.status === 'ai_suggested') acc.aiSuggested += 1;
         else if (c.status === 'active') acc.active += 1;
@@ -68,19 +84,21 @@ export function TerritoryHeatmapImpl({
       },
       { aiSuggested: 0, active: 0, blocked: 0, lowYield: 0 },
     );
-  }, []);
+  }, [sourceCells]);
 
   const visibleCells = useMemo(
-    () => (statusFilter === 'all' ? ALL_CELLS : ALL_CELLS.filter((c) => c.status === statusFilter)),
-    [statusFilter],
+    () =>
+      statusFilter === 'all' ? sourceCells : sourceCells.filter((c) => c.status === statusFilter),
+    [statusFilter, sourceCells],
   );
 
   return (
     <div className="relative w-full" style={{ height: 620 }}>
       <div className="absolute inset-0 rounded-2xl overflow-hidden border border-line2 bg-ink">
         <MapContainer
-          center={DEFAULT_CENTER}
-          zoom={DEFAULT_ZOOM}
+          key={`${mapCenter[0]}_${mapCenter[1]}_${mapZoom}`}
+          center={mapCenter}
+          zoom={mapZoom}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
           scrollWheelZoom={true}
@@ -181,7 +199,9 @@ export function TerritoryHeatmapImpl({
         {/* Propensity legend — bottom-right */}
         <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none">
           <div className="text-[10px] uppercase tracking-wider text-muted mb-1.5 font-semibold">
-            Propensity · {visibleCells.length} cells
+            {scopeLabel
+              ? `${scopeLabel} · ${visibleCells.length} cells`
+              : `Propensity · ${visibleCells.length} cells`}
           </div>
           <div className="flex items-center gap-2 text-[10px]">
             <span className="flex items-center gap-1">

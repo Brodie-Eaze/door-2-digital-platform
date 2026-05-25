@@ -16,6 +16,14 @@ type Props = {
   onSelect: (cell: ZoneSelection | null) => void;
   assignedSet: Set<string>;
   statusFilter?: 'all' | CellStatus;
+  /** Override cell set (defaults to HQ Texas ALL_CELLS). */
+  cells?: ZoneSelection[];
+  /** Override map center (defaults to Texas). */
+  center?: [number, number];
+  /** Override default zoom (defaults to 6). */
+  defaultZoom?: number;
+  /** Optional scope label shown in the legend (e.g. "PestMax · TX + AZ"). */
+  scopeLabel?: string;
 };
 
 export const TerritoryHeatmap = dynamic<Props>(
