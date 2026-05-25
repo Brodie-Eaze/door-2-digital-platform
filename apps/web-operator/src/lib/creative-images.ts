@@ -114,14 +114,39 @@ export function inferTheme(input: {
   copy?: string;
   /** Optional extra context — e.g. the account name. Folded into text matching. */
   account?: string;
+  /** Optional campaign / segment / asset name. Folded into text matching. */
+  name?: string;
   /** Allow callers to pass extra fields without TS complaints. */
   [extra: string]: string | undefined;
 }): CreativeTheme {
-  const text = `${input.headline ?? ''} ${input.copy ?? ''} ${input.account ?? ''}`.toLowerCase();
-  const vertical = (input.vertical ?? '').toLowerCase();
+  const text =
+    `${input.headline ?? ''} ${input.copy ?? ''} ${input.account ?? ''} ${input.name ?? ''}`.toLowerCase();
+  let vertical = (input.vertical ?? '').toLowerCase();
 
   // 1. Exact vertical → theme hint
-  if (VERTICAL_THEMES[vertical]) return VERTICAL_THEMES[vertical];
+  const direct = VERTICAL_THEMES[vertical];
+  if (direct) return direct;
+
+  // 1b. Infer vertical from text/account when not supplied. Names like
+  // "Hope Forward · TX", "World Vision AU", "Tampines FSC", "SCS pilot"
+  // are unambiguously charity work even without a vertical field.
+  if (!vertical) {
+    if (
+      /\b(hospital|oncolog|clinic|cancer|medical|surgery|patient|gold\s*coast)/.test(text) &&
+      !/\b(roach|termite|pest|pestmax)/.test(text)
+    ) {
+      // Healthcare/medical charity context (e.g. "Gold Coast Hospital · Oncology")
+      vertical = 'charity';
+    } else if (
+      /\b(hope\s*forward|world\s*vision|fsc|scs|charity|donat|nonprofit|foundation|sponsor|appeal|sustainer|knocker|relief)/.test(
+        text,
+      )
+    )
+      vertical = 'charity';
+    else if (/\b(pestmax|pest|roach|termite|exterminat)/.test(text)) vertical = 'pest';
+    else if (/\b(sunlink|solar|rooftop)/.test(text)) vertical = 'solar';
+    else if (/\b(nextgen|telco|broadband|kwh|electric|gas)/.test(text)) vertical = 'energy';
+  }
 
   // 2. Solar wins outright if vertical or copy mentions it (even without keywords)
   if (vertical.includes('solar') || /\b(solar|panel|kilowatt|kwh|rooftop\s*solar)\b/.test(text)) {
@@ -130,29 +155,37 @@ export function inferTheme(input: {
 
   // 3. Charity inference
   if (vertical.includes('charity') || vertical.includes('nonprofit') || vertical.includes('ngo')) {
-    if (/\b(feed|hungr|food|meal|families\s*fed|kitchen|hunger|pantry)\b/.test(text))
+    // Order matters: concrete topic wins over generic sponsorship.
+    // E.g. "Five dollars covers a meal" + "child sponsorship" → charity_food
+    // because the literal ask is a meal. But "sponsored a child" with no other
+    // theme word → charity_children.
+    // Strip trailing \b so plurals match ("meals", "kids", "refugees").
+    if (/\b(feed|hungr|food|meal|kitchen|hunger|pantry|families\s*fed)/.test(text))
       return 'charity_food';
-    if (/\b(water|well|drink|thirst|clean\s*water|sanitation)\b/.test(text)) return 'charity_water';
+    if (/\b(water|well|drink|thirst|clean\s*water|sanitation)/.test(text)) return 'charity_water';
     if (
-      /\b(clinic|vaccin|medical|nurse|doctor|treatment|disease|surgery|oncolog|hospital)\b/.test(
+      /\b(clinic|vaccin|medical|nurse|doctor|treatment|disease|surgery|oncolog|hospital|cancer|patient)/.test(
         text,
       )
     )
       return 'charity_medical';
     if (
-      /\b(disaster|refug|relief|crisis|recover|earthquake|flood|hurricane|war|emergency)\b/.test(
-        text,
-      )
+      /\b(disaster|refug|relief|crisis|recover|earthquake|flood|hurricane|war|emergency)/.test(text)
     )
       return 'charity_disaster';
+    if (/\b(dog|cat|puppy|kitten|pet|rescue|shelter|paw|animal)/.test(text))
+      return 'charity_animals';
+    // Sponsorship copy wins over environment when both appear — child sponsorship
+    // creatives that mention "plants a tree" as a secondary benefit should
+    // still show children.
+    if (/\b(sponsor|child|kid|school|classroom|teach|learn|orphan)/.test(text))
+      return 'charity_children';
     if (
-      /\b(forest|tree|ocean|environment|climate|reef|coral|wildlife|conserv|sustainab|planet|reforestation)\b/.test(
+      /\b(forest|tree|ocean|environment|climate|reef|coral|wildlife|conserv|sustainab|planet|reforestation)/.test(
         text,
       )
     )
       return 'charity_environment';
-    if (/\b(dog|cat|puppy|kitten|pet|rescue|shelter|paw|animal)\b/.test(text))
-      return 'charity_animals';
     // Charity context without specific keyword → children/sponsorship (safe default)
     return 'charity_children';
   }
