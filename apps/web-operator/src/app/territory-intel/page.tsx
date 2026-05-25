@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, MapPin, Eye, Plus, Filter, X, Check } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
-import { TerritoryHeatmap, type ZoneSelection } from '@/components/TerritoryHeatmap';
+import {
+  TerritoryHeatmap,
+  type CellStatus,
+  type ZoneSelection,
+} from '@/components/TerritoryHeatmap';
+import { ALL_CELLS } from '@/components/territoryCells';
+
+type StatusFilter = 'all' | CellStatus;
 
 type ZoneRow = {
   name: string;
@@ -173,7 +180,21 @@ export default function TerritoryIntelPage(): JSX.Element {
   const [selectedCell, setSelectedCell] = useState<ZoneSelection | null>(null);
   const [assignedSet, setAssignedSet] = useState<Set<string>>(new Set());
   const [showNewZoneBanner, setShowNewZoneBanner] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Count cells by status for the filter pills — derived from the same data
+  // module the map renders from, so the pill numbers match the visible cells.
+  const cellCounts = useMemo(() => {
+    return ALL_CELLS.reduce(
+      (acc, c) => {
+        acc.total += 1;
+        acc[c.status] += 1;
+        return acc;
+      },
+      { total: 0, ai_suggested: 0, active: 0, blocked: 0, low_yield: 0 },
+    );
+  }, []);
 
   // ESC closes the side panel
   useEffect(() => {
@@ -280,9 +301,39 @@ export default function TerritoryIntelPage(): JSX.Element {
         {/* Real Leaflet heatmap */}
         <Section
           title="Propensity heatmap · Texas"
-          subtitle="Census tract level · click any cell to drill in"
+          subtitle="Census-tract granularity · click any cell to drill in"
         >
-          <TerritoryHeatmap onSelect={setSelectedCell} assignedSet={assignedSet} />
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            <span className="text-[10px] uppercase tracking-wider text-muted mr-1 font-semibold">
+              Show
+            </span>
+            {(
+              [
+                { v: 'all', label: 'All zones', n: cellCounts.total },
+                { v: 'ai_suggested', label: 'AI suggested', n: cellCounts.ai_suggested },
+                { v: 'active', label: 'Active', n: cellCounts.active },
+                { v: 'low_yield', label: 'Low yield', n: cellCounts.low_yield },
+                { v: 'blocked', label: 'Blocked', n: cellCounts.blocked },
+              ] as Array<{ v: StatusFilter; label: string; n: number }>
+            ).map((f) => (
+              <button
+                key={f.v}
+                onClick={() => setStatusFilter(f.v)}
+                className={
+                  statusFilter === f.v
+                    ? 'px-2.5 py-1 rounded-full bg-ink text-surface text-[11px] font-semibold transition'
+                    : 'px-2.5 py-1 rounded-full bg-paper text-muted hover:text-ink text-[11px] font-medium border border-line2 transition'
+                }
+              >
+                {f.label} <span className="numeric opacity-70">({f.n})</span>
+              </button>
+            ))}
+          </div>
+          <TerritoryHeatmap
+            onSelect={setSelectedCell}
+            assignedSet={assignedSet}
+            statusFilter={statusFilter}
+          />
         </Section>
 
         {/* Zone table */}
@@ -518,7 +569,7 @@ function ZoneDetailPanel({
     <div
       ref={panelRef}
       data-keep-panel-open
-      className="fixed top-0 right-0 h-full w-[380px] bg-surface border-l border-line2 shadow-2xl z-50 flex flex-col"
+      className="fixed top-0 right-0 h-full w-[420px] bg-surface border-l border-line2 shadow-2xl z-50 flex flex-col"
       style={{ animation: 'slideInRight 180ms ease-out' }}
     >
       <style jsx>{`
