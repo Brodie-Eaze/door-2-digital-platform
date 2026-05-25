@@ -29,6 +29,7 @@ import {
   Compass,
   Sparkles,
   Radio,
+  Target,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
@@ -84,6 +85,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
         { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
         { href: `${base}/territories`, label: 'Territories', icon: Compass },
         { href: `${base}/roster`, label: 'Roster & shifts', icon: CalendarClock },
+        { href: `${base}/planning`, label: 'Planning', icon: Target },
         { href: `${base}/knocker-ios`, label: 'Knocker iOS preview', icon: Smartphone },
       ],
     },
