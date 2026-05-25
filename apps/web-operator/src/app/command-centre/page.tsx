@@ -1,10 +1,142 @@
 'use client';
 
-import { Radio, Sparkles, AlertTriangle, TrendingUp, Coffee, MapPin } from 'lucide-react';
-import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { Radio } from 'lucide-react';
+import { Banner, KpiCard } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { FLEET_REPS } from '@/lib/fleet-reps';
+import {
+  AiNextZonesPanel,
+  AnomaliesPanel,
+  LiveActivityFeed,
+  PushToFieldStrip,
+  type AiZoneSuggestion,
+  type AnomalyItem,
+  type ActivityEvent,
+} from '@/components/field-ops';
+
+const HQ_SCOPE_LABEL = 'All accounts · HQ';
+
+const HQ_AI_SUGGESTIONS: AiZoneSuggestion[] = [
+  {
+    id: 'hq-zone-1',
+    name: 'Austin South · 78704',
+    propensity: 0.81,
+    reasonOneLiner: 'ACS median income $94k · charity-giving propensity 0.83 · 0% saturation',
+    estLiftPp: 14,
+    saturationPercent: 0,
+    recommendedReps: 2,
+  },
+  {
+    id: 'hq-zone-2',
+    name: 'Plano · 75024',
+    propensity: 0.78,
+    reasonOneLiner: 'Lookalike to top-performing Highland Park · low Dallas saturation',
+    estLiftPp: 11,
+    saturationPercent: 12,
+    recommendedReps: 2,
+  },
+  {
+    id: 'hq-zone-3',
+    name: 'Sugar Land · 77479',
+    propensity: 0.74,
+    reasonOneLiner: '24% knocks-not-converted in nearby Bellaire = warm re-engage pool',
+    estLiftPp: 9,
+    saturationPercent: 8,
+    recommendedReps: 1,
+  },
+];
+
+const HQ_ANOMALIES: AnomalyItem[] = [
+  {
+    id: 'hq-anom-1',
+    severity: 'critical',
+    title: 'Devon R offline since 09:00',
+    detail: 'Houston SE shift uncovered. Auto-SMS + push sent. Backup: reassign to Marcus L.',
+    actionLabel: 'Reassign',
+  },
+  {
+    id: 'hq-anom-2',
+    severity: 'warn',
+    title: 'Tomás M lunch break > 45min',
+    detail: 'On break since 12:48. Auto-reminder push sent.',
+    actionLabel: 'Nudge',
+  },
+  {
+    id: 'hq-anom-3',
+    severity: 'warn',
+    title: 'Hiroshi K conv. rate dropped 11pp',
+    detail: 'Last 4 hours vs trailing avg. Try script v3.2 + check territory saturation.',
+    actionLabel: 'Open 1:1',
+  },
+];
+
+const HQ_ACTIVITY: ActivityEvent[] = [
+  {
+    id: 'hq-act-1',
+    at: '14:42',
+    actorInitials: 'JD',
+    type: 'conversion',
+    primary: 'Conversion captured',
+    secondary: 'Maria Santos · $24/mo · Austin East',
+  },
+  {
+    id: 'hq-act-2',
+    at: '14:41',
+    actorInitials: 'JM',
+    type: 'knock_lead',
+    primary: 'Knock recorded · LEAD',
+    secondary: '4218 Lakeview Dr',
+  },
+  {
+    id: 'hq-act-3',
+    at: '14:40',
+    actorInitials: 'KP',
+    type: 'callback_scheduled',
+    primary: 'Callback scheduled',
+    secondary: 'Robert Kim · Tue 3pm',
+  },
+  {
+    id: 'hq-act-4',
+    at: '14:38',
+    actorInitials: 'AR',
+    type: 'shift_start',
+    primary: 'Started shift',
+    secondary: 'Austin North · 8h shift',
+  },
+  {
+    id: 'hq-act-5',
+    at: '14:36',
+    actorInitials: 'BC',
+    type: 'conversion',
+    primary: 'Conversion captured',
+    secondary: 'PestMax service contract · $480',
+  },
+  {
+    id: 'hq-act-6',
+    at: '14:35',
+    actorInitials: 'TM',
+    type: 'shift_break_return',
+    primary: 'Returned from break',
+    secondary: 'Lunch 45m',
+  },
+  {
+    id: 'hq-act-7',
+    at: '14:32',
+    actorInitials: 'AM',
+    type: 'knock_sale',
+    primary: 'Knock recorded · SALE',
+    secondary: '1502 Cedar St · $36/mo recurring',
+  },
+  {
+    id: 'hq-act-8',
+    at: '14:30',
+    actorInitials: 'JM',
+    type: 'knock_not_home',
+    primary: 'Knock recorded · NOT HOME',
+    secondary: '4216 Lakeview Dr',
+  },
+];
 
 export default function CommandCentrePage(): JSX.Element {
   const active = FLEET_REPS.filter((r) => r.status === 'active').length;
@@ -55,223 +187,20 @@ export default function CommandCentrePage(): JSX.Element {
 
         {/* AI Insights + alerts row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Section
-            title="AI: where to send reps next"
-            subtitle="External data + propensity model · refreshed hourly"
-            action={<StatusPill tone="success">Live</StatusPill>}
-          >
-            <div className="space-y-3">
-              {[
-                {
-                  name: 'Austin South · 78704',
-                  score: 0.81,
-                  lift: '+14pp vs avg',
-                  reason: 'ACS median income $94k · charity-giving propensity 0.83 · 0% saturation',
-                },
-                {
-                  name: 'Plano · 75024',
-                  score: 0.78,
-                  lift: '+11pp vs avg',
-                  reason: 'Lookalike to top-performing Highland Park · low Dallas saturation',
-                },
-                {
-                  name: 'Sugar Land · 77479',
-                  score: 0.74,
-                  lift: '+9pp vs avg',
-                  reason: '24% knocks-not-converted in nearby Bellaire = warm re-engage pool',
-                },
-              ].map((s) => (
-                <div
-                  key={s.name}
-                  className="bg-paper border border-line2 rounded-xl p-3 hover:border-accent transition"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[12.5px] font-semibold text-ink flex items-center gap-1.5">
-                        <MapPin size={11} className="text-accent" /> {s.name}
-                      </div>
-                      <div className="text-[10px] text-muted mt-0.5 line-clamp-2">{s.reason}</div>
-                    </div>
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold text-accent bg-accentSoft">
-                        <Sparkles size={9} />
-                        <span className="numeric">{s.score.toFixed(2)}</span>
-                      </span>
-                      <span className="text-[9px] text-success numeric mt-1">{s.lift}</span>
-                    </div>
-                  </div>
-                  <button className="mt-2 w-full text-[11px] py-1.5 rounded bg-ink text-surface font-semibold">
-                    Assign 2 reps →
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          <Section
-            title="Anomalies · AI watch"
-            subtitle="Real-time pattern detection"
-            action={<StatusPill tone="warn">3</StatusPill>}
-          >
-            <div className="space-y-3">
-              {[
-                {
-                  icon: AlertTriangle,
-                  tone: 'text-rose-600',
-                  title: 'Devon R offline since 09:00',
-                  detail:
-                    'Houston SE shift uncovered. Auto-SMS + push sent. Backup: reassign to Marcus L.',
-                  action: 'Reassign',
-                },
-                {
-                  icon: Coffee,
-                  tone: 'text-warn',
-                  title: 'Tomás M lunch break > 45min',
-                  detail: 'On break since 12:48. Auto-reminder push sent.',
-                  action: 'Nudge',
-                },
-                {
-                  icon: AlertTriangle,
-                  tone: 'text-warn',
-                  title: 'Hiroshi K conv. rate dropped 11pp',
-                  detail:
-                    'Last 4 hours vs trailing avg. Try script v3.2 + check territory saturation.',
-                  action: 'Open 1:1',
-                },
-              ].map((a, i) => (
-                <div
-                  key={i}
-                  className="bg-paper border border-line2 rounded-xl p-3 flex items-start gap-2.5"
-                >
-                  <a.icon size={14} className={`${a.tone} shrink-0 mt-0.5`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-semibold text-ink">{a.title}</div>
-                    <div className="text-[10.5px] text-muted mt-0.5">{a.detail}</div>
-                    <button className="mt-1.5 text-[10px] text-accent font-medium hover:underline">
-                      {a.action} →
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          <Section
-            title="Live activity feed"
-            subtitle="Last 5 minutes · all accounts"
-            action={
-              <span className="text-[10px] text-success flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
-              </span>
-            }
-          >
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {[
-                {
-                  t: '14:42',
-                  who: 'JD',
-                  what: 'Conversion captured',
-                  detail: 'Maria Santos · $24/mo · Austin East',
-                  tone: 'text-success',
-                },
-                {
-                  t: '14:41',
-                  who: 'JM',
-                  what: 'Knock recorded · LEAD',
-                  detail: '4218 Lakeview Dr',
-                  tone: 'text-accent',
-                },
-                {
-                  t: '14:40',
-                  who: 'KP',
-                  what: 'Callback scheduled',
-                  detail: 'Robert Kim · Tue 3pm',
-                  tone: 'text-accent',
-                },
-                {
-                  t: '14:38',
-                  who: 'AR',
-                  what: 'Started shift',
-                  detail: 'Austin North · 8h shift',
-                  tone: 'text-muted',
-                },
-                {
-                  t: '14:36',
-                  who: 'BC',
-                  what: 'Conversion captured',
-                  detail: 'PestMax service contract · $480',
-                  tone: 'text-success',
-                },
-                {
-                  t: '14:35',
-                  who: 'TM',
-                  what: 'Returned from break',
-                  detail: 'Lunch 45m',
-                  tone: 'text-muted',
-                },
-                {
-                  t: '14:32',
-                  who: 'AM',
-                  what: 'Knock recorded · SALE',
-                  detail: '1502 Cedar St · $36/mo recurring',
-                  tone: 'text-success',
-                },
-                {
-                  t: '14:30',
-                  who: 'JM',
-                  what: 'Knock recorded · NOT HOME',
-                  detail: '4216 Lakeview Dr',
-                  tone: 'text-muted',
-                },
-              ].map((e, i) => (
-                <div key={i} className="flex items-start gap-2 text-[11px]">
-                  <span className="text-soft numeric shrink-0 w-9">{e.t}</span>
-                  <span className="mono !w-5 !h-5 !text-[9px] shrink-0">{e.who}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className={`font-medium ${e.tone}`}>{e.what}</div>
-                    <div className="text-muted truncate">{e.detail}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
+          <AiNextZonesPanel zones={HQ_AI_SUGGESTIONS} scopeLabel={HQ_SCOPE_LABEL} />
+          <AnomaliesPanel anomalies={HQ_ANOMALIES} scopeLabel={HQ_SCOPE_LABEL} />
+          <LiveActivityFeed events={HQ_ACTIVITY} scopeLabel={HQ_SCOPE_LABEL} />
         </div>
 
         {/* Quick push-to-field action */}
-        <Section
-          title="Push to field"
-          subtitle="Broadcast a config or message — pushed instantly to every active iPad"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {[
-              {
-                title: 'Broadcast message',
-                desc: 'Send to all active reps · push + in-app',
-                icon: Radio,
-              },
-              {
-                title: 'Update pitch script',
-                desc: 'New version syncs on next app open',
-                icon: Sparkles,
-              },
-              { title: 'Reassign territories', desc: 'Drag-drop reps between zones', icon: MapPin },
-              { title: 'End shift early', desc: 'Manager-initiated wrap', icon: TrendingUp },
-            ].map((a) => (
-              <button
-                key={a.title}
-                className="card card-pad text-left hover:shadow-md hover:border-line transition flex items-start gap-3"
-              >
-                <div className="w-10 h-10 rounded-lg bg-accentSoft text-accent flex items-center justify-center shrink-0">
-                  <a.icon size={16} />
-                </div>
-                <div>
-                  <div className="text-[13px] font-semibold text-ink">{a.title}</div>
-                  <div className="text-[10.5px] text-muted mt-0.5">{a.desc}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Section>
+        <PushToFieldStrip
+          scopeLabel={HQ_SCOPE_LABEL}
+          onAction={(kind) => {
+            // HQ broadcast wiring lands in Phase 1.2. For now: log + toast hook.
+            // eslint-disable-next-line no-console
+            console.log(`HQ Push to field: ${kind}`);
+          }}
+        />
       </div>
     </PlatformShell>
   );

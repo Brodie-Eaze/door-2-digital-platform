@@ -1,8 +1,16 @@
+'use client';
+
 import { Banner, KpiCard } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
 import { getAccount } from '@/lib/accounts';
 import { getAccountFleet } from '@/lib/account-fleet';
+import {
+  AiNextZonesPanel,
+  AnomaliesPanel,
+  LiveActivityFeed,
+  PushToFieldStrip,
+} from '@/components/field-ops';
 
 export default function Page({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
@@ -32,6 +40,25 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
         </div>
 
         <AccountLiveMap accountSlug={params.slug} />
+
+        {fleet && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <AiNextZonesPanel zones={fleet.aiSuggestions} scopeLabel={fleet.scopeLabel} />
+              <AnomaliesPanel anomalies={fleet.anomalies} scopeLabel={fleet.scopeLabel} />
+              <LiveActivityFeed events={fleet.activity} scopeLabel={fleet.scopeLabel} />
+            </div>
+
+            <PushToFieldStrip
+              scopeLabel={fleet.scopeLabel}
+              onAction={(kind) => {
+                // Per-account broadcast wiring lands in Phase 1.2. For now: log only.
+                // eslint-disable-next-line no-console
+                console.log(`[${params.slug}] Push to field: ${kind}`);
+              }}
+            />
+          </>
+        )}
       </div>
     </AccountShell>
   );
