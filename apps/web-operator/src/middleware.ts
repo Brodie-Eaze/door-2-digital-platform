@@ -41,6 +41,11 @@ const PUBLIC_PREFIXES = [
   // redirect to /login. Programmatic callers (curl, the api-client) need a
   // structured body, not an HTML login page.
   '/api/orgs',
+  // Health summary feeds the sidebar's "All systems operational" pill
+  // and the AppShell trust footer. Polled from EVERY page (incl. public
+  // marketing surfaces + the login screen) and intentionally has no PII
+  // in its response, so it stays public.
+  '/api/health-summary',
 ];
 
 export function middleware(req: NextRequest): NextResponse {

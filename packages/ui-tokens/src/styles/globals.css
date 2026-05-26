@@ -175,6 +175,47 @@ body {
   }
 }
 
+/* Health-status slow pulse — applied to the small dot indicators on
+   /public/status, the sidebar "All systems operational" link, and the
+   trust footer. 1.6s opacity cycle, gentle. Mirrors the .d2d-knock-pulse
+   pattern but slower + opacity-only (no scale) so it reads as a
+   heartbeat at rest, not movement. Phase 1.3 wires real health probes;
+   the animation itself is presentation-only. */
+@keyframes d2d-status-pulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+.d2d-status-pulse {
+  animation: d2d-status-pulse 1.6s ease-in-out infinite;
+}
+.d2d-status-pulse-halo {
+  position: relative;
+}
+.d2d-status-pulse-halo::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.25;
+  animation: d2d-status-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d2d-status-pulse,
+  .d2d-status-pulse-halo::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* Route-transition loader — 2px horizontal bar that sweeps across via
    a moving gradient. Used in root + per-account loading.tsx. */
 .d2d-route-loader {

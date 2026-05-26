@@ -16,7 +16,10 @@ import {
   Map,
   Megaphone,
 } from 'lucide-react';
+import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
+import { OperationalIndicator } from './OperationalIndicator';
+import { TrustFooter } from './TrustFooter';
 
 const NAV: NavGroup[] = [
   {
@@ -64,7 +67,12 @@ const NAV: NavGroup[] = [
     label: 'Admin',
     items: [
       { href: '/admin/users', label: 'Operator users', icon: Users, roles: ['super_admin'] },
-      { href: '/admin/secrets', label: 'Secrets inventory', icon: KeyRound, roles: ['super_admin'] },
+      {
+        href: '/admin/secrets',
+        label: 'Secrets inventory',
+        icon: KeyRound,
+        roles: ['super_admin'],
+      },
       { href: '/admin/plans', label: 'Pricing config', icon: Tags, roles: ['super_admin'] },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
@@ -94,7 +102,19 @@ export function OperatorShell({ children, pageTitle }: OperatorShellProps): JSX.
           userRole={userRole}
           footer={
             <>
-              <div>v0.1.0 · {env}</div>
+              <OperationalIndicator />
+              <div className="flex items-center gap-1.5">
+                <span>v0.5.0 · {env}</span>
+                <span className="text-soft">·</span>
+                <Link
+                  href="/public/changelog"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  changelog
+                </Link>
+              </div>
               <div className="truncate">{userEmail}</div>
             </>
           }
@@ -115,6 +135,7 @@ export function OperatorShell({ children, pageTitle }: OperatorShellProps): JSX.
           }
         />
       }
+      footer={<TrustFooter />}
     >
       {children}
     </AppShell>

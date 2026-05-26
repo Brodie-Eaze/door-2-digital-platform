@@ -33,7 +33,10 @@ import {
   Plug,
   LogOut,
 } from 'lucide-react';
+import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
+import { OperationalIndicator } from './OperationalIndicator';
+import { TrustFooter } from './TrustFooter';
 
 interface SessionUser {
   userId: string;
@@ -251,7 +254,19 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
           userRole={(user?.role as 'super_admin') ?? 'super_admin'}
           footer={
             <>
-              <div>v0.5.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</div>
+              <OperationalIndicator />
+              <div className="flex items-center gap-1.5">
+                <span>v0.5.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</span>
+                <span className="text-soft">·</span>
+                <Link
+                  href="/public/changelog"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  changelog
+                </Link>
+              </div>
               <div className="truncate">{sidebarEmail}</div>
               {user?.demo && (
                 <div className="text-amber-700 mt-0.5 text-[9.5px] uppercase tracking-wider">
@@ -274,6 +289,7 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
           }
         />
       }
+      footer={<TrustFooter />}
     >
       {children}
     </AppShell>

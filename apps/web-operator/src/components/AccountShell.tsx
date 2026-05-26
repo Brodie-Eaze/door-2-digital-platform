@@ -37,6 +37,8 @@ import {
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, Reveal, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
+import { OperationalIndicator } from './OperationalIndicator';
+import { TrustFooter } from './TrustFooter';
 import { getAccount, accountMonogram } from '@/lib/accounts';
 
 interface SessionUser {
@@ -185,6 +187,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
               userRole={(user?.role as 'org_admin') ?? 'org_admin'}
               footer={
                 <>
+                  <OperationalIndicator />
                   <Link
                     href="/accounts"
                     className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
@@ -197,6 +200,18 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
                   </div>
                   <div className="text-soft">
                     {account?.vertical} · {account?.region}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span>v0.5.0</span>
+                    <span className="text-soft">·</span>
+                    <Link
+                      href="/public/changelog"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent hover:underline"
+                    >
+                      changelog
+                    </Link>
                   </div>
                 </>
               }
@@ -255,6 +270,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
             }
           />
         }
+        footer={<TrustFooter />}
       >
         {children}
       </AppShell>
