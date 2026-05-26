@@ -220,22 +220,51 @@ export async function registerMarketing(app: FastifyInstance): Promise<void> {
   // lands later as `/v1/marketing/webhooks/:kind/:orgId`. We require the
   // header so the route can scope the connection lookup.
   //
-  // The body is read raw (`req.body` is a Buffer thanks to the JSON content
-  // parser preserving the original payload for HMAC verification).
+  // SEC-007 fix: HMAC must operate on the EXACT bytes the provider sent.
+  // Fastify's default JSON parser re-canonicalises the JSON (whitespace,
+  // key order, Unicode escapes), which breaks signature verification for
+  // strict providers (Meta/TikTok/Higgsfield etc). We register a scoped
+  // child app whose content-type parser preserves the raw Buffer on
+  // `req.rawBody` BEFORE JSON-parsing. Only the webhook routes get this
+  // behaviour — sibling routes keep Fastify's default JSON parsing.
+  await app.register(async (scope) => {
+    scope.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      // `body` is the raw Buffer thanks to parseAs:'buffer'. Stash for
+      // the handler, then JSON-parse so the handler still gets a JS
+      // object on `req.body`.
+      (req as unknown as { rawBody?: Buffer }).rawBody = body as Buffer;
+      if ((body as Buffer).length === 0) {
+        done(null, {});
+        return;
+      }
+      try {
+        const parsed = JSON.parse((body as Buffer).toString('utf-8'));
+        done(null, parsed);
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    });
 
-  app.post<{ Params: KindParams }>('/webhooks/:kind', async (req, reply) => {
-    const kind = providerKindSchema.parse(req.params.kind);
-    const orgId = req.headers['x-d2d-org'];
-    if (typeof orgId !== 'string' || orgId.length === 0) {
-      throw new ProblemError(Problems.validation('x-d2d-org header required for inbound webhook'));
-    }
-    // Re-serialize the JSON body to bytes so HMAC verification has a
-    // stable buffer. Fastify has already JSON-parsed at this point.
-    const raw = Buffer.from(
-      typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}),
-    );
-    const event = await service.recordInboundWebhook(kind, orgId, raw, req.headers);
-    return reply.code(202).send({ event });
+    scope.post<{ Params: KindParams }>('/webhooks/:kind', async (req, reply) => {
+      const kind = providerKindSchema.parse(req.params.kind);
+      const orgId = req.headers['x-d2d-org'];
+      if (typeof orgId !== 'string' || orgId.length === 0) {
+        throw new ProblemError(
+          Problems.validation('x-d2d-org header required for inbound webhook'),
+        );
+      }
+      // Use the raw bytes captured by the scoped parser. Fall back to a
+      // canonical re-serialise only if the parser wasn't engaged (e.g.
+      // non-JSON content type) — this is mostly defensive; webhook
+      // providers always send application/json.
+      const stashed = (req as unknown as { rawBody?: Buffer }).rawBody;
+      const raw =
+        stashed instanceof Buffer
+          ? stashed
+          : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
+      const event = await service.recordInboundWebhook(kind, orgId, raw, req.headers);
+      return reply.code(202).send({ event });
+    });
   });
 
   app.get<{ Params: KindParams }>(

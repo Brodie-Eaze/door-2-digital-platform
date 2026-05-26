@@ -809,6 +809,11 @@ model AuditEvent {
   @@index([orgId, occurredAt])
   @@index([resourceType, resourceId])
   @@index([occurredAt])
+  // P-002: chain-head lookup index. AuditService.recordEvent and
+  // verifyChain both run ORDER BY id DESC LIMIT 1 scoped by orgId (+
+  // regionCode for platform-level rows). Without a covering composite
+  // index this degrades to a Seq Scan as the table grows.
+  @@index([orgId, regionCode, id(sort: Desc)])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -157,6 +157,27 @@ export const AuditService = {
       orderBy: { id: 'asc' },
     });
 
+    // SEC-002 fix: thread `expectedPrev` forward from the actual previous
+    // row's `rowHash` rather than trusting each row's own self-declared
+    // `prevHash`. Without this, a tamperer who rewrites both `action` AND
+    // `prevHash` to a consistent recomputation would slip past the check.
+    //
+    // For an unbounded range the anchor is genesis. When `fromUlid` skips
+    // ahead in the chain we must fetch the row immediately preceding the
+    // first selected row so the walk has a real anchor.
+    let expectedPrev: string = GENESIS_PREV_HASH;
+    if (args.fromUlid && rows.length > 0) {
+      const anchor = await prisma().auditEvent.findFirst({
+        where: {
+          ...where,
+          ulid: { lt: rows[0]!.ulid },
+        },
+        orderBy: { id: 'desc' },
+        select: { rowHash: true },
+      });
+      if (anchor) expectedPrev = anchor.rowHash;
+    }
+
     const secret = env().AUDIT_CHAIN_SECRET;
     let count = 0;
     for (const row of rows) {
@@ -176,8 +197,13 @@ export const AuditService = {
         metadata: row.metadata ?? {},
         occurredAt: row.occurredAt.toISOString(),
       };
-      const expected = computeRowHash(row.prevHash, forHash, secret);
-      if (expected !== row.rowHash) {
+      // Two-level integrity check:
+      //   1. The stored `prevHash` must equal the threaded `expectedPrev`
+      //      (catches tampering of `prevHash` alongside other fields).
+      //   2. The recomputed `rowHash` (using the threaded value, not the
+      //      stored one) must equal the stored `rowHash`.
+      const expected = computeRowHash(expectedPrev, forHash, secret);
+      if (row.prevHash !== expectedPrev || expected !== row.rowHash) {
         return {
           ok: false,
           brokenAt: row.ulid,
@@ -186,6 +212,7 @@ export const AuditService = {
           actual: row.rowHash,
         };
       }
+      expectedPrev = row.rowHash;
     }
     return { ok: true, count };
   },

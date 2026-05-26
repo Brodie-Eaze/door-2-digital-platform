@@ -3,8 +3,12 @@
  *               POST /:id/brand-kit | PATCH /:id/billing
  *
  * All mutations require Idempotency-Key. Region pinned at create, immutable.
+ *
+ * SEC-011: POST /v1/orgs requires authenticated super_admin + heavy
+ * rate-limiting. Anonymous spam was previously possible because the route
+ * had neither auth nor a tighter rate-limit than the global 120/min.
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { createOrgRequestSchema } from '@d2d/shared-types';
 import {
@@ -24,21 +28,47 @@ interface OrgIdParams {
 export async function registerOrg(app: FastifyInstance): Promise<void> {
   app.get('/_status', async () => ({ domain: 'org', status: 'live', phase: '1.1' }));
 
-  // POST /v1/orgs — unauthenticated for now (Phase 1.2 wires super-admin only).
-  // Idempotency-Key required; new orgs are scoped under the special
-  // '__public__' key bucket.
-  app.post('/', async (req, reply) => {
-    const body = createOrgRequestSchema.parse(req.body);
-    await withIdempotency({
-      req,
-      reply,
-      orgId: '__public__',
-      handler: async () => {
-        const result = await createOrg(body);
-        return { status: 201, body: result };
+  // POST /v1/orgs — SEC-011: super_admin only + tight rate-limit (5/min/IP).
+  // Idempotency-Key still required; new orgs are scoped under the special
+  // '__public__' key bucket because the actor's "home org" doesn't exist
+  // yet (this IS the org-creation request).
+  //
+  // Route-level rate-limit config is honoured by @fastify/rate-limit when
+  // registered globally with `enableRouteRules: true`-equivalent semantics;
+  // here we use the plugin's `config.rateLimit` overrides which the plugin
+  // reads automatically.
+  app.post(
+    '/',
+    {
+      preHandler: requireAuth,
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+        },
       },
-    });
-  });
+    },
+    async (req, reply) => {
+      const principal = req.principal;
+      if (!principal) {
+        // Defensive — requireAuth should have thrown.
+        throw new ProblemError(Problems.unauthorized('Authentication required'));
+      }
+      if (principal.role !== 'super_admin') {
+        throw new ProblemError(Problems.forbidden('super_admin role required to create orgs'));
+      }
+      const body = createOrgRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: '__public__',
+        handler: async () => {
+          const result = await createOrg(body, { userId: principal.userId });
+          return { status: 201, body: result };
+        },
+      });
+    },
+  );
 
   // GET /v1/orgs/:id
   app.get<{ Params: OrgIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {

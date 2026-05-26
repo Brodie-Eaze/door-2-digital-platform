@@ -103,7 +103,7 @@ const RULES = [
   'Disclose privately — public disclosure requires our written agreement (typically 90 days post-fix).',
   'Make a good-faith effort to avoid privacy violations, service disruption, and data destruction.',
   'Submit one issue per report; chained issues with shared root cause may be merged at our discretion.',
-  'No automated scanners that generate excessive traffic. Burst &lt; 60 req/min per IP.',
+  'No automated scanners that generate excessive traffic. Burst < 60 req/min per IP.',
 ];
 
 const PGP_BLOCK = `-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -279,7 +279,7 @@ export default function PublicBugBountyPage(): JSX.Element {
                 <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-accentSoft text-accent text-[11.5px] font-semibold shrink-0 mt-px">
                   {i + 1}
                 </span>
-                <span dangerouslySetInnerHTML={{ __html: r }} />
+                <span>{r}</span>
               </li>
             ))}
           </ol>

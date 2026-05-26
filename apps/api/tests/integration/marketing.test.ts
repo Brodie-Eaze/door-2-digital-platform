@@ -744,6 +744,34 @@ describe('POST /v1/marketing/webhooks/:kind', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('signs raw bytes verbatim — leading whitespace + key-order preserved (SEC-007)', async () => {
+    // SEC-007 regression: Fastify's default JSON parser re-canonicalises
+    // payloads (strips whitespace, re-orders keys, normalises escapes).
+    // Providers HMAC the bytes they sent, not our recanonicalisation. The
+    // raw-body parser must preserve the original bytes so the signature
+    // still verifies. We send a body with leading whitespace + an unusual
+    // key order — a wire payload that the old re-serialise path would
+    // have mutated and broken.
+    const t = await tokenFor(adminEmailA, adminPassA);
+    const secret = await connect(t, 'higgsfield', 'mkt-whk-raw-1');
+    const rawBody =
+      '   {"status":"ready","job_id":"hf_raw_001","ready_at":"2026-05-27T10:00:00Z"}   ';
+    const sig = createHmac('sha256', secret).update(rawBody).digest('hex');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/marketing/webhooks/higgsfield',
+      headers: {
+        'content-type': 'application/json',
+        'x-d2d-org': orgA,
+        'x-higgsfield-signature': sig,
+      },
+      payload: rawBody,
+    });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().event.verifiedSignature).toBe(true);
+    expect(res.json().event.externalId).toBe('hf_raw_001');
+  });
 });
 
 describe('GET /v1/marketing/webhooks/:kind/recent', () => {

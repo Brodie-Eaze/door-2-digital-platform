@@ -15,11 +15,27 @@ const adminUserId = 'usr_TEST_ORG_ADMIN';
 const adminEmail = 'admin@org.test';
 const adminPassword = 'AdminPasswordOK!1';
 
+// SEC-011: POST /v1/orgs now requires super_admin. We seed a separate
+// super-admin so the existing org_admin paths (GET/PATCH/archive/brand-kit/
+// billing) still exercise the role boundary they were written to assert.
+const superAdminUserId = 'usr_TEST_ORG_SUPERADMIN';
+const superAdminEmail = 'super@org.test';
+const superAdminPassword = 'SuperAdminPwd_99';
+
 async function getAdminToken(): Promise<string> {
   const res = await app.inject({
     method: 'POST',
     url: '/v1/auth/login',
     payload: { email: adminEmail, password: adminPassword },
+  });
+  return res.json().accessToken;
+}
+
+async function getSuperAdminToken(): Promise<string> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v1/auth/login',
+    payload: { email: superAdminEmail, password: superAdminPassword },
   });
   return res.json().accessToken;
 }
@@ -35,19 +51,32 @@ async function seedAdmin(): Promise<void> {
       regionCode: 'US',
     },
   });
-  await prisma().user.create({
-    data: {
-      id: adminUserId,
-      orgId: adminOrgId,
-      email: adminEmail,
-      emailDigest: emailDigest(adminEmail, process.env.PII_SEARCH_KEY!),
-      givenName: 'Org',
-      familyName: 'Admin',
-      role: 'org_admin',
-      regionCode: 'US',
-    },
+  await prisma().user.createMany({
+    data: [
+      {
+        id: adminUserId,
+        orgId: adminOrgId,
+        email: adminEmail,
+        emailDigest: emailDigest(adminEmail, process.env.PII_SEARCH_KEY!),
+        givenName: 'Org',
+        familyName: 'Admin',
+        role: 'org_admin',
+        regionCode: 'US',
+      },
+      {
+        id: superAdminUserId,
+        orgId: adminOrgId,
+        email: superAdminEmail,
+        emailDigest: emailDigest(superAdminEmail, process.env.PII_SEARCH_KEY!),
+        givenName: 'Super',
+        familyName: 'Admin',
+        role: 'super_admin',
+        regionCode: 'US',
+      },
+    ],
   });
   await setUserPassword(adminUserId, adminPassword);
+  await setUserPassword(superAdminUserId, superAdminPassword);
 }
 
 beforeAll(async () => {
@@ -74,21 +103,47 @@ describe('POST /v1/orgs', () => {
     currency: 'USD',
   };
 
-  it('rejects when Idempotency-Key header is missing', async () => {
+  // SEC-011: anonymous + non-super_admin paths
+  it('rejects with 401 when no auth header (SEC-011)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/orgs',
+      headers: { 'idempotency-key': 'sec011-anon-001' },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects with 403 when authenticated as org_admin (SEC-011)', async () => {
+    const t = await getAdminToken();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/orgs',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'sec011-orgadm-001' },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().type).toBe('https://docs.d2d.io/problems/forbidden');
+  });
+
+  it('rejects when Idempotency-Key header is missing', async () => {
+    const t = await getSuperAdminToken();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/orgs',
+      headers: { authorization: `Bearer ${t}` },
       payload: body,
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().type).toBe('https://docs.d2d.io/problems/validation-failed');
   });
 
-  it('creates org + brand kit + billing in same TX (201)', async () => {
+  it('creates org + brand kit + billing in same TX (201) when super_admin', async () => {
+    const t = await getSuperAdminToken();
     const res = await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-test-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-test-001' },
       payload: body,
     });
     expect(res.statusCode).toBe(201);
@@ -100,16 +155,17 @@ describe('POST /v1/orgs', () => {
   });
 
   it('replays same response when same key + same body', async () => {
+    const t = await getSuperAdminToken();
     const first = await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-replay-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-replay-001' },
       payload: body,
     });
     const second = await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-replay-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-replay-001' },
       payload: body,
     });
     expect(second.statusCode).toBe(201);
@@ -117,26 +173,28 @@ describe('POST /v1/orgs', () => {
   });
 
   it('returns 409 when same key replays with different body', async () => {
+    const t = await getSuperAdminToken();
     await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-conflict-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-conflict-001' },
       payload: body,
     });
     const res = await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-conflict-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-conflict-001' },
       payload: { ...body, legalName: 'Different' },
     });
     expect(res.statusCode).toBe(409);
   });
 
   it('writes org.created audit row with hash chain', async () => {
+    const t = await getSuperAdminToken();
     await app.inject({
       method: 'POST',
       url: '/v1/orgs',
-      headers: { 'idempotency-key': 'org-create-audit-001' },
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'org-create-audit-001' },
       payload: body,
     });
     const audit = await prisma().auditEvent.findFirst({

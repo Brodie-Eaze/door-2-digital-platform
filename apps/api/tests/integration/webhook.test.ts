@@ -165,7 +165,7 @@ describe('POST /v1/webhooks/endpoints', () => {
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-create-1' },
       payload: {
-        url: 'https://hooks.example.com/d2d',
+        url: 'https://example.com/d2d',
         eventTypes: ['lead.created', 'conversion.created'],
       },
     });
@@ -188,7 +188,7 @@ describe('POST /v1/webhooks/endpoints', () => {
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-rbac-1' },
       payload: {
-        url: 'https://hooks.example.com/role',
+        url: 'https://example.com/role',
         eventTypes: ['lead.created'],
       },
     });
@@ -208,6 +208,84 @@ describe('POST /v1/webhooks/endpoints', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // SEC-008: SSRF allowlist on webhook URL registration.
+  describe('SEC-008 SSRF allowlist', () => {
+    it('rejects http:// scheme (https only)', async () => {
+      const t = await tokenFor(adminEmailA, adminPassA);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/endpoints',
+        headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-ssrf-http-1' },
+        payload: {
+          url: 'http://example.com/d2d',
+          eventTypes: ['lead.created'],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().type).toBe('https://docs.d2d.io/problems/webhook-url-rejected');
+    });
+
+    it('rejects AWS metadata IP (169.254.169.254)', async () => {
+      const t = await tokenFor(adminEmailA, adminPassA);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/endpoints',
+        headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-ssrf-meta-1' },
+        payload: {
+          url: 'https://169.254.169.254/latest/meta-data/',
+          eventTypes: ['lead.created'],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().type).toBe('https://docs.d2d.io/problems/webhook-url-rejected');
+    });
+
+    it('rejects RFC1918 IP (10.0.0.1)', async () => {
+      const t = await tokenFor(adminEmailA, adminPassA);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/endpoints',
+        headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-ssrf-rfc1918-1' },
+        payload: {
+          url: 'https://10.0.0.1/hook',
+          eventTypes: ['lead.created'],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().type).toBe('https://docs.d2d.io/problems/webhook-url-rejected');
+    });
+
+    it('rejects non-443 port', async () => {
+      const t = await tokenFor(adminEmailA, adminPassA);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/endpoints',
+        headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-ssrf-port-1' },
+        payload: {
+          url: 'https://example.com:8080/hook',
+          eventTypes: ['lead.created'],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().type).toBe('https://docs.d2d.io/problems/webhook-url-rejected');
+    });
+
+    it('accepts a hostname that resolves to a public IP', async () => {
+      // example.com resolves to 23.x.x.x — public unicast.
+      const t = await tokenFor(adminEmailA, adminPassA);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/endpoints',
+        headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-ssrf-ok-1' },
+        payload: {
+          url: 'https://example.com/d2d-hook',
+          eventTypes: ['lead.created'],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    });
+  });
 });
 
 describe('GET /v1/webhooks/endpoints', () => {
@@ -219,7 +297,7 @@ describe('GET /v1/webhooks/endpoints', () => {
         url: '/v1/webhooks/endpoints',
         headers: { authorization: `Bearer ${t}`, 'idempotency-key': `whk-list-${i}` },
         payload: {
-          url: `https://hooks.example.com/list-${i}`,
+          url: `https://example.com/list-${i}`,
           eventTypes: ['lead.created'],
         },
       });
@@ -249,7 +327,7 @@ describe('GET /v1/webhooks/endpoints', () => {
       method: 'POST',
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${tA}`, 'idempotency-key': 'whk-iso-1' },
-      payload: { url: 'https://hooks.example.com/iso', eventTypes: ['lead.created'] },
+      payload: { url: 'https://example.com/iso', eventTypes: ['lead.created'] },
     });
     const res = await app.inject({
       method: 'GET',
@@ -267,7 +345,7 @@ describe('POST /v1/webhooks/endpoints/:id/rotate-secret', () => {
       method: 'POST',
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-rot-1' },
-      payload: { url: 'https://hooks.example.com/rot', eventTypes: ['lead.created'] },
+      payload: { url: 'https://example.com/rot', eventTypes: ['lead.created'] },
     });
     const id = create.json().endpoint.id;
     const initialSecret = create.json().endpoint.secret;
@@ -305,7 +383,7 @@ describe('DELETE /v1/webhooks/endpoints/:id', () => {
       method: 'POST',
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-del-1' },
-      payload: { url: 'https://hooks.example.com/del', eventTypes: ['lead.created'] },
+      payload: { url: 'https://example.com/del', eventTypes: ['lead.created'] },
     });
     const id = create.json().endpoint.id;
     const del = await app.inject({
@@ -325,7 +403,7 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
       method: 'POST',
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'whk-deliv-1' },
-      payload: { url: 'https://hooks.example.com/deliv', eventTypes: ['lead.created'] },
+      payload: { url: 'https://example.com/deliv', eventTypes: ['lead.created'] },
     });
     const id = create.json().endpoint.id;
     const res = await app.inject({
@@ -345,7 +423,7 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
       method: 'POST',
       url: '/v1/webhooks/endpoints',
       headers: { authorization: `Bearer ${tA}`, 'idempotency-key': 'whk-deliv-iso-1' },
-      payload: { url: 'https://hooks.example.com/deliv-iso', eventTypes: ['lead.created'] },
+      payload: { url: 'https://example.com/deliv-iso', eventTypes: ['lead.created'] },
     });
     const id = create.json().endpoint.id;
     const res = await app.inject({

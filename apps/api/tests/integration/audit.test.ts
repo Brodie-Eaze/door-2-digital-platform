@@ -277,6 +277,41 @@ describe('POST /v1/audit/events/verify', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('detects when a middle row AND its prevHash are both rewritten (SEC-002)', async () => {
+    // SEC-002 regression: a naive verifier that uses each row's own
+    // prevHash as the input to computeRowHash would accept a tampered row
+    // whose prevHash was also rewritten to be self-consistent. The fix
+    // threads expectedPrev forward from the prior row's rowHash so the
+    // chain detects the break.
+    const tA = await tokenFor(adminEmailA, adminPassA);
+    await createSomeLeads(tA, 5);
+    const rows = await prisma().auditEvent.findMany({
+      where: { orgId: orgA },
+      orderBy: { id: 'asc' },
+    });
+    const target = rows[2]!;
+    // Rewrite BOTH the action AND the prevHash — a self-consistent fake
+    // that the old verifier would have accepted because it only checked
+    // recomputeHash(row.prevHash, ...) == row.rowHash.
+    await prisma().auditEvent.update({
+      where: { id: target.id },
+      data: {
+        action: 'lead.tampered_with_consistent_prev',
+        prevHash: 'a'.repeat(64), // fabricated; doesn't match prior row.rowHash
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/audit/events/verify',
+      headers: { authorization: `Bearer ${tA}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(false);
+    expect(body.brokenAt).toBe(target.ulid);
+  });
 });
 
 describe('GET /v1/audit/events/export', () => {

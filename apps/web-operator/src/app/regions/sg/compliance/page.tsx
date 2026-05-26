@@ -304,7 +304,7 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
             <SpamCard
               icon={<Clock size={14} className="text-accent" />}
               title="Unsubscribe link"
-              detail='Functional "&lt;UNSUBSCRIBE&gt;" / "STOP" handling per Spam Control Act.'
+              detail={'Functional "<UNSUBSCRIBE>" / "STOP" handling per Spam Control Act.'}
               tickStat="< 1 day"
               tickHint="median actioning time"
             />
@@ -574,10 +574,7 @@ function SpamCard({
         {icon}
         <div className="text-[13px] font-semibold text-ink">{title}</div>
       </div>
-      <div
-        className="text-[11.5px] text-muted leading-snug mb-3"
-        dangerouslySetInnerHTML={{ __html: detail }}
-      />
+      <div className="text-[11.5px] text-muted leading-snug mb-3">{detail}</div>
       <div className="border-t border-line2 pt-3">
         <div className="text-[16px] font-semibold text-ink tracking-tight numeric">{tickStat}</div>
         <div className="text-[10.5px] text-muted mt-0.5">{tickHint}</div>
