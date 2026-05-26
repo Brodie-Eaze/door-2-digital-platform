@@ -152,7 +152,9 @@ function LoginPageInner(): JSX.Element {
             usedDemo = true;
             setDemoMode(true);
           }
-          if (!usedDemo && (res.status === 502 || res.status === 503 || res.status === 504)) {
+          if (!usedDemo && (res.status === 404 || res.status === 405 || res.status >= 500)) {
+            // Proxy reached but API is missing/misbehaving — fall back to
+            // synthetic-demo so prod stays demo-able.
             res = await fetch('/api/session/demo', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
