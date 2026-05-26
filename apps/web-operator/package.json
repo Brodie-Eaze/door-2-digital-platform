@@ -14,10 +14,13 @@
   },
   "dependencies": {
     "@d2d/api-client": "workspace:*",
+    "@d2d/database": "workspace:*",
     "@d2d/shared-types": "workspace:*",
     "@d2d/shared-utils": "workspace:*",
     "@d2d/ui-tokens": "workspace:*",
     "@d2d/ui-web": "workspace:*",
+    "@prisma/client": "^5.20.0",
+    "zod": "^3.23.8",
     "@tanstack/react-query": "^5.59.0",
     "@types/leaflet": "^1.9.21",
     "leaflet": "^1.9.4",

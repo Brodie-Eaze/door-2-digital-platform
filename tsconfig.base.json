@@ -26,7 +26,8 @@
       "@d2d/ui-web": ["./packages/ui-web/src/index.ts"],
       "@d2d/ui-web/*": ["./packages/ui-web/src/*"],
       "@d2d/integrations": ["./packages/integrations/src/index.ts"],
-      "@d2d/integrations/*": ["./packages/integrations/src/*"]
+      "@d2d/integrations/*": ["./packages/integrations/src/*"],
+      "@d2d/database": ["./packages/database/src/index.ts"]
     }
   }
 }

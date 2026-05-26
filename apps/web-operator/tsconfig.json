@@ -17,7 +17,8 @@
       "@d2d/shared-types": ["../../packages/shared-types/src/index.ts"],
       "@d2d/shared-utils": ["../../packages/shared-utils/src/index.ts"],
       "@d2d/ui-tokens": ["../../packages/ui-tokens/src/index.ts"],
-      "@d2d/ui-web": ["../../packages/ui-web/src/index.ts"]
+      "@d2d/ui-web": ["../../packages/ui-web/src/index.ts"],
+      "@d2d/database": ["../../packages/database/src/index.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

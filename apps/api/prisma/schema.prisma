@@ -155,6 +155,11 @@ enum SsoProvider {
 
 model Org {
   id          String     @id // ULID prefixed: org_*
+  // URL-safe slug — primary external identifier used in web URLs and Route
+  // Handler params. Optional in the schema so existing rows survive the
+  // additive migration; the route handler 404s if a slug is missing for an
+  // org the UI tries to read. New orgs MUST receive a slug at create time.
+  slug        String?    @unique
   legalName   String
   tradingName String
   vertical    Vertical

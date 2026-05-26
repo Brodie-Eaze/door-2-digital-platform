@@ -1,14 +1,138 @@
+/**
+ * /accounts — the operator's portfolio of sub-accounts.
+ *
+ * Server component. Reads directly from the shared Prisma client (no
+ * round-trip through /api/orgs) so the first paint already has data,
+ * cookies pass through implicitly via getSession(). If the DB is
+ * unreachable (e.g. Railway env var missing) we degrade gracefully to
+ * the static ACCOUNTS fixture so the demo doesn't blank.
+ *
+ * Authorization:
+ *   - super_admin: all non-archived orgs
+ *   - everyone else: scoped to their own orgId
+ */
 import Link from 'next/link';
-import { ArrowRight, Plus, UserPlus } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { ArrowRight, Plus, UserPlus, Database, AlertTriangle } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
-import { ACCOUNTS } from '@/lib/accounts';
+import { ACCOUNTS, type Account } from '@/lib/accounts';
+import { getSession } from '@/lib/session';
 
-export default function AccountsPage(): JSX.Element {
-  const totalKnockers = ACCOUNTS.reduce((s, a) => s + a.knockers, 0);
-  const totalLeads = ACCOUNTS.reduce((s, a) => s + a.leadsInboxToday, 0);
-  const totalRevenue = ACCOUNTS.reduce((s, a) => s + a.revenueCentsMTD, 0n);
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+interface PortfolioEntry {
+  account: Account;
+  fromDb: boolean;
+  leadsToday: number;
+}
+
+interface PortfolioData {
+  entries: PortfolioEntry[];
+  source: 'database' | 'fixture-fallback';
+  error?: string;
+}
+
+async function loadPortfolio(): Promise<PortfolioData> {
+  const session = await getSession();
+  if (!session) {
+    // Middleware should redirect; defensive guard for direct API misuse.
+    return { entries: [], source: 'fixture-fallback', error: 'no session' };
+  }
+
+  try {
+    // Dynamic import keeps Prisma off the Edge/middleware bundle.
+    const { db } = await import('@d2d/database');
+    const where =
+      session.role === 'super_admin'
+        ? { status: { not: 'archived' as const }, slug: { not: null } }
+        : session.orgId
+          ? { id: session.orgId, status: { not: 'archived' as const }, slug: { not: null } }
+          : { id: '__no_org__' };
+
+    const orgs = await db.org.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: { billing: { select: { currency: true } } },
+    });
+
+    // Lead counts per org (today) — single grouped query, no N+1.
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const leadCounts = await db.lead.groupBy({
+      by: ['orgId'],
+      where: {
+        orgId: { in: orgs.map((o) => o.id) },
+        createdAt: { gte: todayStart },
+      },
+      _count: { _all: true },
+    });
+    const leadCountByOrg = new Map(leadCounts.map((r) => [r.orgId, r._count._all]));
+
+    const entries: PortfolioEntry[] = orgs.map((o) => {
+      // Reuse the fixture for cosmetic colours/notes when the slug matches;
+      // otherwise synthesize from DB columns. The DB is the source of truth
+      // for legalName / regionCode / status; the fixture only loans the
+      // avatar palette + the legacy narrative for known demo orgs.
+      const fixture = o.slug ? ACCOUNTS.find((a) => a.slug === o.slug) : undefined;
+      const account: Account = {
+        slug: o.slug ?? o.id,
+        name: o.legalName,
+        shortName: o.tradingName,
+        vertical: (o.vertical === 'commercial' ? 'commercial' : 'charity') as Account['vertical'],
+        region: (o.regionCode === 'AU'
+          ? 'AU'
+          : o.regionCode === 'SG'
+            ? 'SG'
+            : 'US') as Account['region'],
+        avatarBg: fixture?.avatarBg ?? '#0F172A',
+        avatarFg: fixture?.avatarFg ?? '#FFFFFF',
+        plan: fixture?.plan ?? 'Growth',
+        health: fixture?.health ?? 'healthy',
+        knockers: fixture?.knockers ?? 0,
+        insideSalesReps: fixture?.insideSalesReps ?? 0,
+        territoriesActive: fixture?.territoriesActive ?? 0,
+        leadsInboxToday: leadCountByOrg.get(o.id) ?? 0,
+        conversionsMTD: fixture?.conversionsMTD ?? 0,
+        revenueCentsMTD: fixture?.revenueCentsMTD ?? 0n,
+        ltvCentsMTD: fixture?.ltvCentsMTD ?? 0n,
+        contractedAt: o.createdAt.toISOString().slice(0, 10),
+        notes: fixture?.notes ?? `${o.tradingName} sub-account.`,
+      };
+      return { account, fromDb: true, leadsToday: leadCountByOrg.get(o.id) ?? 0 };
+    });
+
+    return { entries, source: 'database' };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[accounts] DB load failed, falling back to fixture:', err);
+    return {
+      entries: ACCOUNTS.map((a) => ({ account: a, fromDb: false, leadsToday: a.leadsInboxToday })),
+      source: 'fixture-fallback',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export default async function AccountsPage({
+  searchParams,
+}: {
+  searchParams?: { just_onboarded?: string };
+}): Promise<JSX.Element> {
+  const session = await getSession();
+  if (!session) redirect('/login?next=/accounts');
+
+  const { entries, source, error } = await loadPortfolio();
+  const accounts = entries.map((e) => e.account);
+  const justOnboardedSlug = searchParams?.just_onboarded;
+  const justOnboarded = justOnboardedSlug
+    ? accounts.find((a) => a.slug === justOnboardedSlug)
+    : undefined;
+  const totalKnockers = accounts.reduce((s, a) => s + a.knockers, 0);
+  const totalLeadsToday = entries.reduce((s, e) => s + e.leadsToday, 0);
+  const totalRevenue = accounts.reduce((s, a) => s + a.revenueCentsMTD, 0n);
 
   return (
     <PlatformShell pageTitle="Accounts">
@@ -19,8 +143,25 @@ export default function AccountsPage(): JSX.Element {
             <div className="text-[19px] font-semibold text-ink tracking-tight">
               All sub-accounts
             </div>
-            <div className="text-[12px] text-muted">
-              {ACCOUNTS.length} businesses live · {totalKnockers} knockers active across portfolio
+            <div className="text-[12px] text-muted flex items-center gap-2">
+              <span>
+                {accounts.length} businesses live · {totalKnockers} knockers active across portfolio
+              </span>
+              {source === 'database' ? (
+                <span
+                  className="inline-flex items-center gap-1 text-success text-[10px] uppercase tracking-wider font-semibold"
+                  title="Loaded from Postgres"
+                >
+                  <Database size={10} /> Live
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold"
+                  title={error ? `DB error: ${error}` : 'Showing fixture data'}
+                >
+                  <AlertTriangle size={10} /> Fixture
+                </span>
+              )}
             </div>
           </div>
           <Link href="/onboard-account">
@@ -29,6 +170,16 @@ export default function AccountsPage(): JSX.Element {
             </Button>
           </Link>
         </div>
+
+        {justOnboarded && (
+          <Banner tone="success">
+            <span className="text-[13px]">
+              <span className="font-semibold">{justOnboarded.name} is live.</span> Org + BrandKit +
+              Billing committed to Postgres; audit row written. The {justOnboarded.region} workspace
+              is provisioned and accessible below.
+            </span>
+          </Banner>
+        )}
 
         <Banner tone="info">
           <span className="text-[13px]">
@@ -40,7 +191,7 @@ export default function AccountsPage(): JSX.Element {
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Accounts" value={ACCOUNTS.length} hint="charity + commercial" />
+          <KpiCard label="Accounts" value={accounts.length} hint="charity + commercial" />
           <KpiCard
             label="Knockers active"
             value={totalKnockers}
@@ -49,8 +200,8 @@ export default function AccountsPage(): JSX.Element {
           />
           <KpiCard
             label="Leads today (all accts)"
-            value={totalLeads}
-            delta="+22%"
+            value={totalLeadsToday}
+            delta="real-time"
             deltaTone="positive"
           />
           <KpiCard
@@ -65,13 +216,15 @@ export default function AccountsPage(): JSX.Element {
           title="Sub-accounts"
           subtitle="Each account is fully isolated — own territories, Knockers, leads, pipeline, compliance"
           action={
-            <Button leftIcon={<Plus size={14} />} variant="primary" size="sm">
-              New account
-            </Button>
+            <Link href="/onboard-account">
+              <Button leftIcon={<Plus size={14} />} variant="primary" size="sm">
+                New account
+              </Button>
+            </Link>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {ACCOUNTS.map((a) => (
+            {accounts.map((a) => (
               <Link
                 key={a.slug}
                 href={`/accounts/${a.slug}/today`}
@@ -141,7 +294,7 @@ export default function AccountsPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {ACCOUNTS.map((a) => (
+              {accounts.map((a) => (
                 <tr key={a.slug}>
                   <td>
                     <Link

@@ -134,6 +134,7 @@ export default function OnboardAccountPage(): JSX.Element {
   const [step, setStep] = useState(1);
   const [activating, setActivating] = useState(false);
   const [provisionLog, setProvisionLog] = useState<string[]>([]);
+  const [activateError, setActivateError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     legalName: '',
     shortName: '',
@@ -221,11 +222,103 @@ export default function OnboardAccountPage(): JSX.Element {
     return true;
   }, [step, form]);
 
-  function activate(): void {
+  async function activate(): Promise<void> {
     setActivating(true);
-    setProvisionLog(['Account provisioned — generating workspace…']);
+    setActivateError(null);
+    setProvisionLog(['Posting to /api/orgs · creating Org + BrandKit + Billing in TX…']);
+
+    // Idempotency key — survives wizard reloads if state were persisted; for
+    // now we mint a fresh ULID per activation attempt so retry-after-failure
+    // gets a fresh key. Crypto.randomUUID is universal in modern browsers.
+    const idempotencyKey = `idem_${crypto.randomUUID()}`;
+
+    // Map wizard shape → POST /api/orgs body. UI lets the user pick
+    // 'healthcare' as vertical (UX nicety), but the schema enum only has
+    // charity|commercial — the server coerces, and we hint the caller via
+    // `uiVertical` for analytics.
+    const verticalForApi: 'charity' | 'commercial' =
+      form.vertical === 'commercial' ? 'commercial' : 'charity';
+    const body = {
+      legalName: form.legalName,
+      tradingName: form.shortName,
+      vertical: verticalForApi,
+      uiVertical: form.vertical,
+      regionCode: form.region,
+      brandCode: 'd2d',
+      brandKit: {
+        displayName: form.displayName || form.shortName,
+        ...(form.avatarBg && { primaryColor: form.avatarBg }),
+        ...(form.supportEmail && { supportEmail: form.supportEmail }),
+        ...(form.privacyUrl && { privacyPolicyUrl: form.privacyUrl }),
+        ...(form.termsUrl && { termsUrl: form.termsUrl }),
+      },
+      billing: {
+        platformFeeMonthlyCents: Math.round(form.platformFee * 100),
+        doorRakePercent: form.doorRake,
+        insideSalesRakePercent: form.insideRake,
+        retargetingRakePercent: form.retargetingRake,
+        billingDay: form.billingDay,
+        currency: form.region === 'AU' ? 'AUD' : form.region === 'SG' ? 'SGD' : 'USD',
+      },
+    };
+
+    let res: Response;
+    try {
+      res = await fetch('/api/orgs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Network error';
+      setActivateError(`Network error: ${detail}. Check connection and retry.`);
+      setActivating(false);
+      return;
+    }
+
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const problem = (await res.json()) as { title?: string; detail?: string };
+        detail = problem.detail ?? problem.title ?? detail;
+      } catch {
+        // body wasn't JSON; fall through with HTTP status
+      }
+      if (res.status >= 400 && res.status < 500) {
+        setActivateError(`Cannot create sub-account: ${detail}`);
+      } else {
+        setActivateError(`Server error (${res.status}): ${detail}. The button will let you retry.`);
+      }
+      setActivating(false);
+      return;
+    }
+
+    const json = (await res.json()) as { orgId: string; slug: string | null };
+    const newSlug = json.slug ?? slugify(form.shortName) ?? 'new-account';
+
+    // Show the same staged provisioning narrative for visual feedback,
+    // but the actual write is already committed.
+    //
+    // Where to land the user post-create:
+    //   - /accounts        → proves the new org appears in the portfolio
+    //                        list (the spec's "new org appears in the list").
+    //   - /accounts/[slug]/leads → fully wired to the DB; the new org will
+    //                        have zero leads but the page renders cleanly.
+    //   - /accounts/[slug]/today → fixture-only fallback; "Not found" for
+    //                        new orgs. Tracked as a separate workstream
+    //                        (out of this PR's scope).
+    //
+    // Pick /accounts so the demo proof is immediate; the wizard's narrative
+    // mentions /today as the future-state landing once the per-account
+    // dashboard is wired through the same DB pattern.
     const lines = [
-      `Created org record · slug ${slugify(form.shortName) || 'new-account'}`,
+      `Org row committed · slug=${newSlug} · id=${json.orgId}`,
+      `BrandKit + OrgBilling provisioned in same TX`,
+      `AuditEvent written (org.created) — hash chain extended`,
       `Provisioned ${form.knockerCount} Knocker iOS seats · bundle ${form.bundleId}`,
       `Queued paid-solicitor filings for ${form.states.length} ${form.region === 'US' ? 'states' : 'jurisdictions'}`,
       `Wired ${processorForRegion(form.region)} billing · day ${form.billingDay} of month`,
@@ -236,12 +329,17 @@ export default function OnboardAccountPage(): JSX.Element {
         () => {
           setProvisionLog((prev) => [...prev, l]);
         },
-        (i + 1) * 600,
+        (i + 1) * 350,
       );
     });
-    setTimeout(() => {
-      router.push('/accounts');
-    }, 3500);
+    setTimeout(
+      () => {
+        // Land on the portfolio list — proves the new org appears immediately.
+        router.push(`/accounts?just_onboarded=${encodeURIComponent(newSlug)}`);
+        router.refresh();
+      },
+      lines.length * 350 + 600,
+    );
   }
 
   const monogram = useMemo(() => {
@@ -324,7 +422,10 @@ export default function OnboardAccountPage(): JSX.Element {
             onBack={() => setStep(4)}
             activating={activating}
             provisionLog={provisionLog}
-            onActivate={activate}
+            onActivate={() => {
+              void activate();
+            }}
+            error={activateError}
           />
         )}
 
@@ -940,6 +1041,7 @@ function Step5Review({
   activating,
   provisionLog,
   onActivate,
+  error,
 }: {
   form: FormState;
   monogram: string;
@@ -947,6 +1049,7 @@ function Step5Review({
   activating: boolean;
   provisionLog: string[];
   onActivate: () => void;
+  error: string | null;
 }): JSX.Element {
   return (
     <div className="space-y-5">
@@ -1071,19 +1174,26 @@ function Step5Review({
           </div>
         </Section>
       ) : (
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" leftIcon={<ChevronLeft size={14} />} onClick={onBack}>
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            leftIcon={<Sparkles size={14} />}
-            onClick={onActivate}
-          >
-            Activate sub-account
-          </Button>
-        </div>
+        <>
+          {error && (
+            <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-[12px] text-rose-900">
+              <span className="font-semibold">Activation failed:</span> {error}
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" leftIcon={<ChevronLeft size={14} />} onClick={onBack}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              leftIcon={<Sparkles size={14} />}
+              onClick={onActivate}
+            >
+              Activate sub-account
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -119,13 +119,22 @@ const nextConfig = {
   // the bundle into reverse-engineerable shape.)
   productionBrowserSourceMaps: false,
   output: 'standalone',
-  experimental: { typedRoutes: false },
+  // Prisma client emits a CJS require + binary engine; mark it external so
+  // Next's bundler doesn't try to inline the .node file. Standalone output
+  // still copies the engine into the deploy artifact via Prisma's tracing.
+  // (Next 14 calls this experimental.serverComponentsExternalPackages; Next
+  // 15 promotes it to top-level serverExternalPackages.)
+  experimental: {
+    typedRoutes: false,
+    serverComponentsExternalPackages: ['@prisma/client', '.prisma/client'],
+  },
   transpilePackages: [
     '@d2d/api-client',
     '@d2d/ui-web',
     '@d2d/ui-tokens',
     '@d2d/shared-types',
     '@d2d/shared-utils',
+    '@d2d/database',
   ],
   // Phase 0 demo: ship build despite ESLint nits (unused imports, escaped quotes).
   // Re-enable strict in Phase 1.1 once team has reviewed.

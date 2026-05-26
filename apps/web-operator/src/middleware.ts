@@ -36,6 +36,11 @@ const PUBLIC_PREFIXES = [
   '/_next/',
   '/.well-known/',
   '/api/session/', // synthetic demo issue endpoint
+  // BFF route handlers: auth is enforced inside each handler via
+  // requireSession() returning RFC 7807 problem+json 401, NOT via a 307
+  // redirect to /login. Programmatic callers (curl, the api-client) need a
+  // structured body, not an HTML login page.
+  '/api/orgs',
 ];
 
 export function middleware(req: NextRequest): NextResponse {
