@@ -162,88 +162,101 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
   ];
 
   return (
-    <AppShell
-      sidebar={
-        <Sidebar
-          appName={account?.shortName ?? 'Account'}
-          appTagline="SUB-ACCOUNT"
-          homeHref={`${base}/today`}
-          groups={NAV}
-          userRole={(user?.role as 'org_admin') ?? 'org_admin'}
-          footer={
-            <>
-              <Link
-                href="/accounts"
-                className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
-              >
-                <ArrowLeft size={10} /> Back to Command Centre
-              </Link>
-              <div className="flex items-center gap-2">
-                {account && <Monogram letters={accountMonogram(account.shortName)} small />}
-                <span>{account?.shortName}</span>
-              </div>
-              <div className="text-soft">
-                {account?.vertical} · {account?.region}
-              </div>
-            </>
-          }
+    <>
+      {/* Per-account brand accent — 2px stripe in the account's avatarBg
+          colour, painted across the very top of the viewport. Free brand
+          differentiator: a screenshot of Hope Forward vs PestMax vs World
+          Vision instantly reads as different products. */}
+      {account?.avatarBg && (
+        <div
+          aria-hidden
+          className="fixed top-0 left-0 right-0 z-[60] h-[2px] pointer-events-none"
+          style={{ background: account.avatarBg }}
         />
-      }
-      topBar={
-        <TopBar
-          title={pageTitle}
-          env={process.env.NEXT_PUBLIC_ENV ?? 'local'}
-          rightSlot={
-            <div className="flex items-center gap-3">
-              <Link
-                href="/command-centre"
-                className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted hover:bg-paper hover:text-ink transition"
-                title="Back to Door 2 Digital Command Centre"
-              >
-                <Compass size={12} /> Command Centre
-              </Link>
-              <button
-                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
-                title="Search"
-              >
-                <Search size={16} className="text-soft" />
-              </button>
-              <AccountSwitcher currentSlug={accountSlug} />
-              <button
-                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
-                title="Notifications"
-              >
-                <Bell size={16} className="text-soft" />
-              </button>
-              <span className="mono" aria-label="Signed-in user initials">
-                {user?.initials ?? '··'}
-              </span>
-              {user && (
-                <div className="hidden md:block text-[10.5px] leading-tight">
-                  <div className="font-medium text-ink truncate max-w-[120px]">
-                    {user.givenName}
-                  </div>
-                  <div className="text-muted uppercase tracking-wider text-[9.5px]">
-                    {user.role}
-                  </div>
+      )}
+      <AppShell
+        sidebar={
+          <Sidebar
+            appName={account?.shortName ?? 'Account'}
+            appTagline="SUB-ACCOUNT"
+            homeHref={`${base}/today`}
+            groups={NAV}
+            userRole={(user?.role as 'org_admin') ?? 'org_admin'}
+            footer={
+              <>
+                <Link
+                  href="/accounts"
+                  className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
+                >
+                  <ArrowLeft size={10} /> Back to Command Centre
+                </Link>
+                <div className="flex items-center gap-2">
+                  {account && <Monogram letters={accountMonogram(account.shortName)} small />}
+                  <span>{account?.shortName}</span>
                 </div>
-              )}
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                disabled={signingOut}
-                title="Sign out"
-                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center text-soft hover:text-ink transition disabled:opacity-50"
-              >
-                <LogOut size={14} />
-              </button>
-            </div>
-          }
-        />
-      }
-    >
-      {children}
-    </AppShell>
+                <div className="text-soft">
+                  {account?.vertical} · {account?.region}
+                </div>
+              </>
+            }
+          />
+        }
+        topBar={
+          <TopBar
+            title={pageTitle}
+            env={process.env.NEXT_PUBLIC_ENV ?? 'local'}
+            rightSlot={
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/command-centre"
+                  className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-muted hover:bg-paper hover:text-ink transition"
+                  title="Back to Door 2 Digital Command Centre"
+                >
+                  <Compass size={12} /> Command Centre
+                </Link>
+                <button
+                  className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
+                  title="Search"
+                >
+                  <Search size={16} className="text-soft" />
+                </button>
+                <AccountSwitcher currentSlug={accountSlug} />
+                <button
+                  className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center"
+                  title="Notifications"
+                >
+                  <Bell size={16} className="text-soft" />
+                </button>
+                <span className="mono" aria-label="Signed-in user initials">
+                  {user?.initials ?? '··'}
+                </span>
+                {user && (
+                  <div className="hidden md:block text-[10.5px] leading-tight">
+                    <div className="font-medium text-ink truncate max-w-[120px]">
+                      {user.givenName}
+                    </div>
+                    <div className="text-muted uppercase tracking-wider text-[9.5px]">
+                      {user.role}
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  disabled={signingOut}
+                  title="Sign out"
+                  className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center text-soft hover:text-ink transition disabled:opacity-50"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            }
+          />
+        }
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }
 
