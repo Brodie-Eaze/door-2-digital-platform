@@ -59,3 +59,11 @@ export const radius = {
 
 export type Palette = typeof palette;
 export type Typography = typeof typography;
+
+/**
+ * Canonical taxonomy — single source of truth for every status pill /
+ * filter chip / category label across the operator surface.
+ *
+ * Re-exported here so consumers can `import { LEAD_STATUS_LABEL } from '@d2d/ui-tokens'`.
+ */
+export * from './taxonomy';

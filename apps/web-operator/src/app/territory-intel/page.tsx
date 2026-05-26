@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, MapPin, Eye, Plus, Filter, X, Check } from 'lucide-react';
-import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import {
+  Banner,
+  Button,
+  FilterChip,
+  FilterChipStrip,
+  KpiCard,
+  Section,
+  StatusPill,
+} from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import {
   TerritoryHeatmap,
@@ -303,10 +311,7 @@ export default function TerritoryIntelPage(): JSX.Element {
           title="Propensity heatmap · Texas"
           subtitle="Census-tract granularity · click any cell to drill in"
         >
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            <span className="text-[10px] uppercase tracking-wider text-muted mr-1 font-semibold">
-              Show
-            </span>
+          <FilterChipStrip label="Show" className="mb-3">
             {(
               [
                 { v: 'all', label: 'All zones', n: cellCounts.total },
@@ -316,19 +321,16 @@ export default function TerritoryIntelPage(): JSX.Element {
                 { v: 'blocked', label: 'Blocked', n: cellCounts.blocked },
               ] as Array<{ v: StatusFilter; label: string; n: number }>
             ).map((f) => (
-              <button
+              <FilterChip
                 key={f.v}
+                active={statusFilter === f.v}
                 onClick={() => setStatusFilter(f.v)}
-                className={
-                  statusFilter === f.v
-                    ? 'px-2.5 py-1 rounded-full bg-ink text-surface text-[11px] font-semibold transition'
-                    : 'px-2.5 py-1 rounded-full bg-paper text-muted hover:text-ink text-[11px] font-medium border border-line2 transition'
-                }
+                count={f.n}
               >
-                {f.label} <span className="numeric opacity-70">({f.n})</span>
-              </button>
+                {f.label}
+              </FilterChip>
             ))}
-          </div>
+          </FilterChipStrip>
           <TerritoryHeatmap
             onSelect={setSelectedCell}
             assignedSet={assignedSet}

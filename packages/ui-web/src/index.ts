@@ -18,6 +18,7 @@ export { Card } from './components/Card';
 export { Section } from './components/Section';
 export { KpiCard } from './components/KpiCard';
 export { StatusPill } from './components/StatusPill';
+export { FilterChip, FilterChipStrip } from './components/FilterChip';
 export { Money } from './components/Money';
 export { RegionBadge } from './components/RegionBadge';
 export { EmptyState } from './components/EmptyState';

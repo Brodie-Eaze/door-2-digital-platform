@@ -8,6 +8,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./taxonomy": "./src/taxonomy.ts",
     "./tailwind-preset": "./src/tailwind-preset.cjs",
     "./globals.css": "./src/styles/globals.css"
   },

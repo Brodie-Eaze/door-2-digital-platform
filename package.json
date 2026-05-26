@@ -26,6 +26,7 @@
     "db:studio": "pnpm --filter api db:studio",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "taxonomy:check": "bash scripts/check-taxonomy.sh",
     "prepare": "husky"
   },
   "lint-staged": {

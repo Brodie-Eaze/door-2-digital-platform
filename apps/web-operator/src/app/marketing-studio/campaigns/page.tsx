@@ -17,6 +17,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_STATUS_TONE } from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
@@ -509,20 +510,11 @@ const CAMPAIGNS: Campaign[] = [
 ];
 
 function statusTone(s: CampaignStatus): 'success' | 'muted' | 'warn' | 'info' {
-  switch (s) {
-    case 'active':
-      return 'success';
-    case 'ended':
-      return 'muted';
-    case 'paused':
-      return 'warn';
-    case 'pending_review':
-      return 'info';
-  }
+  return CAMPAIGN_STATUS_TONE[s];
 }
 
 function statusLabel(s: CampaignStatus): string {
-  return s === 'pending_review' ? 'Pending review' : s.charAt(0).toUpperCase() + s.slice(1);
+  return CAMPAIGN_STATUS_LABEL[s];
 }
 
 function channelBadge(c: Channel): string {

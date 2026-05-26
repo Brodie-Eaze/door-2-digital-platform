@@ -38,7 +38,16 @@ import {
   Send,
   Lock,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import {
+  Banner,
+  Button,
+  FilterChip,
+  FilterChipStrip,
+  KpiCard,
+  Section,
+  StatusPill,
+} from '@d2d/ui-web';
+import { PROVIDER_CONN_LABEL, PROVIDER_CONN_TONE } from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -497,29 +506,11 @@ const OUTBOUND_LOG: OutboundCall[] = [
 // ───────────────────────────────────────────────────────────────────────────
 
 function statusToTone(s: ConnectionStatus): 'success' | 'info' | 'muted' | 'danger' {
-  switch (s) {
-    case 'connected':
-      return 'success';
-    case 'sandbox':
-      return 'info';
-    case 'not_connected':
-      return 'muted';
-    case 'error':
-      return 'danger';
-  }
+  return PROVIDER_CONN_TONE[s];
 }
 
 function statusLabel(s: ConnectionStatus): string {
-  switch (s) {
-    case 'connected':
-      return 'Connected';
-    case 'sandbox':
-      return 'Sandbox';
-    case 'not_connected':
-      return 'Not connected';
-    case 'error':
-      return 'Error';
-  }
+  return PROVIDER_CONN_LABEL[s];
 }
 
 function categoryIcon(c: ProviderCard['category']): typeof Sparkles {
@@ -644,23 +635,13 @@ export default function IntegrationsPage(): JSX.Element {
           title="Providers"
           subtitle="One card per registered adapter · filter by capability category"
           action={
-            <div className="flex items-center gap-1.5">
+            <FilterChipStrip>
               {CATEGORY_FILTERS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setFilter(c)}
-                  className={
-                    filter === c
-                      ? 'text-[10.5px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-ink text-surface transition'
-                      : 'text-[10.5px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full text-muted hover:text-ink transition border border-line2'
-                  }
-                  aria-pressed={filter === c}
-                >
+                <FilterChip key={c} active={filter === c} onClick={() => setFilter(c)}>
                   {c}
-                </button>
+                </FilterChip>
               ))}
-            </div>
+            </FilterChipStrip>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

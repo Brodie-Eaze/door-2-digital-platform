@@ -31,6 +31,7 @@ import {
   Target,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, StatusPill } from '@d2d/ui-web';
+import { LEAD_STATUS_LABEL, LEAD_STATUS_TONE, type LeadStatus } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
 import { PipelineLeadConversation } from '@/components/PipelineLeadConversation';
 import { accountData, PIPELINE_STAGES, type LeadRow } from '@/lib/account-fixtures';
@@ -629,16 +630,8 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
                       <div className="text-[10px] text-muted">{l.address}</div>
                     </td>
                     <td>
-                      <StatusPill
-                        tone={
-                          l.status === 'converted'
-                            ? 'success'
-                            : l.status === 'lost'
-                              ? 'muted'
-                              : 'info'
-                        }
-                      >
-                        {l.status.replace('_', ' ')}
+                      <StatusPill tone={LEAD_STATUS_TONE[l.status as LeadStatus] ?? 'info'}>
+                        {LEAD_STATUS_LABEL[l.status as LeadStatus] ?? l.status.replace('_', ' ')}
                       </StatusPill>
                     </td>
                     <td>

@@ -19,7 +19,21 @@ import {
   Activity,
   TrendingUp,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import {
+  Banner,
+  Button,
+  FilterChip,
+  FilterChipStrip,
+  KpiCard,
+  Money,
+  Section,
+  StatusPill,
+} from '@d2d/ui-web';
+import {
+  CREATIVE_STATUS_LABEL,
+  CREATIVE_STATUS_TONE,
+  type CreativeStatus,
+} from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
@@ -38,7 +52,8 @@ type Vertical = 'charity' | 'pest' | 'solar' | 'energy';
 type Region = 'US' | 'AU' | 'SG';
 type Channel = 'Meta' | 'Google' | 'TikTok' | 'YouTube';
 type Format = 'image' | 'carousel' | 'video';
-type Status = 'draft' | 'review' | 'approved' | 'published' | 'blocked';
+/** Aliased to the canonical taxonomy — display labels + tones come from @d2d/ui-tokens. */
+type Status = CreativeStatus;
 type Aspect = 'square' | 'portrait' | 'vertical' | 'video';
 
 interface LibraryCreative {
@@ -1060,18 +1075,7 @@ const LIBRARY: LibraryCreative[] = [
 ];
 
 function statusTone(s: Status): 'success' | 'info' | 'warn' | 'danger' | 'muted' {
-  switch (s) {
-    case 'published':
-      return 'success';
-    case 'approved':
-      return 'info';
-    case 'review':
-      return 'warn';
-    case 'blocked':
-      return 'danger';
-    case 'draft':
-      return 'muted';
-  }
+  return CREATIVE_STATUS_TONE[s];
 }
 
 function aspectClass(a: Aspect): string {
@@ -1135,11 +1139,11 @@ const CHANNEL_OPTS: Array<{ value: Channel | 'all'; label: string }> = [
 ];
 const STATUS_OPTS: Array<{ value: Status | 'all'; label: string }> = [
   { value: 'all', label: 'All status' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'review', label: 'Review' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'published', label: 'Published' },
-  { value: 'blocked', label: 'Blocked' },
+  { value: 'draft', label: CREATIVE_STATUS_LABEL.draft },
+  { value: 'review', label: CREATIVE_STATUS_LABEL.review },
+  { value: 'approved', label: CREATIVE_STATUS_LABEL.approved },
+  { value: 'published', label: CREATIVE_STATUS_LABEL.published },
+  { value: 'blocked', label: CREATIVE_STATUS_LABEL.blocked },
 ];
 
 export default function CreativeLibraryPage(): JSX.Element {
@@ -1238,42 +1242,54 @@ export default function CreativeLibraryPage(): JSX.Element {
                 />
               </div>
               <span className="w-px h-4 bg-line2 mx-1" />
-              {VERTICAL_OPTS.map((opt) => (
-                <Pill
-                  key={opt.value}
-                  label={opt.label}
-                  active={vertical === opt.value}
-                  onClick={() => setVertical(opt.value)}
-                />
-              ))}
+              <FilterChipStrip label="Vertical">
+                {VERTICAL_OPTS.map((opt) => (
+                  <FilterChip
+                    key={opt.value}
+                    active={vertical === opt.value}
+                    onClick={() => setVertical(opt.value)}
+                  >
+                    {opt.label}
+                  </FilterChip>
+                ))}
+              </FilterChipStrip>
               <span className="w-px h-4 bg-line2 mx-1" />
-              {REGION_OPTS.map((opt) => (
-                <Pill
-                  key={opt.value}
-                  label={opt.label}
-                  active={region === opt.value}
-                  onClick={() => setRegion(opt.value)}
-                />
-              ))}
+              <FilterChipStrip label="Region">
+                {REGION_OPTS.map((opt) => (
+                  <FilterChip
+                    key={opt.value}
+                    active={region === opt.value}
+                    onClick={() => setRegion(opt.value)}
+                  >
+                    {opt.label}
+                  </FilterChip>
+                ))}
+              </FilterChipStrip>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {CHANNEL_OPTS.map((opt) => (
-                <Pill
-                  key={opt.value}
-                  label={opt.label}
-                  active={channel === opt.value}
-                  onClick={() => setChannel(opt.value)}
-                />
-              ))}
+              <FilterChipStrip label="Channel">
+                {CHANNEL_OPTS.map((opt) => (
+                  <FilterChip
+                    key={opt.value}
+                    active={channel === opt.value}
+                    onClick={() => setChannel(opt.value)}
+                  >
+                    {opt.label}
+                  </FilterChip>
+                ))}
+              </FilterChipStrip>
               <span className="w-px h-4 bg-line2 mx-1" />
-              {STATUS_OPTS.map((opt) => (
-                <Pill
-                  key={opt.value}
-                  label={opt.label}
-                  active={status === opt.value}
-                  onClick={() => setStatus(opt.value)}
-                />
-              ))}
+              <FilterChipStrip label="Status">
+                {STATUS_OPTS.map((opt) => (
+                  <FilterChip
+                    key={opt.value}
+                    active={status === opt.value}
+                    onClick={() => setStatus(opt.value)}
+                  >
+                    {opt.label}
+                  </FilterChip>
+                ))}
+              </FilterChipStrip>
               <div className="ml-auto flex items-center gap-2">
                 <Button variant="ghost" size="sm" leftIcon={<SlidersHorizontal size={13} />}>
                   Advanced
@@ -1457,7 +1473,9 @@ function LibraryCard({
           )}
         </div>
         <div className="flex items-center justify-between">
-          <StatusPill tone={statusTone(creative.status)}>{creative.status}</StatusPill>
+          <StatusPill tone={statusTone(creative.status)}>
+            {CREATIVE_STATUS_LABEL[creative.status]}
+          </StatusPill>
           <div className="flex items-center gap-0.5">
             <button
               type="button"
@@ -1654,29 +1672,7 @@ function DetailDrawer({
   );
 }
 
-function Pill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? 'text-[10.5px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-ink text-surface transition'
-          : 'text-[10.5px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full border border-line2 text-muted hover:text-ink hover:border-soft transition'
-      }
-    >
-      {label}
-    </button>
-  );
-}
+// (Local <Pill> removed in Polish sprint F — replaced by <FilterChip> from @d2d/ui-web.)
 
 function Metric({
   icon,
