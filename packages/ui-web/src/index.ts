@@ -23,6 +23,10 @@ export { RegionBadge } from './components/RegionBadge';
 export { EmptyState } from './components/EmptyState';
 export { Banner } from './components/Banner';
 
+// Motion primitives
+export { Reveal } from './components/Reveal';
+export { Skeleton } from './components/Skeleton';
+
 // Form primitives
 export { Button } from './components/Button';
 export { Input } from './components/Input';

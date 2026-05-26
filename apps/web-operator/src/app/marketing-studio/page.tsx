@@ -19,7 +19,7 @@ import {
   RotateCw,
   Sparkle,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, KpiCard, Money, Reveal, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { pickCreativeImage, inferTheme, type CreativeTheme } from '@/lib/creative-images';
 
@@ -723,7 +723,7 @@ export default function MarketingStudioPage(): JSX.Element {
           </span>
         </Banner>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Reveal delay={0} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label="Creatives this week"
             value="412"
@@ -746,55 +746,59 @@ export default function MarketingStudioPage(): JSX.Element {
           <KpiCard label="Active campaigns" value="28" hint="Meta + Google + TikTok" />
           <KpiCard label="Rolling ROAS" value="5.2x" delta="+0.4x" deltaTone="positive" />
           <KpiCard label="AI assist time saved" value="184 hr" hint="vs manual baseline · 7d" />
-        </div>
+        </Reveal>
 
-        <Section
-          title="Pipeline · today"
-          subtitle="Brief → Compose → Variation → Review → Publish → Measure"
-        >
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            {PIPELINE.map((stage, idx) => {
-              const Icon = stage.icon;
-              return (
-                <div key={stage.label} className="card card-pad relative">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded bg-accentSoft text-accent flex items-center justify-center">
-                      <Icon size={13} />
-                    </span>
-                    <div className="text-[11.5px] font-semibold uppercase tracking-wider text-muted">
-                      {stage.label}
+        <Reveal delay={80}>
+          <Section
+            title="Pipeline · today"
+            subtitle="Brief → Compose → Variation → Review → Publish → Measure"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              {PIPELINE.map((stage, idx) => {
+                const Icon = stage.icon;
+                return (
+                  <div key={stage.label} className="card card-pad relative">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-6 h-6 rounded bg-accentSoft text-accent flex items-center justify-center">
+                        <Icon size={13} />
+                      </span>
+                      <div className="text-[11.5px] font-semibold uppercase tracking-wider text-muted">
+                        {stage.label}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-[22px] font-semibold text-ink tracking-tight numeric">
-                    {stage.todayCount.toLocaleString()}
-                  </div>
-                  <div className="text-[10.5px] text-muted mt-0.5">{stage.detail}</div>
-                  {idx < PIPELINE.length - 1 && (
-                    <div className="hidden md:block absolute right-[-9px] top-1/2 -translate-y-1/2 text-soft text-[14px]">
-                      →
+                    <div className="text-[22px] font-semibold text-ink tracking-tight numeric">
+                      {stage.todayCount.toLocaleString()}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Section>
-
-        <Section
-          title="Top-performing creatives · last 7 days"
-          subtitle="Ranked by ROAS · scroll horizontally · click any tile to inspect"
-          paddedBody={false}
-        >
-          <div className="overflow-x-auto px-4 py-4">
-            <div className="flex gap-3 min-w-max">
-              {TOP_CREATIVES.map((c) => (
-                <TopCreativeCard key={c.id} creative={c} />
-              ))}
+                    <div className="text-[10.5px] text-muted mt-0.5">{stage.detail}</div>
+                    {idx < PIPELINE.length - 1 && (
+                      <div className="hidden md:block absolute right-[-9px] top-1/2 -translate-y-1/2 text-soft text-[14px]">
+                        →
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        </Section>
+          </Section>
+        </Reveal>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Reveal delay={160}>
+          <Section
+            title="Top-performing creatives · last 7 days"
+            subtitle="Ranked by ROAS · scroll horizontally · click any tile to inspect"
+            paddedBody={false}
+          >
+            <div className="overflow-x-auto px-4 py-4">
+              <div className="flex gap-3 min-w-max">
+                {TOP_CREATIVES.map((c) => (
+                  <TopCreativeCard key={c.id} creative={c} />
+                ))}
+              </div>
+            </div>
+          </Section>
+        </Reveal>
+
+        <Reveal delay={240} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 space-y-5">
             <Section
               title="Recent jobs"
@@ -998,7 +1002,7 @@ export default function MarketingStudioPage(): JSX.Element {
               </div>
             </Section>
           </div>
-        </div>
+        </Reveal>
       </div>
     </PlatformShell>
   );

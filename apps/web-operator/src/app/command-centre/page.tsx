@@ -1,7 +1,7 @@
 'use client';
 
 import { Radio } from 'lucide-react';
-import { Banner, KpiCard } from '@d2d/ui-web';
+import { Banner, KpiCard, Reveal } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { FLEET_REPS } from '@/lib/fleet-reps';
@@ -161,7 +161,7 @@ export default function CommandCentrePage(): JSX.Element {
         </Banner>
 
         {/* Fleet KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <Reveal delay={0} className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <KpiCard
             label="Active iPads"
             value={active}
@@ -180,17 +180,19 @@ export default function CommandCentrePage(): JSX.Element {
             deltaTone="positive"
             hint={`${((totalConv / totalKnocks) * 100).toFixed(1)}% rate`}
           />
-        </div>
+        </Reveal>
 
         {/* The main live map */}
-        <HQLiveMap />
+        <Reveal delay={80}>
+          <HQLiveMap />
+        </Reveal>
 
         {/* AI Insights + alerts row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Reveal delay={160} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <AiNextZonesPanel zones={HQ_AI_SUGGESTIONS} scopeLabel={HQ_SCOPE_LABEL} />
           <AnomaliesPanel anomalies={HQ_ANOMALIES} scopeLabel={HQ_SCOPE_LABEL} />
           <LiveActivityFeed events={HQ_ACTIVITY} scopeLabel={HQ_SCOPE_LABEL} />
-        </div>
+        </Reveal>
 
         {/* Quick push-to-field action */}
         <PushToFieldStrip

@@ -24,7 +24,7 @@ import {
   ArrowUpRight,
   ChevronRight,
 } from 'lucide-react';
-import { AnomalyCard, KpiCard, Money, Section, StatusPill, Banner } from '@d2d/ui-web';
+import { AnomalyCard, KpiCard, Money, Section, StatusPill, Banner, Reveal } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { accountData, PIPELINE_STAGES } from '@/lib/account-fixtures';
 
@@ -188,7 +188,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
         </Banner>
 
         {/* Row 1: KPI rail (6 cards) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Reveal delay={0} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label={`${isCharity ? 'Donations' : isHealth ? 'Gifts' : 'Revenue'} today`}
             value={<Money cents={todayRev} region={region} />}
@@ -229,10 +229,10 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
             deltaTone="positive"
             hint="automations fired"
           />
-        </div>
+        </Reveal>
 
         {/* Row 2: Revenue chart + AI summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Reveal delay={80} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <Section
               title={`${isCharity ? 'Giving' : isHealth ? 'Pledges' : 'Revenue'} · 14-day trend`}
@@ -376,10 +376,10 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
               </button>
             </div>
           </Section>
-        </div>
+        </Reveal>
 
         {/* Row 3: Funnel + Top performers */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Reveal delay={160} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <Section
               title="Conversion funnel · today"
@@ -447,10 +447,10 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
               ))}
             </div>
           </Section>
-        </div>
+        </Reveal>
 
         {/* Row 4: Anomalies + Recent activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Reveal delay={240} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="h-section flex items-center gap-1.5">
@@ -493,7 +493,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
               ))}
             </div>
           </Section>
-        </div>
+        </Reveal>
 
         {/* Row 5: Pipeline snapshot + Knocker live status */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

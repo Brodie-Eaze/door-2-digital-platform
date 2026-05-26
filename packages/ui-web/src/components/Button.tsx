@@ -17,7 +17,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT: Record<Variant, string> = {
-  primary: 'bg-ink text-surface hover:bg-ink2 active:bg-ink2 shadow-sm',
+  primary: 'bg-ink text-surface hover:bg-ink2 hover:shadow active:bg-ink2 shadow-sm',
   secondary: 'bg-surface text-ink border border-line hover:bg-paper active:bg-line2',
   ghost: 'bg-transparent text-ink hover:bg-paper active:bg-line2',
   danger: 'bg-dangerSoft text-danger border border-danger/30 hover:bg-danger/10',
@@ -45,9 +45,11 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium tracking-tight transition',
+        'inline-flex items-center justify-center rounded-lg font-medium tracking-tight',
+        'transition-[background-color,color,box-shadow,transform] duration-150 ease-out',
+        'active:scale-[0.985] motion-reduce:transform-none motion-reduce:transition-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
-        'disabled:opacity-50 disabled:cursor-not-allowed',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
         loading && 'animate-pulse',
         VARIANT[variant],
         SIZE[size],

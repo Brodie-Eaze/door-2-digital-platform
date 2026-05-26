@@ -106,9 +106,9 @@ export function Sidebar({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] tracking-tight transition ${
+                  className={`nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] tracking-tight transition-colors duration-150 ease-out ${
                     active
-                      ? 'bg-ink text-surface font-medium shadow-sm'
+                      ? 'nav-active bg-ink text-surface font-medium shadow-sm'
                       : 'text-ink2 hover:bg-paper'
                   }`}
                 >

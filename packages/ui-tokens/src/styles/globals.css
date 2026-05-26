@@ -115,3 +115,95 @@ body {
   background: rgba(15, 23, 42, 0.04);
   color: #475569;
 }
+
+/* ---------------------------------------------------------------------------
+   D2D motion system
+   --------------------------------------------------------------------------- */
+
+/* Knocker heartbeat — applied to Leaflet CircleMarker SVG paths via the
+   `pathOptions.className` escape hatch (react-leaflet doesn't expose direct
+   keyframe binding). Halo expands + fades on a 2.6s heartbeat to make
+   "active" reps feel literally alive. */
+@keyframes d2d-knock-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+}
+.d2d-knock-pulse {
+  animation: d2d-knock-pulse 2.6s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d2d-knock-pulse {
+    animation: none;
+    opacity: 0.2;
+  }
+}
+
+/* Sidebar active-item left accent bar — slides in to 2px on .nav-active.
+   Uses :before so we don't have to touch layout. */
+.nav-item {
+  position: relative;
+}
+.nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 0;
+  background: theme('colors.accent');
+  border-radius: 0 2px 2px 0;
+  transition: width 200ms ease-out;
+}
+.nav-item.nav-active::before {
+  width: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-item::before {
+    transition: none;
+  }
+}
+
+/* Route-transition loader — 2px horizontal bar that sweeps across via
+   a moving gradient. Used in root + per-account loading.tsx. */
+.d2d-route-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 70;
+  overflow: hidden;
+  background: theme('colors.line2');
+  pointer-events: none;
+}
+.d2d-route-loader::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--d2d-loader-color, theme('colors.accent')) 50%,
+    transparent 100%
+  );
+  animation: d2d-loader-sweep 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d2d-route-loader::after {
+    animation: none;
+    background: var(--d2d-loader-color, theme('colors.accent'));
+    opacity: 0.5;
+  }
+}

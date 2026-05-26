@@ -139,6 +139,7 @@ export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JS
                       weight: 1,
                       fillColor: color,
                       fillOpacity: 0.2,
+                      className: 'd2d-knock-pulse',
                     }}
                     interactive={false}
                   />

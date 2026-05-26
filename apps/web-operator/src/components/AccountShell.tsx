@@ -35,7 +35,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
+import { AppShell, Sidebar, TopBar, Reveal, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
 import { getAccount, accountMonogram } from '@/lib/accounts';
 
@@ -176,30 +176,32 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       )}
       <AppShell
         sidebar={
-          <Sidebar
-            appName={account?.shortName ?? 'Account'}
-            appTagline="SUB-ACCOUNT"
-            homeHref={`${base}/today`}
-            groups={NAV}
-            userRole={(user?.role as 'org_admin') ?? 'org_admin'}
-            footer={
-              <>
-                <Link
-                  href="/accounts"
-                  className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
-                >
-                  <ArrowLeft size={10} /> Back to Command Centre
-                </Link>
-                <div className="flex items-center gap-2">
-                  {account && <Monogram letters={accountMonogram(account.shortName)} small />}
-                  <span>{account?.shortName}</span>
-                </div>
-                <div className="text-soft">
-                  {account?.vertical} · {account?.region}
-                </div>
-              </>
-            }
-          />
+          <AccountSidebarReveal key={accountSlug}>
+            <Sidebar
+              appName={account?.shortName ?? 'Account'}
+              appTagline="SUB-ACCOUNT"
+              homeHref={`${base}/today`}
+              groups={NAV}
+              userRole={(user?.role as 'org_admin') ?? 'org_admin'}
+              footer={
+                <>
+                  <Link
+                    href="/accounts"
+                    className="flex items-center gap-1.5 text-[10px] text-accent hover:underline mb-1.5"
+                  >
+                    <ArrowLeft size={10} /> Back to Command Centre
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    {account && <Monogram letters={accountMonogram(account.shortName)} small />}
+                    <span>{account?.shortName}</span>
+                  </div>
+                  <div className="text-soft">
+                    {account?.vertical} · {account?.region}
+                  </div>
+                </>
+              }
+            />
+          </AccountSidebarReveal>
         }
         topBar={
           <TopBar
@@ -257,6 +259,31 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
         {children}
       </AppShell>
     </>
+  );
+}
+
+/**
+ * Sub-account sidebar entry transition — slides in from the left by 12px and
+ * fades in over 280ms when the user drops into a new account context. Keyed
+ * by `accountSlug` upstream so React remounts the wrapper per account entry,
+ * making the motion read as "you entered a new context" rather than constant
+ * decoration. Respects prefers-reduced-motion.
+ */
+function AccountSidebarReveal({ children }: { children: React.ReactNode }): JSX.Element {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // Defer one frame so the initial 0/-12 paints before transitioning.
+    const t = window.setTimeout(() => setMounted(true), 16);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div
+      className={`transition-[opacity,transform] duration-[280ms] ease-out motion-reduce:transition-none motion-reduce:transform-none motion-reduce:opacity-100 h-full ${
+        mounted ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-3'
+      }`}
+    >
+      {children}
+    </div>
   );
 }
 

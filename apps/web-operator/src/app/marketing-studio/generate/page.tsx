@@ -14,7 +14,7 @@ import {
   Lock,
   Eye,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, KpiCard, Section, Skeleton, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
@@ -360,10 +360,10 @@ export default function GenerateCreativePage(): JSX.Element {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="card overflow-hidden">
-                      <div className="aspect-[4/5] bg-paper animate-pulse" />
+                      <Skeleton height="aspect-[4/5]" rounded="rounded-none" />
                       <div className="p-2.5 space-y-2">
-                        <div className="h-3 bg-paper rounded animate-pulse w-3/4" />
-                        <div className="h-3 bg-paper rounded animate-pulse w-1/2" />
+                        <Skeleton height="h-3" width="w-3/4" />
+                        <Skeleton height="h-3" width="w-1/2" />
                       </div>
                     </div>
                   ))}
