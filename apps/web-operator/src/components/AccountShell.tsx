@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   MessageCircle,
@@ -30,11 +32,40 @@ import {
   Sparkles,
   Radio,
   Target,
+  LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
 import { getAccount, accountMonogram } from '@/lib/accounts';
+
+interface SessionUser {
+  userId: string;
+  email: string;
+  role: string;
+  initials: string;
+  givenName: string;
+  demo: boolean;
+}
+
+function useSession(): SessionUser | null {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/session/me', { credentials: 'include' })
+      .then(async (r) => (r.ok ? ((await r.json()) as { session: SessionUser }) : null))
+      .then((data) => {
+        if (!cancelled && data) setUser(data.session);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return user;
+}
 
 interface AccountShellProps {
   accountSlug: string;
@@ -52,6 +83,19 @@ interface AccountShellProps {
 export function AccountShell({ accountSlug, pageTitle, children }: AccountShellProps): JSX.Element {
   const account = getAccount(accountSlug);
   const base = `/accounts/${accountSlug}`;
+  const router = useRouter();
+  const user = useSession();
+  const [signingOut, setSigningOut] = useState(false);
+  async function signOut(): Promise<void> {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await fetch('/api/session/logout', { method: 'POST', credentials: 'include' });
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
+  }
 
   const NAV: NavGroup[] = [
     {
@@ -125,7 +169,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
           appTagline="SUB-ACCOUNT"
           homeHref={`${base}/today`}
           groups={NAV}
-          userRole="org_admin"
+          userRole={(user?.role as 'org_admin') ?? 'org_admin'}
           footer={
             <>
               <Link
@@ -171,7 +215,28 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
               >
                 <Bell size={16} className="text-soft" />
               </button>
-              <span className="mono">BR</span>
+              <span className="mono" aria-label="Signed-in user initials">
+                {user?.initials ?? '··'}
+              </span>
+              {user && (
+                <div className="hidden md:block text-[10.5px] leading-tight">
+                  <div className="font-medium text-ink truncate max-w-[120px]">
+                    {user.givenName}
+                  </div>
+                  <div className="text-muted uppercase tracking-wider text-[9.5px]">
+                    {user.role}
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                disabled={signingOut}
+                title="Sign out"
+                className="w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center text-soft hover:text-ink transition disabled:opacity-50"
+              >
+                <LogOut size={14} />
+              </button>
             </div>
           }
         />

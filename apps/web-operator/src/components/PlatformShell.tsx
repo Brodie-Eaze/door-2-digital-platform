@@ -9,6 +9,7 @@
  * sub-account's self-contained workspace (rendered by AccountShell).
  */
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Building2,
   CreditCard,
@@ -30,8 +31,18 @@ import {
   Megaphone,
   ExternalLink,
   Plug,
+  LogOut,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
+
+interface SessionUser {
+  userId: string;
+  email: string;
+  role: string;
+  initials: string;
+  givenName: string;
+  demo: boolean;
+}
 
 const NAV: NavGroup[] = [
   {
@@ -164,12 +175,71 @@ function RegionToggle(): JSX.Element {
   );
 }
 
+function useSession(): SessionUser | null {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/session/me', { credentials: 'include' })
+      .then(async (r) => (r.ok ? ((await r.json()) as { session: SessionUser }) : null))
+      .then((data) => {
+        if (!cancelled && data) setUser(data.session);
+      })
+      .catch(() => {
+        // ignore — middleware handles unauth redirect
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return user;
+}
+
+function UserBadge({ user }: { user: SessionUser | null }): JSX.Element {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  async function signOut(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetch('/api/session/logout', { method: 'POST', credentials: 'include' });
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
+  }
+  const initials = user?.initials ?? '··';
+  const name = user?.givenName ?? '—';
+  const role = user?.role ?? 'viewer';
+  return (
+    <div className="flex items-center gap-2">
+      <span className="mono" aria-hidden>
+        {initials}
+      </span>
+      <div className="text-xs leading-tight hidden sm:block">
+        <div className="font-medium text-ink truncate max-w-[180px]">{name}</div>
+        <div className="text-muted text-[10px] uppercase tracking-wider">{role}</div>
+      </div>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        disabled={busy}
+        title="Sign out"
+        className="ml-1 w-8 h-8 rounded-md hover:bg-paper flex items-center justify-center text-soft hover:text-ink transition disabled:opacity-50"
+      >
+        <LogOut size={14} />
+      </button>
+    </div>
+  );
+}
+
 interface PlatformShellProps {
   children: React.ReactNode;
   pageTitle?: string;
 }
 
 export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.Element {
+  const user = useSession();
+  const sidebarEmail = user?.email ?? 'brodie@door2digital.com';
   return (
     <AppShell
       sidebar={
@@ -178,11 +248,16 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
           appTagline="COMMAND CENTRE"
           homeHref="/command-centre"
           groups={NAV}
-          userRole="super_admin"
+          userRole={(user?.role as 'super_admin') ?? 'super_admin'}
           footer={
             <>
               <div>v0.5.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</div>
-              <div className="truncate">brodie@door2digital.com</div>
+              <div className="truncate">{sidebarEmail}</div>
+              {user?.demo && (
+                <div className="text-amber-700 mt-0.5 text-[9.5px] uppercase tracking-wider">
+                  Demo session
+                </div>
+              )}
             </>
           }
         />
@@ -194,13 +269,7 @@ export function PlatformShell({ children, pageTitle }: PlatformShellProps): JSX.
           rightSlot={
             <div className="flex items-center gap-3">
               <RegionToggle />
-              <div className="flex items-center gap-2">
-                <span className="mono">BR</span>
-                <div className="text-xs leading-tight hidden sm:block">
-                  <div className="font-medium text-ink truncate max-w-[180px]">Brodie</div>
-                  <div className="text-muted text-[10px] uppercase tracking-wider">super_admin</div>
-                </div>
-              </div>
+              <UserBadge user={user} />
             </div>
           }
         />

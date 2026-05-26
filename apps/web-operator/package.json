@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@d2d/api-client": "workspace:*",
     "@d2d/shared-types": "workspace:*",
     "@d2d/shared-utils": "workspace:*",
     "@d2d/ui-tokens": "workspace:*",

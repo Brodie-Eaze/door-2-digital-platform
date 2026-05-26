@@ -15,6 +15,9 @@ export interface AccessTokenPayload {
   role: string;
   regionCode: string;
   brandCode: string;
+  /** Optional vanity claims used by the browser topbar — NOT used for authz. */
+  email?: string;
+  givenName?: string;
   iat: number;
   exp: number;
 }

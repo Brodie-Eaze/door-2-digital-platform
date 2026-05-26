@@ -239,6 +239,9 @@ async function issueTokens(user: IssueUser, args: IssueArgs): Promise<AuthSucces
       role: user.role,
       regionCode: user.regionCode,
       brandCode: user.brandCode,
+      // Vanity claims for browser topbar — never read for authz decisions.
+      email: user.email,
+      givenName: user.givenName,
     },
     e.JWT_ACCESS_SECRET,
   );

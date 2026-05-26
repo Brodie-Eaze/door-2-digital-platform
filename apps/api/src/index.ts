@@ -11,6 +11,7 @@
  *   7. Listen
  */
 import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -64,6 +65,13 @@ async function buildServer() {
     trustProxy: true,
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
+  });
+
+  // Cookie parser (required by auth routes to set httpOnly d2d_at / d2d_rt
+  // session cookies). Must register BEFORE routes.
+  await app.register(cookie, {
+    secret: e.CSRF_SIGNING_SECRET, // signed cookies use this
+    hook: 'onRequest',
   });
 
   // Security headers

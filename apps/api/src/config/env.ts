@@ -15,7 +15,11 @@ const envSchema = z.object({
   // HTTP
   PORT: z.coerce.number().int().default(3010),
   HOST: z.string().default('0.0.0.0'),
-  CORS_ORIGINS: z.string().default('http://localhost:3011,http://localhost:3012'),
+  CORS_ORIGINS: z
+    .string()
+    .default(
+      'http://localhost:3011,http://localhost:3012,https://d2d-production-1fab.up.railway.app',
+    ),
 
   // Database + Redis
   DATABASE_URL: z.string().url(),

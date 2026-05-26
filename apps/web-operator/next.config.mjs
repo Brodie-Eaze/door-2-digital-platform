@@ -120,7 +120,13 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   output: 'standalone',
   experimental: { typedRoutes: false },
-  transpilePackages: ['@d2d/ui-web', '@d2d/ui-tokens', '@d2d/shared-types', '@d2d/shared-utils'],
+  transpilePackages: [
+    '@d2d/api-client',
+    '@d2d/ui-web',
+    '@d2d/ui-tokens',
+    '@d2d/shared-types',
+    '@d2d/shared-utils',
+  ],
   // Phase 0 demo: ship build despite ESLint nits (unused imports, escaped quotes).
   // Re-enable strict in Phase 1.1 once team has reviewed.
   eslint: { ignoreDuringBuilds: true },

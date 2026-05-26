@@ -6,6 +6,7 @@
  * Also exposes `truncateAll()` to wipe mutable rows between suites.
  */
 import Fastify, { type FastifyInstance } from 'fastify';
+import cookie from '@fastify/cookie';
 import sensible from '@fastify/sensible';
 import { errorHandler } from '../../src/shared/errors/handler';
 import { registerCorrelationId } from '../../src/shared/middleware/correlation';
@@ -33,6 +34,9 @@ export async function buildTestApp(): Promise<FastifyInstance> {
     logger: false,
     trustProxy: true,
     genReqId: () => newId('req'),
+  });
+  await app.register(cookie, {
+    secret: process.env.CSRF_SIGNING_SECRET ?? 'test-csrf-secret-must-be-at-least-32-chars-long',
   });
   await app.register(sensible);
   await app.register(registerCorrelationId);
