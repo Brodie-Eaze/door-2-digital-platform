@@ -1,7 +1,15 @@
 /**
- * Fleet rep fixtures with real lat/lng across Texas (Austin / Dallas / Houston).
- * Used by the HQ Command Centre live map + KPI tiles.
+ * HQ fleet aggregate — every rep across every account, displayed on the
+ * `/command-centre` live satellite map.
+ *
+ * The pre-Sprint-B version hard-coded 10 reps across Austin/Dallas/Houston.
+ * Pilot-Charlie scale is ~530 reps across 4 accounts; the HQ map renders up
+ * to MAX_VISIBLE pins so it's legible, sourcing from the deterministic
+ * per-account rosters in `lib/seed/roster.ts`.
  */
+
+import { buildRoster } from './seed/roster';
+import { ACCOUNT_SEEDS } from './seed/kpis';
 
 export interface FleetRep {
   id: string;
@@ -34,163 +42,59 @@ export const STATUS_COLORS: Record<FleetRep['status'], string> = {
   offline: '#64748B',
 };
 
-export const FLEET_REPS: FleetRep[] = [
-  // Austin cluster (30.27, -97.74)
-  {
-    id: 'r1',
-    initials: 'JM',
-    name: 'Jordan Mosley',
-    account: 'Hope Forward',
-    lat: 30.2672,
-    lng: -97.7431,
-    status: 'active',
-    shiftStart: '09:00',
-    hoursToday: '4h 12m',
-    knocksToday: 84,
-    conversionsToday: 31,
-    lastKnockMin: 3,
-    territory: 'Austin East',
-  },
-  {
-    id: 'r2',
-    initials: 'JD',
-    name: 'Jada Davis',
-    account: 'Hope Forward',
-    lat: 30.2515,
-    lng: -97.7186,
-    status: 'active',
-    shiftStart: '09:00',
-    hoursToday: '4h 08m',
-    knocksToday: 91,
-    conversionsToday: 22,
-    lastKnockMin: 1,
-    territory: 'Austin East',
-  },
-  {
-    id: 'r3',
-    initials: 'AR',
-    name: 'Aaliyah Reed',
-    account: 'Hope Forward',
-    lat: 30.2698,
-    lng: -97.7589,
-    status: 'active',
-    shiftStart: '09:00',
-    hoursToday: '4h 15m',
-    knocksToday: 78,
-    conversionsToday: 18,
-    lastKnockMin: 7,
-    territory: 'Austin North',
-  },
-  {
-    id: 'r4',
-    initials: 'TM',
-    name: 'Tomás Mendez',
-    account: 'Hope Forward',
-    lat: 30.2451,
-    lng: -97.7299,
-    status: 'break',
-    shiftStart: '09:00',
-    hoursToday: '3h 45m · LUNCH',
-    knocksToday: 64,
-    conversionsToday: 14,
-    lastKnockMin: 28,
-    territory: 'Austin East',
-  },
+// Display name per account for the `account` field on pins.
+const ACCOUNT_DISPLAY: Record<string, string> = {
+  'hope-forward': 'Hope Forward',
+  'world-vision': 'World Vision',
+  pestmax: 'PestMax',
+  'gold-coast-hospital': 'Gold Coast Hospital',
+};
 
-  // Dallas cluster (32.78, -96.80)
-  {
-    id: 'r5',
-    initials: 'AM',
-    name: 'Asha Mehta',
-    account: 'Hope Forward',
-    lat: 32.7821,
-    lng: -96.8005,
-    status: 'active',
-    shiftStart: '09:30',
-    hoursToday: '3h 42m',
-    knocksToday: 66,
-    conversionsToday: 12,
-    lastKnockMin: 5,
-    territory: 'Dallas Metro',
-  },
-  {
-    id: 'r6',
-    initials: 'BC',
-    name: 'Bianca Costa',
-    account: 'PestMax',
-    lat: 32.7901,
-    lng: -96.8214,
-    status: 'active',
-    shiftStart: '08:00',
-    hoursToday: '5h 12m',
-    knocksToday: 38,
-    conversionsToday: 9,
-    lastKnockMin: 12,
-    territory: 'Dallas North',
-  },
-  {
-    id: 'r7',
-    initials: 'HK',
-    name: 'Hiroshi Kato',
-    account: 'PestMax',
-    lat: 32.7712,
-    lng: -96.7826,
-    status: 'idle',
-    shiftStart: '08:00',
-    hoursToday: '5h 18m',
-    knocksToday: 31,
-    conversionsToday: 5,
-    lastKnockMin: 22,
-    territory: 'Dallas North',
-  },
+// Max pins on the HQ map — beyond this it becomes a blob. Per-account
+// proportional sampling keeps each tenant represented even when one
+// account dwarfs the others.
+const MAX_VISIBLE = 120;
 
-  // Houston cluster (29.76, -95.37)
-  {
-    id: 'r8',
-    initials: 'KP',
-    name: 'Kim Park',
-    account: 'Hope Forward',
-    lat: 29.7589,
-    lng: -95.3676,
-    status: 'active',
-    shiftStart: '09:00',
-    hoursToday: '4h 05m',
-    knocksToday: 71,
-    conversionsToday: 15,
-    lastKnockMin: 4,
-    territory: 'Houston SE',
-  },
-  {
-    id: 'r9',
-    initials: 'DR',
-    name: 'Devon Russell',
-    account: 'Hope Forward',
-    lat: 29.7782,
-    lng: -95.3951,
-    status: 'offline',
-    shiftStart: '—',
-    hoursToday: 'Not clocked in',
-    knocksToday: 0,
-    conversionsToday: 0,
-    lastKnockMin: 999,
-    territory: 'Houston SE',
-  },
-  {
-    id: 'r10',
-    initials: 'ML',
-    name: 'Marcus Lee',
-    account: 'Hope Forward',
-    lat: 29.7434,
-    lng: -95.3512,
-    status: 'active',
-    shiftStart: '09:00',
-    hoursToday: '4h 11m',
-    knocksToday: 58,
-    conversionsToday: 11,
-    lastKnockMin: 2,
-    territory: 'Houston SE',
-  },
-];
+function buildHqFleet(): FleetRep[] {
+  const cfgs = Object.values(ACCOUNT_SEEDS);
+  const totalRoster = cfgs.reduce((s, c) => s + c.rosterSize, 0);
+  const out: FleetRep[] = [];
+  for (const cfg of cfgs) {
+    const display = ACCOUNT_DISPLAY[cfg.slug] ?? cfg.slug;
+    const proportional = Math.max(
+      8, // minimum representation per account so tiny tenants aren't invisible
+      Math.round((cfg.rosterSize / totalRoster) * MAX_VISIBLE),
+    );
+    const roster = buildRoster({ slug: cfg.slug });
+    // Prefer on-shift reps for the live map; backfill with offline if needed.
+    const onShift = roster.filter((k) => k.status !== 'offline');
+    const offline = roster.filter((k) => k.status === 'offline');
+    const picked = [
+      ...onShift.slice(0, proportional),
+      ...offline.slice(0, Math.max(0, proportional - onShift.length)),
+    ];
+    for (const k of picked) {
+      out.push({
+        id: k.id,
+        initials: k.initials,
+        name: k.name,
+        account: display,
+        lat: k.lat,
+        lng: k.lng,
+        status: k.status,
+        shiftStart: k.shiftStart,
+        hoursToday: k.hoursToday,
+        knocksToday: k.knocksToday,
+        conversionsToday: k.conversionsToday,
+        lastKnockMin: k.lastKnockMin,
+        territory: k.territory,
+      });
+    }
+  }
+  return out;
+}
+
+export const FLEET_REPS: FleetRep[] = buildHqFleet();
 
 /** AI-suggested next territories (pulsing highlights on the map) */
 export const AI_ZONES: AiZone[] = [

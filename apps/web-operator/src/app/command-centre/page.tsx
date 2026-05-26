@@ -1,10 +1,11 @@
 'use client';
 
 import { Radio } from 'lucide-react';
-import { Banner, KpiCard, Reveal } from '@d2d/ui-web';
+import { Banner, KpiCard, Money, Reveal } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { FLEET_REPS } from '@/lib/fleet-reps';
+import { hqRollup } from '@/lib/seed/kpis';
 import {
   AiNextZonesPanel,
   AnomaliesPanel,
@@ -139,12 +140,15 @@ const HQ_ACTIVITY: ActivityEvent[] = [
 ];
 
 export default function CommandCentrePage(): JSX.Element {
-  const active = FLEET_REPS.filter((r) => r.status === 'active').length;
+  // HQ rollup is the source of truth for the headline numbers — every
+  // sub-account page reconciles against the same `hqRollup()` slice.
+  // FLEET_REPS is the *map* sample (capped at ~120 pins for legibility);
+  // the KPIs reflect the full Pilot-Charlie-scale operation.
+  const hq = hqRollup();
   const onBreak = FLEET_REPS.filter((r) => r.status === 'break').length;
   const idle = FLEET_REPS.filter((r) => r.status === 'idle').length;
   const offline = FLEET_REPS.filter((r) => r.status === 'offline').length;
-  const totalKnocks = FLEET_REPS.reduce((s, r) => s + r.knocksToday, 0);
-  const totalConv = FLEET_REPS.reduce((s, r) => s + r.conversionsToday, 0);
+  const convRate = hq.totalKnocksToday > 0 ? (hq.totalConvToday / hq.totalKnocksToday) * 100 : 0;
 
   return (
     <PlatformShell pageTitle="Command Centre · Live field map">
@@ -160,25 +164,60 @@ export default function CommandCentrePage(): JSX.Element {
           </span>
         </Banner>
 
-        {/* Fleet KPIs */}
+        {/* Fleet KPIs — HQ totals across all accounts. */}
         <Reveal delay={0} className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <KpiCard
             label="Active iPads"
-            value={active}
-            hint={`of ${FLEET_REPS.length} on roster`}
-            delta="+2 last hour"
+            value={hq.totalActiveReps.toLocaleString()}
+            hint={`of ${hq.totalReps.toLocaleString()} on roster`}
+            delta="+8 last hour"
             deltaTone="positive"
           />
           <KpiCard label="On break" value={onBreak} hint="lunch / scheduled" />
           <KpiCard label="Idle > 15min" value={idle} hint="manager nudge sent" />
           <KpiCard label="Offline" value={offline} hint="not clocked in" />
-          <KpiCard label="Knocks today" value={totalKnocks} delta="+8.4%" deltaTone="positive" />
+          <KpiCard
+            label="Knocks today"
+            value={hq.totalKnocksToday.toLocaleString()}
+            delta="+8.4%"
+            deltaTone="positive"
+          />
           <KpiCard
             label="Conv. today"
-            value={totalConv}
+            value={hq.totalConvToday.toLocaleString()}
             delta="+12%"
             deltaTone="positive"
-            hint={`${((totalConv / totalKnocks) * 100).toFixed(1)}% rate`}
+            hint={`${convRate.toFixed(1)}% rate`}
+          />
+        </Reveal>
+
+        {/* HQ rollup totals — reconciled with every per-account view. */}
+        <Reveal delay={40} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard
+            label="Conversions · 7d"
+            value={hq.totalConvWeek.toLocaleString()}
+            delta="+14%"
+            deltaTone="positive"
+            hint="across 4 accounts"
+          />
+          <KpiCard
+            label="Conversions · MTD"
+            value={hq.totalConvMTD.toLocaleString()}
+            delta="+22%"
+            deltaTone="positive"
+            hint={`${hq.perAccount.length} accounts live`}
+          />
+          <KpiCard
+            label="Revenue · MTD"
+            value={<Money cents={hq.totalRevenueCentsMTD} region="US" />}
+            delta="+18.2%"
+            deltaTone="positive"
+            hint="mixed USD/AUD · displayed USD"
+          />
+          <KpiCard
+            label="Territories active"
+            value={hq.totalTerritories}
+            hint="across all metros"
           />
         </Reveal>
 

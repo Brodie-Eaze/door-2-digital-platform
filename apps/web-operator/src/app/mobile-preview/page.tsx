@@ -220,7 +220,7 @@ function LoginScreen() {
         </button>
       </div>
       <div className="text-[10px] text-soft">
-        v1.0.4 · 218 Knockers live · 7 territories cleared
+        v1.0.4 · 531 Knockers live · 43 territories cleared
       </div>
     </div>
   );

@@ -4,7 +4,14 @@
  * Each account is its own "tiny operating system" with full CRM, territories,
  * Knockers, leads, pipeline, campaigns, drip. The whole Door 2 Digital OS team
  * (sales, tech, admin) drills in from the top-level accounts list.
+ *
+ * Headline numbers (rosterSize, conversionsMTD, revenueCentsMTD) come from
+ * the central seed rollup so they reconcile with every per-account surface
+ * and the HQ command-centre totals. Account metadata (slug, branding,
+ * contractedAt, notes) stays hand-authored.
  */
+
+import { rollupFor } from './seed/kpis';
 
 export type Vertical = 'charity' | 'commercial' | 'healthcare';
 export type AccountHealth = 'healthy' | 'attention' | 'critical';
@@ -39,7 +46,21 @@ export function accountMonogram(shortName: string): string {
   return (parts[0]?.slice(0, 2) ?? '??').toUpperCase();
 }
 
-export const ACCOUNTS: Account[] = [
+interface StaticAccountFields {
+  slug: string;
+  name: string;
+  shortName: string;
+  vertical: Vertical;
+  region: 'AU' | 'US' | 'SG';
+  avatarBg: string;
+  avatarFg: string;
+  plan: 'Enterprise' | 'Growth' | 'Trial';
+  health: AccountHealth;
+  contractedAt: string;
+  notes: string;
+}
+
+const STATIC_ACCOUNTS: StaticAccountFields[] = [
   {
     slug: 'hope-forward',
     name: 'Hope Forward International',
@@ -50,13 +71,6 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
-    knockers: 218,
-    insideSalesReps: 14,
-    territoriesActive: 7,
-    leadsInboxToday: 84,
-    conversionsMTD: 4831,
-    revenueCentsMTD: 1_605_240_00n,
-    ltvCentsMTD: 19_262_880_00n,
     contractedAt: '2026-04-01',
     notes: 'Pilot-Charlie enterprise launch. Charity vertical. Recurring giving.',
   },
@@ -70,13 +84,6 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Enterprise',
     health: 'healthy',
-    knockers: 162,
-    insideSalesReps: 11,
-    territoriesActive: 12,
-    leadsInboxToday: 102,
-    conversionsMTD: 3120,
-    revenueCentsMTD: 940_800_00n,
-    ltvCentsMTD: 11_289_600_00n,
     contractedAt: '2026-04-15',
     notes: 'AU charity. Child sponsorship focus. ACNC-registered.',
   },
@@ -90,13 +97,6 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Growth',
     health: 'attention',
-    knockers: 32,
-    insideSalesReps: 4,
-    territoriesActive: 4,
-    leadsInboxToday: 21,
-    conversionsMTD: 412,
-    revenueCentsMTD: 124_800_00n,
-    ltvCentsMTD: 748_800_00n,
     contractedAt: '2026-04-22',
     notes: 'Commercial pest control. Texas + Arizona. One-shot service contracts.',
   },
@@ -110,17 +110,26 @@ export const ACCOUNTS: Account[] = [
     avatarFg: '#FFFFFF',
     plan: 'Trial',
     health: 'healthy',
-    knockers: 8,
-    insideSalesReps: 2,
-    territoriesActive: 3,
-    leadsInboxToday: 14,
-    conversionsMTD: 89,
-    revenueCentsMTD: 53_400_00n,
-    ltvCentsMTD: 640_800_00n,
     contractedAt: '2026-05-15',
     notes: 'Hospital foundation. Capital campaign for new wing.',
   },
 ];
+
+function buildAccount(s: StaticAccountFields): Account {
+  const r = rollupFor(s.slug);
+  return {
+    ...s,
+    knockers: r.rosterSize,
+    insideSalesReps: r.insideSalesSize,
+    territoriesActive: r.territoriesActive,
+    leadsInboxToday: r.leadsInboxToday,
+    conversionsMTD: r.conversionsMTD,
+    revenueCentsMTD: r.revenueCentsMTD,
+    ltvCentsMTD: r.ltvCentsMTD,
+  };
+}
+
+export const ACCOUNTS: Account[] = STATIC_ACCOUNTS.map(buildAccount);
 
 export function getAccount(slug: string): Account | undefined {
   return ACCOUNTS.find((a) => a.slug === slug);

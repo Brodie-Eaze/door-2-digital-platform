@@ -2,13 +2,20 @@
  * Per-account fleet + zone fixtures for live satellite maps.
  *
  * Each sub-account gets a scoped slice of FleetRep + AiZone data, with its
- * own map center/zoom appropriate to where the business operates. Counts are
- * sized for legibility on the map (12 max per account), not 1:1 with the real
- * rosters in `accounts.ts`.
+ * own map center/zoom appropriate to where the business operates. Rep
+ * coordinates and metadata come from the central seed (`lib/seed/roster.ts`)
+ * — so the map shows the SAME knockers that appear on `/knockers` and
+ * `/roster`, and the count scales to Pilot-Charlie levels (40-60+ active
+ * reps per account rather than the original 12).
+ *
+ * The hand-authored zones / anomalies / activity copy stays — those are
+ * vertical-specific narratives that need editorial control.
  */
 
 import type { FleetRep, AiZone } from './fleet-reps';
 import type { AiZoneSuggestion, AnomalyItem, ActivityEvent } from '@/components/field-ops/types';
+import { buildRoster } from './seed/roster';
+import { ACCOUNT_SEEDS } from './seed/kpis';
 
 export interface AccountFleetData {
   /** [lat, lng] for initial map center */
@@ -26,201 +33,24 @@ export interface AccountFleetData {
   activity: ActivityEvent[];
 }
 
-export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
-  // ─────────────────────────────────────────────────────────────────────────
-  // Hope Forward · US charity · 12 reps across Texas
-  // ─────────────────────────────────────────────────────────────────────────
+interface FleetTemplate {
+  center: [number, number];
+  zoom: number;
+  scopeLabel: string;
+  zones: AiZone[];
+  aiSuggestions: AiZoneSuggestion[];
+  anomalies: AnomalyItem[];
+  activity: ActivityEvent[];
+  /** Display name of the account (used on rep `.account` field). */
+  accountDisplay: string;
+}
+
+const FLEET_TEMPLATES: Record<string, FleetTemplate> = {
   'hope-forward': {
     center: [31.2, -97.0],
     zoom: 6,
     scopeLabel: 'Hope Forward · US',
-    reps: [
-      // Austin cluster (30.27, -97.74) — 4 reps
-      {
-        id: 'hf1',
-        initials: 'JM',
-        name: 'Jordan Mosley',
-        account: 'Hope Forward',
-        lat: 30.2672,
-        lng: -97.7431,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 12m',
-        knocksToday: 84,
-        conversionsToday: 31,
-        lastKnockMin: 3,
-        territory: 'Austin East',
-      },
-      {
-        id: 'hf2',
-        initials: 'JD',
-        name: 'Jada Davis',
-        account: 'Hope Forward',
-        lat: 30.2515,
-        lng: -97.7186,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 08m',
-        knocksToday: 91,
-        conversionsToday: 22,
-        lastKnockMin: 1,
-        territory: 'Austin Central',
-      },
-      {
-        id: 'hf3',
-        initials: 'AR',
-        name: 'Aaliyah Reed',
-        account: 'Hope Forward',
-        lat: 30.2898,
-        lng: -97.7589,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 15m',
-        knocksToday: 78,
-        conversionsToday: 18,
-        lastKnockMin: 7,
-        territory: 'Austin North',
-      },
-      {
-        id: 'hf4',
-        initials: 'TM',
-        name: 'Tomás Mendez',
-        account: 'Hope Forward',
-        lat: 30.2451,
-        lng: -97.7299,
-        status: 'break',
-        shiftStart: '09:00',
-        hoursToday: '3h 45m · LUNCH',
-        knocksToday: 64,
-        conversionsToday: 14,
-        lastKnockMin: 28,
-        territory: 'Austin South',
-      },
-
-      // Dallas / Plano cluster (32.78, -96.80) — 4 reps
-      {
-        id: 'hf5',
-        initials: 'AM',
-        name: 'Asha Mehta',
-        account: 'Hope Forward',
-        lat: 32.7821,
-        lng: -96.8005,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '3h 42m',
-        knocksToday: 66,
-        conversionsToday: 12,
-        lastKnockMin: 5,
-        territory: 'Dallas Metro',
-      },
-      {
-        id: 'hf6',
-        initials: 'CS',
-        name: 'Cameron Singh',
-        account: 'Hope Forward',
-        lat: 32.7901,
-        lng: -96.8214,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '3h 30m',
-        knocksToday: 58,
-        conversionsToday: 11,
-        lastKnockMin: 4,
-        territory: 'Dallas North',
-      },
-      {
-        id: 'hf7',
-        initials: 'RV',
-        name: 'Riley Vargas',
-        account: 'Hope Forward',
-        lat: 33.0198,
-        lng: -96.6989,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '3h 22m',
-        knocksToday: 49,
-        conversionsToday: 9,
-        lastKnockMin: 6,
-        territory: 'Plano',
-      },
-      {
-        id: 'hf8',
-        initials: 'EB',
-        name: 'Eli Bautista',
-        account: 'Hope Forward',
-        lat: 33.0044,
-        lng: -96.7186,
-        status: 'idle',
-        shiftStart: '09:30',
-        hoursToday: '3h 50m',
-        knocksToday: 41,
-        conversionsToday: 6,
-        lastKnockMin: 22,
-        territory: 'Plano',
-      },
-
-      // Houston cluster (29.76, -95.37) — 4 reps
-      {
-        id: 'hf9',
-        initials: 'KP',
-        name: 'Kim Park',
-        account: 'Hope Forward',
-        lat: 29.7589,
-        lng: -95.3676,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 05m',
-        knocksToday: 71,
-        conversionsToday: 15,
-        lastKnockMin: 4,
-        territory: 'Houston Central',
-      },
-      {
-        id: 'hf10',
-        initials: 'DR',
-        name: 'Devon Russell',
-        account: 'Hope Forward',
-        lat: 29.7434,
-        lng: -95.3512,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 11m',
-        knocksToday: 58,
-        conversionsToday: 11,
-        lastKnockMin: 2,
-        territory: 'Houston SE',
-      },
-      {
-        id: 'hf11',
-        initials: 'ML',
-        name: 'Marcus Lee',
-        account: 'Hope Forward',
-        lat: 29.7782,
-        lng: -95.3951,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 00m',
-        knocksToday: 62,
-        conversionsToday: 13,
-        lastKnockMin: 3,
-        territory: 'Houston West',
-      },
-      {
-        id: 'hf12',
-        initials: 'NK',
-        name: 'Naomi Kowalski',
-        account: 'Hope Forward',
-        lat: 29.7218,
-        lng: -95.4012,
-        status: 'offline',
-        shiftStart: '—',
-        hoursToday: 'Not clocked in',
-        knocksToday: 0,
-        conversionsToday: 0,
-        lastKnockMin: 999,
-        territory: 'Houston West',
-      },
-    ],
+    accountDisplay: 'Hope Forward',
     zones: [
       {
         lat: 30.2415,
@@ -249,7 +79,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'ACS median income $94k · charity-giving propensity 0.83 · 0% saturation',
         estLiftPp: 14,
         saturationPercent: 0,
-        recommendedReps: 2,
+        recommendedReps: 4,
       },
       {
         id: 'hf-zone-2',
@@ -258,7 +88,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'Lookalike to top-performing Highland Park · low Dallas saturation',
         estLiftPp: 11,
         saturationPercent: 12,
-        recommendedReps: 2,
+        recommendedReps: 6,
       },
       {
         id: 'hf-zone-3',
@@ -267,29 +97,32 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: '24% knocks-not-converted in nearby Bellaire = warm re-engage pool',
         estLiftPp: 9,
         saturationPercent: 8,
-        recommendedReps: 1,
+        recommendedReps: 3,
       },
     ],
     anomalies: [
       {
         id: 'hf-anom-1',
         severity: 'critical',
-        title: 'Devon R offline since 09:00',
-        detail: 'Houston SE shift uncovered. Auto-SMS + push sent. Backup: reassign to Marcus L.',
+        title: '14 reps offline · auto-SMS dispatched',
+        detail:
+          'Houston SE shift coverage at 78%. Reassign 4 reps from Houston Central or escalate to ops lead.',
         actionLabel: 'Reassign',
       },
       {
         id: 'hf-anom-2',
         severity: 'warn',
-        title: 'Tomás M lunch break > 45min',
-        detail: 'On break since 12:48. Auto-reminder push sent.',
-        actionLabel: 'Nudge',
+        title: '8 reps on break > 45min',
+        detail:
+          'Auto-reminder push sent. Watch for chronic-late patterns (3 reps now flagged 2x this week).',
+        actionLabel: 'Nudge all',
       },
       {
         id: 'hf-anom-3',
         severity: 'warn',
-        title: 'Eli B conv. rate dropped 11pp',
-        detail: 'Last 4 hours vs trailing avg. Try script v3.2 + check Plano saturation.',
+        title: 'Plano conv. rate dropped 9pp · last 4hr',
+        detail:
+          'Two new reps onboarding; script v3.2 not pushed to their iPads yet. Push update or rotate veteran in.',
         actionLabel: 'Open 1:1',
       },
     ],
@@ -300,7 +133,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         actorInitials: 'JD',
         type: 'conversion',
         primary: 'Conversion captured',
-        secondary: 'Maria Santos · $24/mo recurring · Austin East',
+        secondary: 'Maria Santos · $32/mo recurring · Austin East',
       },
       {
         id: 'hf-act-2',
@@ -332,7 +165,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         actorInitials: 'AM',
         type: 'conversion',
         primary: 'Conversion captured',
-        secondary: 'James Whitfield · $36/mo · Dallas Metro',
+        secondary: 'James Whitfield · $48/mo · Dallas Metro',
       },
       {
         id: 'hf-act-6',
@@ -352,7 +185,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'hf-act-8',
-        at: '14:30',
+        at: '14:31',
         actorInitials: 'JM',
         type: 'knock_not_home',
         primary: 'Knock recorded · NOT HOME',
@@ -360,7 +193,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'hf-act-9',
-        at: '14:28',
+        at: '14:30',
         actorInitials: 'CS',
         type: 'conversion',
         primary: 'Conversion captured',
@@ -368,7 +201,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'hf-act-10',
-        at: '14:25',
+        at: '14:28',
         actorInitials: 'RV',
         type: 'knock_lead',
         primary: 'Knock recorded · LEAD',
@@ -376,217 +209,91 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'hf-act-11',
-        at: '14:22',
+        at: '14:26',
         actorInitials: 'JD',
         type: 'knock_sale',
         primary: 'Knock recorded · SALE',
-        secondary: '2210 Manor Rd, Austin · $20/mo recurring',
+        secondary: '2210 Manor Rd, Austin · $24/mo recurring',
       },
       {
         id: 'hf-act-12',
-        at: '14:18',
+        at: '14:25',
         actorInitials: 'DR',
         type: 'shift_break_start',
         primary: 'Started break',
         secondary: 'Lunch · Houston SE',
       },
+      {
+        id: 'hf-act-13',
+        at: '14:23',
+        actorInitials: 'EB',
+        type: 'conversion',
+        primary: 'Conversion captured',
+        secondary: 'Marcus Reeves · $36/mo · Plano',
+      },
+      {
+        id: 'hf-act-14',
+        at: '14:21',
+        actorInitials: 'AR',
+        type: 'knock_sale',
+        primary: 'Knock recorded · SALE',
+        secondary: '912 Anderson Ln, Austin · $40/mo',
+      },
+      {
+        id: 'hf-act-15',
+        at: '14:18',
+        actorInitials: 'KP',
+        type: 'conversion',
+        primary: 'Conversion captured',
+        secondary: 'Lily Tran · $25/mo · Houston Central',
+      },
+      {
+        id: 'hf-act-16',
+        at: '14:16',
+        actorInitials: 'ML',
+        type: 'knock_lead',
+        primary: 'Knock recorded · LEAD',
+        secondary: '8814 Memorial Dr, Houston',
+      },
+      {
+        id: 'hf-act-17',
+        at: '14:14',
+        actorInitials: 'AM',
+        type: 'knock_not_home',
+        primary: 'Knock recorded · NOT HOME',
+        secondary: '402 Knox St, Dallas',
+      },
+      {
+        id: 'hf-act-18',
+        at: '14:12',
+        actorInitials: 'CS',
+        type: 'callback_scheduled',
+        primary: 'Callback scheduled',
+        secondary: 'Hassan Khalil · Thu 6pm · Dallas Metro',
+      },
+      {
+        id: 'hf-act-19',
+        at: '14:09',
+        actorInitials: 'JM',
+        type: 'conversion',
+        primary: 'Conversion captured',
+        secondary: 'Naomi Walker · $36/mo · Austin East',
+      },
+      {
+        id: 'hf-act-20',
+        at: '14:07',
+        actorInitials: 'TM',
+        type: 'knock_sale',
+        primary: 'Knock recorded · SALE',
+        secondary: '344 Live Oak St, Austin · $30/mo',
+      },
     ],
   },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // World Vision · AU charity · 12 reps across Syd/Mel/Bne
-  // ─────────────────────────────────────────────────────────────────────────
   'world-vision': {
     center: [-32.5, 148.0],
     zoom: 5,
-    scopeLabel: 'World Vision AU',
-    reps: [
-      // Sydney cluster (-33.87, 151.21) — 4 reps
-      {
-        id: 'wv1',
-        initials: 'AC',
-        name: 'Amelia Chen',
-        account: 'World Vision',
-        lat: -33.8688,
-        lng: 151.2093,
-        status: 'active',
-        shiftStart: '10:00',
-        hoursToday: '3h 45m',
-        knocksToday: 72,
-        conversionsToday: 21,
-        lastKnockMin: 2,
-        territory: 'Sydney CBD',
-      },
-      {
-        id: 'wv2',
-        initials: 'LO',
-        name: 'Liam O’Brien',
-        account: 'World Vision',
-        lat: -33.8915,
-        lng: 151.1875,
-        status: 'active',
-        shiftStart: '10:00',
-        hoursToday: '3h 38m',
-        knocksToday: 65,
-        conversionsToday: 14,
-        lastKnockMin: 5,
-        territory: 'Sydney Inner West',
-      },
-      {
-        id: 'wv3',
-        initials: 'ZH',
-        name: 'Zara Habib',
-        account: 'World Vision',
-        lat: -33.8434,
-        lng: 151.2541,
-        status: 'active',
-        shiftStart: '10:00',
-        hoursToday: '3h 51m',
-        knocksToday: 58,
-        conversionsToday: 12,
-        lastKnockMin: 1,
-        territory: 'Sydney East',
-      },
-      {
-        id: 'wv4',
-        initials: 'JW',
-        name: 'Jack Williams',
-        account: 'World Vision',
-        lat: -33.9173,
-        lng: 151.2354,
-        status: 'break',
-        shiftStart: '10:00',
-        hoursToday: '3h 20m · LUNCH',
-        knocksToday: 41,
-        conversionsToday: 7,
-        lastKnockMin: 35,
-        territory: 'Sydney South',
-      },
-
-      // Melbourne cluster (-37.81, 144.96) — 4 reps
-      {
-        id: 'wv5',
-        initials: 'IN',
-        name: 'Isabel Nguyen',
-        account: 'World Vision',
-        lat: -37.8136,
-        lng: 144.9631,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '4h 12m',
-        knocksToday: 78,
-        conversionsToday: 18,
-        lastKnockMin: 3,
-        territory: 'Melbourne CBD',
-      },
-      {
-        id: 'wv6',
-        initials: 'HK',
-        name: 'Harvey Kapoor',
-        account: 'World Vision',
-        lat: -37.7989,
-        lng: 144.9412,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '4h 05m',
-        knocksToday: 81,
-        conversionsToday: 22,
-        lastKnockMin: 1,
-        territory: 'Melbourne North',
-      },
-      {
-        id: 'wv7',
-        initials: 'GO',
-        name: 'Grace O’Sullivan',
-        account: 'World Vision',
-        lat: -37.8425,
-        lng: 145.0033,
-        status: 'active',
-        shiftStart: '09:30',
-        hoursToday: '4h 18m',
-        knocksToday: 69,
-        conversionsToday: 15,
-        lastKnockMin: 4,
-        territory: 'Melbourne East',
-      },
-      {
-        id: 'wv8',
-        initials: 'NR',
-        name: 'Noah Ricci',
-        account: 'World Vision',
-        lat: -37.8312,
-        lng: 144.9215,
-        status: 'idle',
-        shiftStart: '09:30',
-        hoursToday: '4h 30m',
-        knocksToday: 47,
-        conversionsToday: 6,
-        lastKnockMin: 19,
-        territory: 'Melbourne West',
-      },
-
-      // Brisbane cluster (-27.47, 153.03) — 4 reps
-      {
-        id: 'wv9',
-        initials: 'EM',
-        name: 'Ethan Morrison',
-        account: 'World Vision',
-        lat: -27.4698,
-        lng: 153.0251,
-        status: 'active',
-        shiftStart: '08:30',
-        hoursToday: '5h 02m',
-        knocksToday: 88,
-        conversionsToday: 24,
-        lastKnockMin: 2,
-        territory: 'Brisbane CBD',
-      },
-      {
-        id: 'wv10',
-        initials: 'AS',
-        name: 'Ava Singh',
-        account: 'World Vision',
-        lat: -27.4485,
-        lng: 153.0398,
-        status: 'active',
-        shiftStart: '08:30',
-        hoursToday: '4h 58m',
-        knocksToday: 74,
-        conversionsToday: 17,
-        lastKnockMin: 6,
-        territory: 'Brisbane North',
-      },
-      {
-        id: 'wv11',
-        initials: 'MT',
-        name: 'Mia Tan',
-        account: 'World Vision',
-        lat: -27.4901,
-        lng: 153.0089,
-        status: 'active',
-        shiftStart: '08:30',
-        hoursToday: '5h 10m',
-        knocksToday: 61,
-        conversionsToday: 13,
-        lastKnockMin: 4,
-        territory: 'Brisbane South',
-      },
-      {
-        id: 'wv12',
-        initials: 'BC',
-        name: 'Ben Castro',
-        account: 'World Vision',
-        lat: -27.4612,
-        lng: 153.0512,
-        status: 'offline',
-        shiftStart: '—',
-        hoursToday: 'Not clocked in',
-        knocksToday: 0,
-        conversionsToday: 0,
-        lastKnockMin: 999,
-        territory: 'Brisbane East',
-      },
-    ],
+    scopeLabel: 'World Vision · AU',
+    accountDisplay: 'World Vision',
     zones: [
       {
         lat: -33.8174,
@@ -616,7 +323,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
           'SEIFA decile 9 · large multicultural cohort · child sponsorship affinity 0.84',
         estLiftPp: 13,
         saturationPercent: 4,
-        recommendedReps: 2,
+        recommendedReps: 5,
       },
       {
         id: 'wv-zone-2',
@@ -625,7 +332,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'Charity supporter density top quintile · prior campaign uplift 17pp',
         estLiftPp: 15,
         saturationPercent: 6,
-        recommendedReps: 2,
+        recommendedReps: 6,
       },
       {
         id: 'wv-zone-3',
@@ -635,31 +342,32 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
           'CoreLogic AU growth corridor · low Brisbane saturation · 11k door catchment',
         estLiftPp: 10,
         saturationPercent: 3,
-        recommendedReps: 1,
+        recommendedReps: 3,
       },
     ],
     anomalies: [
       {
         id: 'wv-anom-1',
         severity: 'critical',
-        title: 'Liam P offline since 09:30',
+        title: '11 reps offline · Sydney West uncovered',
         detail:
-          'Sydney North shift uncovered. Auto-SMS sent. Backup: reassign to Ava T (Brisbane North).',
+          'Sydney West shift at 64% coverage. Auto-SMS sent. Backup roster offered $40 short-shift bonus.',
         actionLabel: 'Reassign',
       },
       {
         id: 'wv-anom-2',
         severity: 'warn',
-        title: 'Mia S lunch break > 50min',
-        detail: 'On break since 12:45 AEST. Auto-reminder push sent to iPad.',
-        actionLabel: 'Nudge',
+        title: '6 reps on break > 50min',
+        detail:
+          'Mostly Melbourne CBD. Auto-reminder push sent to iPad. Pattern flagged for ops review.',
+        actionLabel: 'Nudge all',
       },
       {
         id: 'wv-anom-3',
         severity: 'warn',
-        title: 'Oliver K conv. rate dropped 9pp',
+        title: 'Brisbane CBD conv. rate dropped 7pp',
         detail:
-          'Last 4 hours vs trailing avg. Try sponsorship script v4.1 + check Melbourne West saturation.',
+          'Last 4 hours vs trailing avg. Try sponsorship script v4.1 + check Brisbane CBD saturation.',
         actionLabel: 'Open 1:1',
       },
     ],
@@ -698,7 +406,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-5',
-        at: '14:33',
+        at: '14:34',
         actorInitials: 'HK',
         type: 'knock_sale',
         primary: 'Knock recorded · SALE',
@@ -706,7 +414,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-6',
-        at: '14:30',
+        at: '14:32',
         actorInitials: 'JW',
         type: 'shift_break_return',
         primary: 'Returned from break',
@@ -714,7 +422,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-7',
-        at: '14:27',
+        at: '14:30',
         actorInitials: 'GO',
         type: 'conversion',
         primary: 'Child sponsorship captured',
@@ -722,7 +430,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-8',
-        at: '14:24',
+        at: '14:28',
         actorInitials: 'AS',
         type: 'knock_lead',
         primary: 'Knock recorded · LEAD',
@@ -730,7 +438,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-9',
-        at: '14:22',
+        at: '14:26',
         actorInitials: 'NR',
         type: 'knock_not_home',
         primary: 'Knock recorded · NOT HOME',
@@ -738,7 +446,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-10',
-        at: '14:18',
+        at: '14:24',
         actorInitials: 'MT',
         type: 'conversion',
         primary: 'Child sponsorship captured',
@@ -746,7 +454,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-11',
-        at: '14:15',
+        at: '14:22',
         actorInitials: 'EM',
         type: 'knock_sale',
         primary: 'Knock recorded · SALE',
@@ -754,149 +462,83 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       },
       {
         id: 'wv-act-12',
-        at: '14:10',
+        at: '14:19',
         actorInitials: 'LO',
         type: 'shift_break_start',
         primary: 'Started break',
         secondary: 'Lunch · Sydney Inner West',
       },
+      {
+        id: 'wv-act-13',
+        at: '14:17',
+        actorInitials: 'AC',
+        type: 'knock_lead',
+        primary: 'Knock recorded · LEAD',
+        secondary: '203 Pitt St, Sydney CBD',
+      },
+      {
+        id: 'wv-act-14',
+        at: '14:15',
+        actorInitials: 'IN',
+        type: 'conversion',
+        primary: 'Child sponsorship captured',
+        secondary: 'Liam OBrien · A$55/mo · Melbourne CBD',
+      },
+      {
+        id: 'wv-act-15',
+        at: '14:13',
+        actorInitials: 'HK',
+        type: 'knock_sale',
+        primary: 'Knock recorded · SALE',
+        secondary: '34 Lygon St, Carlton · A$45/mo',
+      },
+      {
+        id: 'wv-act-16',
+        at: '14:10',
+        actorInitials: 'GO',
+        type: 'knock_lead',
+        primary: 'Knock recorded · LEAD',
+        secondary: '88 Riversdale Rd, Hawthorn',
+      },
+      {
+        id: 'wv-act-17',
+        at: '14:08',
+        actorInitials: 'EM',
+        type: 'conversion',
+        primary: 'Child sponsorship captured',
+        secondary: 'Mia Brown · A$48/mo · Brisbane North',
+      },
+      {
+        id: 'wv-act-18',
+        at: '14:06',
+        actorInitials: 'ZH',
+        type: 'knock_sale',
+        primary: 'Knock recorded · SALE',
+        secondary: '12 Bondi Rd, Bondi · A$50/mo',
+      },
+      {
+        id: 'wv-act-19',
+        at: '14:04',
+        actorInitials: 'AS',
+        type: 'conversion',
+        primary: 'Child sponsorship captured',
+        secondary: 'Tyson Williams · A$45/mo · Brisbane CBD',
+      },
+      {
+        id: 'wv-act-20',
+        at: '14:01',
+        actorInitials: 'MT',
+        type: 'callback_scheduled',
+        primary: 'Callback scheduled',
+        secondary: 'Ava Singh · Fri 2pm · Brisbane South',
+      },
     ],
   },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // PestMax · US commercial · 8 reps Dallas / Phoenix / Houston
-  // ─────────────────────────────────────────────────────────────────────────
   pestmax: {
     center: [32.0, -103.0],
     zoom: 5,
     scopeLabel: 'PestMax · US',
-    reps: [
-      // Dallas cluster (32.78, -96.80) — 4 reps
-      {
-        id: 'pm1',
-        initials: 'BC',
-        name: 'Bianca Costa',
-        account: 'PestMax',
-        lat: 32.7767,
-        lng: -96.797,
-        status: 'active',
-        shiftStart: '08:00',
-        hoursToday: '5h 12m',
-        knocksToday: 38,
-        conversionsToday: 9,
-        lastKnockMin: 12,
-        territory: 'Dallas Metro',
-      },
-      {
-        id: 'pm2',
-        initials: 'HK',
-        name: 'Hiroshi Kato',
-        account: 'PestMax',
-        lat: 32.7712,
-        lng: -96.7826,
-        status: 'active',
-        shiftStart: '08:00',
-        hoursToday: '5h 18m',
-        knocksToday: 42,
-        conversionsToday: 7,
-        lastKnockMin: 5,
-        territory: 'Dallas North',
-      },
-      {
-        id: 'pm3',
-        initials: 'RG',
-        name: 'Rafael Gomez',
-        account: 'PestMax',
-        lat: 32.7895,
-        lng: -96.8054,
-        status: 'active',
-        shiftStart: '08:00',
-        hoursToday: '5h 02m',
-        knocksToday: 51,
-        conversionsToday: 11,
-        lastKnockMin: 8,
-        territory: 'Dallas South',
-      },
-      {
-        id: 'pm4',
-        initials: 'SK',
-        name: 'Sara Kowalski',
-        account: 'PestMax',
-        lat: 32.7654,
-        lng: -96.8125,
-        status: 'break',
-        shiftStart: '08:00',
-        hoursToday: '4h 45m · LUNCH',
-        knocksToday: 29,
-        conversionsToday: 4,
-        lastKnockMin: 32,
-        territory: 'Dallas Metro',
-      },
-
-      // Phoenix cluster (33.45, -112.07) — 2 reps
-      {
-        id: 'pm5',
-        initials: 'TN',
-        name: 'Tara Nguyen',
-        account: 'PestMax',
-        lat: 33.4484,
-        lng: -112.074,
-        status: 'active',
-        shiftStart: '07:30',
-        hoursToday: '5h 50m',
-        knocksToday: 45,
-        conversionsToday: 8,
-        lastKnockMin: 3,
-        territory: 'Phoenix Metro',
-      },
-      {
-        id: 'pm6',
-        initials: 'JL',
-        name: 'José Luna',
-        account: 'PestMax',
-        lat: 33.4625,
-        lng: -112.0891,
-        status: 'idle',
-        shiftStart: '07:30',
-        hoursToday: '6h 02m',
-        knocksToday: 33,
-        conversionsToday: 4,
-        lastKnockMin: 24,
-        territory: 'Phoenix West',
-      },
-
-      // Houston cluster (29.76, -95.37) — 2 reps
-      {
-        id: 'pm7',
-        initials: 'AT',
-        name: 'Aiden Thomas',
-        account: 'PestMax',
-        lat: 29.7604,
-        lng: -95.3698,
-        status: 'active',
-        shiftStart: '08:00',
-        hoursToday: '5h 08m',
-        knocksToday: 48,
-        conversionsToday: 9,
-        lastKnockMin: 6,
-        territory: 'Houston SE',
-      },
-      {
-        id: 'pm8',
-        initials: 'DG',
-        name: 'Diana Gallagher',
-        account: 'PestMax',
-        lat: 29.7515,
-        lng: -95.3812,
-        status: 'offline',
-        shiftStart: '—',
-        hoursToday: 'Not clocked in',
-        knocksToday: 0,
-        conversionsToday: 0,
-        lastKnockMin: 999,
-        territory: 'Houston SE',
-      },
-    ],
+    accountDisplay: 'PestMax',
     zones: [
       {
         lat: 32.8136,
@@ -919,7 +561,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'Termite hotspot · high SFR density · 38% commercial property mix',
         estLiftPp: 10,
         saturationPercent: 5,
-        recommendedReps: 2,
+        recommendedReps: 3,
       },
       {
         id: 'pm-zone-2',
@@ -928,7 +570,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'Premium service tier · low Phoenix cannibalisation · HOA-permitted',
         estLiftPp: 12,
         saturationPercent: 7,
-        recommendedReps: 2,
+        recommendedReps: 4,
       },
       {
         id: 'pm-zone-3',
@@ -937,28 +579,28 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'New-build subdivision · termite scope · Houston West expansion play',
         estLiftPp: 8,
         saturationPercent: 2,
-        recommendedReps: 1,
+        recommendedReps: 2,
       },
     ],
     anomalies: [
       {
         id: 'pm-anom-1',
         severity: 'critical',
-        title: 'Aiden T no completed calls in 2hr',
+        title: '4 reps no completed calls in 2hr · Houston SE',
         detail: 'Houston SE route. Possible vehicle issue or no-knock zone — check in via call.',
-        actionLabel: 'Call rep',
+        actionLabel: 'Call reps',
       },
       {
         id: 'pm-anom-2',
         severity: 'warn',
-        title: 'Sara K lunch > 60min',
-        detail: 'On break since 12:15 CT. Auto-reminder push sent.',
+        title: '3 reps lunch > 60min',
+        detail: 'Dallas Metro cluster. Auto-reminder push sent.',
         actionLabel: 'Nudge',
       },
       {
         id: 'pm-anom-3',
         severity: 'warn',
-        title: 'Installer no-show on 3 pending appts',
+        title: 'Installer no-show on 8 pending appts',
         detail:
           'Dallas Metro install crew offline. Reassign install slots before customer SLA breach.',
         actionLabel: 'Reassign installs',
@@ -1061,147 +703,37 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         primary: 'Knock recorded · LEAD',
         secondary: '6890 N Central Ave, Phoenix',
       },
+      {
+        id: 'pm-act-13',
+        at: '14:05',
+        actorInitials: 'JL',
+        type: 'conversion',
+        primary: 'Service contract closed',
+        secondary: 'Desert Sun Apartments · $245/mo · Phoenix West',
+      },
+      {
+        id: 'pm-act-14',
+        at: '14:02',
+        actorInitials: 'AT',
+        type: 'knock_sale',
+        primary: 'Knock recorded · SALE',
+        secondary: '1402 Kirby Dr, Houston · termite scope · $1,840',
+      },
+      {
+        id: 'pm-act-15',
+        at: '13:58',
+        actorInitials: 'BC',
+        type: 'callback_scheduled',
+        primary: 'Callback scheduled',
+        secondary: 'Sigma Logistics · Wed 2pm · Dallas Metro',
+      },
     ],
   },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Gold Coast Hospital · AU healthcare · 8 reps on the Gold Coast
-  // ─────────────────────────────────────────────────────────────────────────
   'gold-coast-hospital': {
     center: [-28.02, 153.4],
     zoom: 11,
     scopeLabel: 'Gold Coast Hospital · AU',
-    reps: [
-      // Surfers Paradise (-28.00, 153.43) — 2 reps
-      {
-        id: 'gc1',
-        initials: 'CO',
-        name: 'Charlotte O’Connor',
-        account: 'Gold Coast Hospital',
-        lat: -28.0033,
-        lng: 153.4297,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 05m',
-        knocksToday: 52,
-        conversionsToday: 6,
-        lastKnockMin: 2,
-        territory: 'Surfers Paradise',
-      },
-      {
-        id: 'gc2',
-        initials: 'JK',
-        name: 'James Karras',
-        account: 'Gold Coast Hospital',
-        lat: -28.0095,
-        lng: 153.4258,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 12m',
-        knocksToday: 47,
-        conversionsToday: 5,
-        lastKnockMin: 4,
-        territory: 'Surfers Paradise',
-      },
-
-      // Broadbeach (-28.03, 153.43) — 2 reps
-      {
-        id: 'gc3',
-        initials: 'EH',
-        name: 'Ella Henderson',
-        account: 'Gold Coast Hospital',
-        lat: -28.029,
-        lng: 153.4351,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 08m',
-        knocksToday: 44,
-        conversionsToday: 5,
-        lastKnockMin: 6,
-        territory: 'Broadbeach',
-      },
-      {
-        id: 'gc4',
-        initials: 'OP',
-        name: 'Owen Park',
-        account: 'Gold Coast Hospital',
-        lat: -28.0354,
-        lng: 153.4289,
-        status: 'break',
-        shiftStart: '09:00',
-        hoursToday: '3h 50m · LUNCH',
-        knocksToday: 31,
-        conversionsToday: 3,
-        lastKnockMin: 29,
-        territory: 'Broadbeach',
-      },
-
-      // Burleigh Heads (-28.10, 153.45) — 1 rep
-      {
-        id: 'gc5',
-        initials: 'MC',
-        name: 'Maya Choudhury',
-        account: 'Gold Coast Hospital',
-        lat: -28.0995,
-        lng: 153.4503,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 15m',
-        knocksToday: 38,
-        conversionsToday: 4,
-        lastKnockMin: 3,
-        territory: 'Burleigh Heads',
-      },
-
-      // Robina (-28.08, 153.39) — 2 reps
-      {
-        id: 'gc6',
-        initials: 'SR',
-        name: 'Sienna Roberts',
-        account: 'Gold Coast Hospital',
-        lat: -28.0815,
-        lng: 153.3899,
-        status: 'active',
-        shiftStart: '09:00',
-        hoursToday: '4h 02m',
-        knocksToday: 40,
-        conversionsToday: 6,
-        lastKnockMin: 5,
-        territory: 'Robina',
-      },
-      {
-        id: 'gc7',
-        initials: 'LD',
-        name: 'Lachlan Diaz',
-        account: 'Gold Coast Hospital',
-        lat: -28.0762,
-        lng: 153.3954,
-        status: 'idle',
-        shiftStart: '09:00',
-        hoursToday: '4h 22m',
-        knocksToday: 25,
-        conversionsToday: 2,
-        lastKnockMin: 20,
-        territory: 'Robina',
-      },
-
-      // Southport (-27.97, 153.40) — 1 rep
-      {
-        id: 'gc8',
-        initials: 'PA',
-        name: 'Priya Anand',
-        account: 'Gold Coast Hospital',
-        lat: -27.9667,
-        lng: 153.4034,
-        status: 'offline',
-        shiftStart: '—',
-        hoursToday: 'Not clocked in',
-        knocksToday: 0,
-        conversionsToday: 0,
-        lastKnockMin: 999,
-        territory: 'Southport',
-      },
-    ],
+    accountDisplay: 'Gold Coast Hospital',
     zones: [
       {
         lat: -28.0421,
@@ -1224,7 +756,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
         reasonOneLiner: 'SEIFA decile 9 · capital campaign lookalike · 4.6k doors retiree-skew',
         estLiftPp: 12,
         saturationPercent: 4,
-        recommendedReps: 2,
+        recommendedReps: 3,
       },
       {
         id: 'gc-zone-2',
@@ -1234,7 +766,7 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
           'Low saturation · family households · catchment 12k doors · GP referral overlap',
         estLiftPp: 9,
         saturationPercent: 2,
-        recommendedReps: 1,
+        recommendedReps: 2,
       },
       {
         id: 'gc-zone-3',
@@ -1250,21 +782,21 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
       {
         id: 'gc-anom-1',
         severity: 'critical',
-        title: 'Charlotte O offline since 09:15',
-        detail: 'Surfers Paradise route uncovered. Auto-SMS sent. Backup: reassign to James K.',
+        title: '2 reps offline · Southport uncovered',
+        detail: 'Southport route uncovered. Auto-SMS sent. Backup: reassign from Surfers Paradise.',
         actionLabel: 'Reassign',
       },
       {
         id: 'gc-anom-2',
         severity: 'warn',
-        title: 'Ella H lunch break > 50min',
+        title: '1 rep lunch break > 50min',
         detail: 'On break since 12:50 AEST. Auto-reminder push sent.',
         actionLabel: 'Nudge',
       },
       {
         id: 'gc-anom-3',
         severity: 'warn',
-        title: 'Lachlan D pledge rate dropped 7pp',
+        title: 'Robina pledge rate dropped 7pp',
         detail:
           'Last 4 hours vs trailing avg. Try the new capital campaign script + check Robina saturation.',
         actionLabel: 'Open 1:1',
@@ -1370,6 +902,62 @@ export const ACCOUNT_FLEET: Record<string, AccountFleetData> = {
     ],
   },
 };
+
+/**
+ * Convert a SeededKnocker (which carries lat/lng + status + hours) into the
+ * FleetRep shape consumed by the Leaflet map components. Only knockers who
+ * are on-shift (active/break/idle) are rendered as pins; offline reps are
+ * filtered out at the map layer.
+ */
+function buildReps(slug: string, accountDisplay: string): FleetRep[] {
+  const cfg = ACCOUNT_SEEDS[slug];
+  if (!cfg) return [];
+  const roster = buildRoster({ slug });
+  // Show every on-shift rep up to a hard cap. 60 pins on a 640px map is
+  // crowded but legible; >80 makes the map a sea of dots.
+  const MAX_VISIBLE = 60;
+  const fielded = roster.filter((k) => k.status !== 'offline');
+  const visible = fielded.slice(0, MAX_VISIBLE);
+  return visible.map((k) => ({
+    id: k.id,
+    initials: k.initials,
+    name: k.name,
+    account: accountDisplay,
+    lat: k.lat,
+    lng: k.lng,
+    status: k.status === 'break' ? 'break' : k.status === 'idle' ? 'idle' : 'active',
+    shiftStart: k.shiftStart,
+    hoursToday: k.hoursToday,
+    knocksToday: k.knocksToday,
+    conversionsToday: k.conversionsToday,
+    lastKnockMin: k.lastKnockMin,
+    territory: k.territory,
+  }));
+}
+
+function buildFleetData(slug: string): AccountFleetData | undefined {
+  const tpl = FLEET_TEMPLATES[slug];
+  if (!tpl) return undefined;
+  return {
+    center: tpl.center,
+    zoom: tpl.zoom,
+    reps: buildReps(slug, tpl.accountDisplay),
+    zones: tpl.zones,
+    scopeLabel: tpl.scopeLabel,
+    aiSuggestions: tpl.aiSuggestions,
+    anomalies: tpl.anomalies,
+    activity: tpl.activity,
+  };
+}
+
+// Build all four account fleets eagerly so consumers can stay synchronous
+// (parity with the previous static-record API).
+export const ACCOUNT_FLEET: Record<string, AccountFleetData> = Object.fromEntries(
+  Object.keys(FLEET_TEMPLATES).map((slug) => {
+    const data = buildFleetData(slug);
+    return [slug, data!];
+  }),
+);
 
 export function getAccountFleet(slug: string): AccountFleetData | undefined {
   return ACCOUNT_FLEET[slug];

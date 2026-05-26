@@ -1,8 +1,88 @@
 import { BarChart3, Download, Sparkles, ChevronRight } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { getAccount } from '@/lib/accounts';
+import { seedFor } from '@/lib/seed';
+import { rollupFor } from '@/lib/seed/kpis';
 
 export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
+  const account = getAccount(params.slug);
+  if (!account) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Reports">
+        <Banner tone="danger">Account not found.</Banner>
+      </AccountShell>
+    );
+  }
+  const seed = seedFor(params.slug);
+  const rollup = rollupFor(params.slug);
+  const region = account.region === 'AU' ? 'AU' : 'US';
+
+  // 30-day attribution split: derive from the conversions ledger (count) and
+  // multiply by avg-ticket to get GMV. Door / Inside / Retarget mix from the
+  // 60-row ledger is statistically representative of MTD attribution.
+  const ledgerByAttr = seed.conversions.reduce(
+    (acc, c) => {
+      acc[c.attribution] = (acc[c.attribution] ?? 0) + 1;
+      return acc;
+    },
+    { door: 0, inside_sales: 0, retargeting: 0, other: 0 } as Record<string, number>,
+  );
+  const total = ledgerByAttr.door! + ledgerByAttr.inside_sales! + ledgerByAttr.retargeting!;
+  const doorShare = ledgerByAttr.door! / total;
+  const insideShare = ledgerByAttr.inside_sales! / total;
+  const retargShare = ledgerByAttr.retargeting! / total;
+
+  const doorConv = Math.round(rollup.conversionsMTD * doorShare);
+  const insideConv = Math.round(rollup.conversionsMTD * insideShare);
+  const retargConv = rollup.conversionsMTD - doorConv - insideConv;
+
+  const doorGmv = (rollup.revenueCentsMTD * BigInt(Math.round(doorShare * 1000))) / 1000n;
+  const insideGmv = (rollup.revenueCentsMTD * BigInt(Math.round(insideShare * 1000))) / 1000n;
+  const retargGmv = rollup.revenueCentsMTD - doorGmv - insideGmv;
+  const doorRake = (doorGmv * 15n) / 100n;
+  const insideRake = (insideGmv * 10n) / 100n;
+  const retargRake = (retargGmv * 5n) / 100n;
+  const blendedRake = doorRake + insideRake + retargRake;
+  // Implied CPA — total spend across the marketing studio is ~12% of GMV.
+  const impliedSpendCents = (rollup.revenueCentsMTD * 12n) / 100n;
+  const blendedCpaCents =
+    rollup.conversionsMTD > 0 ? impliedSpendCents / BigInt(rollup.conversionsMTD) : 0n;
+
+  // Top knockers by today's revenue — pull straight from the seeded roster.
+  const topKnockers = [...seed.knockers]
+    .filter((k) => k.status !== 'offline')
+    .sort((a, b) => b.conversionsToday - a.conversionsToday)
+    .slice(0, 8);
+
+  const attrBars = [
+    {
+      src: 'Door',
+      count: doorConv,
+      value: doorGmv,
+      rake: 15,
+      rakeAmt: doorRake,
+      color: 'bg-success',
+    },
+    {
+      src: 'Inside sales',
+      count: insideConv,
+      value: insideGmv,
+      rake: 10,
+      rakeAmt: insideRake,
+      color: 'bg-accent',
+    },
+    {
+      src: 'Retargeting',
+      count: retargConv,
+      value: retargGmv,
+      rake: 5,
+      rakeAmt: retargRake,
+      color: 'bg-accent/60',
+    },
+  ];
+  const maxVal = attrBars.reduce((m, r) => (r.value > m ? r.value : m), 0n);
+
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Reports">
       <div className="space-y-5 max-w-[1500px]">
@@ -16,57 +96,33 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard
             label="MTD revenue"
-            value={<Money cents={1_605_240_00n} region="US" />}
+            value={<Money cents={rollup.revenueCentsMTD} region={region} />}
             delta="+18.2%"
             deltaTone="positive"
           />
-          <KpiCard label="MTD conv." value="4,831" delta="+12%" deltaTone="positive" />
+          <KpiCard
+            label="MTD conv."
+            value={rollup.conversionsMTD.toLocaleString()}
+            delta="+12%"
+            deltaTone="positive"
+          />
           <KpiCard
             label="Blended CPA"
-            value={<Money cents={158_00n} region="US" />}
+            value={<Money cents={blendedCpaCents} region={region} />}
             delta="-12%"
             deltaTone="positive"
           />
           <KpiCard
             label="Commission accrued"
-            value={<Money cents={48_220_00n} region="US" />}
-            hint="pre-payout"
+            value={<Money cents={blendedRake} region={region} />}
+            hint="platform rake · pre-payout"
           />
         </div>
 
-        <Section
-          title="Conversion attribution · last 30 days"
-          subtitle="Where the conversions came from"
-        >
+        <Section title="Conversion attribution · MTD" subtitle="Where the conversions came from">
           <div className="space-y-3">
-            {[
-              {
-                src: 'Door',
-                count: 3140,
-                value: 942_240_00n,
-                rake: 15,
-                rakeAmt: 141_336_00n,
-                color: 'bg-success',
-              },
-              {
-                src: 'Inside sales',
-                count: 1180,
-                value: 472_320_00n,
-                rake: 10,
-                rakeAmt: 47_232_00n,
-                color: 'bg-accent',
-              },
-              {
-                src: 'Retargeting',
-                count: 511,
-                value: 190_680_00n,
-                rake: 5,
-                rakeAmt: 9_534_00n,
-                color: 'bg-accent/60',
-              },
-            ].map((row) => {
-              const max = 942_240_00n;
-              const pct = (Number(row.value) / Number(max)) * 100;
+            {attrBars.map((row) => {
+              const pct = maxVal > 0n ? Number((row.value * 10000n) / maxVal) / 100 : 0;
               return (
                 <div key={row.src} className="flex items-center gap-3">
                   <div className="w-28 text-[13px] text-ink">{row.src}</div>
@@ -78,12 +134,12 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
                       </span>
                       <span className="text-muted">·</span>
                       <span className="text-ink numeric">
-                        <Money cents={row.value} region="US" />
+                        <Money cents={row.value} region={region} />
                       </span>
                       <span className="text-muted">GMV</span>
                       <div className="flex-1" />
                       <span className="text-success font-semibold numeric">
-                        D2D rake {row.rake}% · <Money cents={row.rakeAmt} region="US" />
+                        D2D rake {row.rake}% · <Money cents={row.rakeAmt} region={region} />
                       </span>
                     </div>
                   </div>
@@ -94,11 +150,12 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
         </Section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <Section title="Top Knockers (revenue · last 30d)" paddedBody={false}>
+          <Section title={`Top Knockers · today`} paddedBody={false}>
             <table className="tbl">
               <thead>
                 <tr>
                   <th>Knocker</th>
+                  <th>Tenure</th>
                   <th>Knocks</th>
                   <th>Conv.</th>
                   <th>Rate</th>
@@ -106,30 +163,36 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { i: 'JM', n: 'Jordan Mosley', k: 1840, c: 612, r: 33.3, v: 184_320_00n },
-                  { i: 'JD', n: 'Jada Davis', k: 1920, c: 440, r: 22.9, v: 132_440_00n },
-                  { i: 'AR', n: 'Aaliyah Reed', k: 1560, c: 360, r: 23.1, v: 108_220_00n },
-                  { i: 'TM', n: 'Tomás Mendez', k: 1480, c: 280, r: 18.9, v: 84_160_00n },
-                  { i: 'KP', n: 'Kim Park', k: 1420, c: 300, r: 21.1, v: 92_180_00n },
-                ].map((k) => (
-                  <tr key={k.i}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <span className="mono">{k.i}</span>
-                        <span className="text-[13px] text-ink">{k.n}</span>
-                      </div>
-                    </td>
-                    <td className="numeric text-[13px]">{k.k.toLocaleString()}</td>
-                    <td className="numeric text-[13px]">{k.c}</td>
-                    <td>
-                      <StatusPill tone={k.r > 25 ? 'success' : 'info'}>{k.r}%</StatusPill>
-                    </td>
-                    <td>
-                      <Money cents={k.v} region="US" />
-                    </td>
-                  </tr>
-                ))}
+                {topKnockers.map((k) => {
+                  const rate = k.knocksToday > 0 ? (k.conversionsToday / k.knocksToday) * 100 : 0;
+                  const tenure =
+                    k.tenureDays < 30
+                      ? `${k.tenureDays}d`
+                      : k.tenureDays < 365
+                        ? `${Math.round(k.tenureDays / 30)}mo`
+                        : `${(k.tenureDays / 365).toFixed(1)}yr`;
+                  return (
+                    <tr key={k.id}>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="mono">{k.initials}</span>
+                          <span className="text-[13px] text-ink">{k.name}</span>
+                        </div>
+                      </td>
+                      <td className="numeric text-[12px] text-muted">{tenure}</td>
+                      <td className="numeric text-[13px]">{k.knocksToday.toLocaleString()}</td>
+                      <td className="numeric text-[13px]">{k.conversionsToday}</td>
+                      <td>
+                        <StatusPill tone={rate > 18 ? 'success' : rate > 10 ? 'info' : 'muted'}>
+                          {rate.toFixed(1)}%
+                        </StatusPill>
+                      </td>
+                      <td>
+                        <Money cents={k.revenueCentsToday} region={region} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </Section>
@@ -161,6 +224,16 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
             </div>
           </Section>
         </div>
+
+        <Section
+          title="14-day conversion trend"
+          subtitle="Weekday peaks · weekend trough · trend +2.2% WoW"
+        >
+          <SimpleBarChart
+            data={rollup.conversions14d}
+            label={`${account.shortName} · daily conversions`}
+          />
+        </Section>
 
         <Section
           title="Saved reports"
@@ -211,5 +284,44 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
         </Section>
       </div>
     </AccountShell>
+  );
+}
+
+/**
+ * Hand-rolled bar chart — no external deps. Shows the real weekly pattern
+ * (Sun trough, Wed/Thu peak) so the chart looks like a real ops dashboard.
+ */
+function SimpleBarChart({
+  data,
+  label,
+}: {
+  data: { iso: string; weekday: string; value: number }[];
+  label: string;
+}): JSX.Element {
+  const max = Math.max(...data.map((p) => p.value), 1);
+  return (
+    <div className="w-full">
+      <div className="flex gap-1 items-end" style={{ height: 200 }}>
+        {data.map((p) => {
+          const h = (p.value / max) * 100;
+          const isWeekend = p.weekday === 'Sat' || p.weekday === 'Sun';
+          return (
+            <div
+              key={p.iso}
+              className="flex-1 flex flex-col items-center justify-end h-full"
+              title={`${p.iso} · ${p.weekday} · ${p.value.toLocaleString()}`}
+            >
+              <div className="text-[9px] text-muted numeric mb-1">{p.value}</div>
+              <div
+                className={`w-full rounded-t ${isWeekend ? 'bg-accent/40' : 'bg-accent'}`}
+                style={{ height: `${h}%` }}
+              />
+              <div className="text-[9px] text-soft mt-1">{p.weekday[0]}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[10px] text-soft text-center mt-2 numeric">{label}</div>
+    </div>
   );
 }

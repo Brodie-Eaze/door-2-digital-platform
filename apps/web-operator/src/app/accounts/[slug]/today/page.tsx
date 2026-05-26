@@ -27,6 +27,8 @@ import {
 import { AnomalyCard, KpiCard, Money, Section, StatusPill, Banner, Reveal } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { accountData, PIPELINE_STAGES } from '@/lib/account-fixtures';
+import { rollupFor } from '@/lib/seed/kpis';
+import { values as seriesValues } from '@/lib/seed/time-series';
 
 export default function TodayPage({ params }: { params: { slug: string } }): JSX.Element {
   const { account, anomalies, knockers, leads } = accountData(params.slug);
@@ -38,19 +40,22 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
     );
   }
 
+  // Pull canonical rollup so headline numbers reconcile with the
+  // command-centre + reports view.
+  const rollup = rollupFor(params.slug);
   const region = account.region === 'AU' ? 'AU' : 'US';
   const isCharity = account.vertical === 'charity';
   const isHealth = account.vertical === 'healthcare';
   const valueLabel = isCharity ? 'donations' : isHealth ? 'pledges' : 'closed deals';
   const repsLabel = isCharity || isHealth ? 'fundraisers' : 'techs';
 
-  const topKnockers = [...knockers]
-    .filter((n) => n.status === 'active')
-    .sort((a, b) => b.conversions - a.conversions)
-    .slice(0, 6);
-  const todayRev = topKnockers.reduce((s, n) => s + n.revenueCents, 0n);
-  const totalKnocks = topKnockers.reduce((s, n) => s + n.knocks, 0);
-  const totalConv = topKnockers.reduce((s, n) => s + n.conversions, 0);
+  const activeKnockers = knockers.filter((n) => n.status === 'active');
+  const topKnockers = [...activeKnockers].sort((a, b) => b.conversions - a.conversions).slice(0, 6);
+
+  // Headline numbers from rollup (account-wide), not just the 6 we display.
+  const todayRev = rollup.revenueCentsToday;
+  const totalKnocks = rollup.knocksToday;
+  const totalConv = rollup.conversionsToday;
 
   // Build pipeline snapshot — 5 columns with top 2 leads each
   const pipelineSnapshot = PIPELINE_STAGES.map((s) => ({
@@ -59,21 +64,9 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
     count: leads.filter((l) => l.status === s.status).length,
   }));
 
-  // Revenue chart data — 14 days, varied per slug
-  const revSeed =
-    params.slug === 'hope-forward'
-      ? 5800
-      : params.slug === 'world-vision'
-        ? 3200
-        : params.slug === 'pestmax'
-          ? 420
-          : 180;
-
-  const revSeries = Array.from({ length: 14 }, (_, i) => {
-    const base = revSeed * (1 + i * 0.04);
-    const wobble = Math.sin(i * 1.4) * revSeed * 0.18;
-    return Math.max(revSeed * 0.7, Math.round(base + wobble));
-  });
+  // Revenue chart data — 14 days from the seed time-series (real weekly
+  // pattern + trend + noise; same chart as /reports).
+  const revSeries = seriesValues(rollup.revenueCents14d).map((c) => Math.round(c / 100));
 
   // Conversion funnel data
   const funnelSteps = isCharity
@@ -205,8 +198,8 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
           />
           <KpiCard
             label={`Active ${repsLabel}`}
-            value={topKnockers.length}
-            hint={`of ${knockers.length} on shift`}
+            value={rollup.activeReps}
+            hint={`of ${rollup.rosterSize} on roster`}
           />
           <KpiCard
             label="Open pipeline"
@@ -539,7 +532,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
 
           <Section
             title="Field status"
-            subtitle={`${repsLabel} live · ${knockers.length} on shift`}
+            subtitle={`${repsLabel} live · ${rollup.activeReps} on shift of ${rollup.rosterSize} roster`}
             paddedBody={false}
           >
             <div className="px-5 py-3 border-b border-line2">
@@ -569,13 +562,13 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
               <div className="px-5 py-2.5 flex items-center justify-between">
                 <span className="text-[11px] text-muted">Active now</span>
                 <span className="text-[13px] font-semibold text-success numeric">
-                  {topKnockers.length}
+                  {rollup.activeReps}
                 </span>
               </div>
               <div className="px-5 py-2.5 flex items-center justify-between">
-                <span className="text-[11px] text-muted">Idle</span>
+                <span className="text-[11px] text-muted">Idle / break / offline</span>
                 <span className="text-[13px] font-semibold text-soft numeric">
-                  {knockers.length - topKnockers.length}
+                  {rollup.rosterSize - rollup.activeReps}
                 </span>
               </div>
               <div className="px-5 py-2.5 flex items-center justify-between">

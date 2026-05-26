@@ -739,7 +739,7 @@ const LIBRARY: LibraryCreative[] = [
   seed(
     39,
     'hf-pilot-charlie-ops-4921',
-    'Pilot Charlie: 218 Knockers, 4,831 conversions in May.',
+    'Pilot Charlie: 247 Knockers, 2,955 conversions in May.',
     'Hope Forward · ops update · internal · ACFR audit copy.',
     'charity',
     'US',

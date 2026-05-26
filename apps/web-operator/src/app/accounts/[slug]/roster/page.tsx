@@ -18,6 +18,7 @@ import {
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
+import { buildRoster } from '@/lib/seed/roster';
 
 type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
@@ -40,113 +41,20 @@ interface Rep {
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// First-name pools differ by region to keep things feeling real
-const FIRST_NAMES_US = [
-  'Jordan',
-  'Jada',
-  'Aaliyah',
-  'Tomás',
-  'Asha',
-  'Bianca',
-  'Hiroshi',
-  'Kim',
-  'Devon',
-  'Marcus',
-  'Sage',
-  'Naomi',
-  'Reese',
-  'Imani',
-  'Caleb',
-  'Lina',
-  'Andre',
-  'Priya',
-  'Mateo',
-  'Zara',
-];
-const LAST_NAMES_US = [
-  'Mosley',
-  'Davis',
-  'Reed',
-  'Mendez',
-  'Mehta',
-  'Costa',
-  'Kato',
-  'Park',
-  'Russell',
-  'Lee',
-  'Brennan',
-  'Okafor',
-  'Knight',
-  'Patel',
-  'Hayes',
-  'Vega',
-  'Sullivan',
-  'Bose',
-  'Ortiz',
-  'Cohen',
-];
-
-const FIRST_NAMES_AU = [
-  'Olivia',
-  'Liam',
-  'Charlotte',
-  'Noah',
-  'Amelia',
-  'Hayden',
-  'Mia',
-  'Jack',
-  'Isla',
-  'Oliver',
-  'Ella',
-  'Lucas',
-  'Grace',
-  'Harvey',
-  'Ruby',
-  'Cooper',
-  'Zara',
-  'Archie',
-  'Maya',
-  'Hudson',
-];
-const LAST_NAMES_AU = [
-  'Patel',
-  'Nguyen',
-  'Singh',
-  'Smith',
-  'Brown',
-  'Jones',
-  'Tran',
-  'Williams',
-  'Taylor',
-  'Wilson',
-  'Anderson',
-  'Thompson',
-  'Murphy',
-  'Hall',
-  'Lewis',
-  'Wood',
-  'Kim',
-  'Chen',
-  'Khan',
-  'Roberts',
-];
-
 function buildReps(account: Account): Rep[] {
-  // Display up to 12 reps in the matrix (caps wide tables); cap by knockers
-  const max = Math.min(account.knockers, 12);
-  const firsts = account.region === 'AU' ? FIRST_NAMES_AU : FIRST_NAMES_US;
-  const lasts = account.region === 'AU' ? LAST_NAMES_AU : LAST_NAMES_US;
-  const out: Rep[] = [];
-  const seen = new Set<string>();
-  for (let i = 0; out.length < max && i < max * 3; i++) {
-    const first = firsts[i % firsts.length]!;
-    const last = lasts[(i * 7) % lasts.length]!;
-    const initials = (first[0]! + last[0]!).toUpperCase();
-    if (seen.has(initials)) continue;
-    seen.add(initials);
-    out.push({ initials, name: `${first} ${last}` });
+  // Use the seeded roster — top 30 by tenure × on-shift bias so the schedule
+  // matrix shows a representative cross-section. The DOM still caps at 30 for
+  // readability; the headline KPI shows the full roster size.
+  const SEED_MAX = 30;
+  const roster = buildRoster({ slug: account.slug });
+  // Prefer reps who are actually on-shift today; backfill with offline so
+  // the matrix has a stable size when the calendar lands on a weekend.
+  const onShift = roster.filter((k) => k.status !== 'offline').slice(0, SEED_MAX);
+  if (onShift.length >= SEED_MAX) {
+    return onShift.map((k) => ({ initials: k.initials, name: k.name }));
   }
-  return out;
+  const backfill = roster.filter((k) => k.status === 'offline').slice(0, SEED_MAX - onShift.length);
+  return [...onShift, ...backfill].map((k) => ({ initials: k.initials, name: k.name }));
 }
 
 function buildTerritories(account: Account): string[] {
@@ -356,9 +264,9 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
         <Banner tone="info">
           <span className="text-[13px]">
             Rostering for <span className="font-semibold">{account.shortName}</span>&apos;s{' '}
-            {account.knockers} Knockers (top 12 shown). Hours auto-logged from Knocker iOS clock-in.
-            Drag shifts between cells to reassign. Click any shift to edit. Pushes changes instantly
-            to the rep&apos;s iPad.
+            {account.knockers.toLocaleString()} Knockers (top {reps.length} shown). Hours
+            auto-logged from Knocker iOS clock-in. Drag shifts between cells to reassign. Click any
+            shift to edit. Pushes changes instantly to the rep&apos;s iPad.
           </span>
         </Banner>
 

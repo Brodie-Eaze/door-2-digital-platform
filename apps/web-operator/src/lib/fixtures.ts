@@ -1,7 +1,14 @@
 /**
  * Demo fixtures — static seed data so the operator console renders
  * realistic content without a backend. Replace with API calls in Phase 1.1.
+ *
+ * Headline org metadata (knockers / conversions / revenue) is mirrored from
+ * the seed rollup so this view reconciles with /command-centre.
  */
+import { rollupFor, hqRollup } from './seed/kpis';
+
+const HF = rollupFor('hope-forward');
+const HQ = hqRollup();
 
 export const PILOT = {
   id: 'org_01HXJZP1PILOTCHARLIE',
@@ -10,13 +17,15 @@ export const PILOT = {
   slug: 'pilot-charlie',
   vertical: 'charity' as const,
   region: 'US' as const,
-  knockers: 218,
-  insideSalesReps: 14,
-  monthlyConversions: 5240,
-  monthlyRevenueCents: 1_847_500_00n,
+  knockers: HF.rosterSize,
+  insideSalesReps: HF.insideSalesSize,
+  monthlyConversions: HF.conversionsMTD,
+  monthlyRevenueCents: HF.revenueCentsMTD,
   contractedAt: '2026-04-01',
   goLiveAt: '2026-09-15',
 };
+
+const PESTMAX = rollupFor('pestmax');
 
 export const ORGS = [
   {
@@ -26,9 +35,9 @@ export const ORGS = [
     vertical: 'charity',
     region: 'US',
     plan: 'Enterprise',
-    knockers: 218,
-    conversionsMTD: 4831,
-    revenueCentsMTD: 1_605_240_00n,
+    knockers: HF.rosterSize,
+    conversionsMTD: HF.conversionsMTD,
+    revenueCentsMTD: HF.revenueCentsMTD,
     health: 'healthy',
     addedAt: '2026-04-01',
   },
@@ -39,10 +48,10 @@ export const ORGS = [
     vertical: 'commercial',
     region: 'US',
     plan: 'Growth',
-    knockers: 32,
-    conversionsMTD: 412,
-    revenueCentsMTD: 124_800_00n,
-    health: 'healthy',
+    knockers: PESTMAX.rosterSize,
+    conversionsMTD: PESTMAX.conversionsMTD,
+    revenueCentsMTD: PESTMAX.revenueCentsMTD,
+    health: 'attention',
     addedAt: '2026-04-22',
   },
   {
@@ -91,13 +100,16 @@ export const ANOMALIES = [
 ];
 
 export const KPIS = {
-  activeOrgs: 3,
-  activeKnockers: 256,
-  conversionsMTD: 5274,
+  activeOrgs: 4,
+  activeKnockers: HQ.totalReps,
+  conversionsMTD: HQ.totalConvMTD,
   conversionsDelta: '+18.2%',
-  revenueCentsMTD: 1_748_440_00n,
+  revenueCentsMTD: HQ.totalRevenueCentsMTD,
   revenueDelta: '+22.4%',
-  processorResidualMTD: 18_240_50n, // MiCamp ISO residuals
+  // Platform residual ≈ 1.05% of revenue. MiCamp ISO residuals (US only).
+  processorResidualMTD:
+    ((rollupFor('hope-forward').revenueCentsMTD + rollupFor('pestmax').revenueCentsMTD) * 105n) /
+    10000n,
 };
 
 export const STATE_CLEARANCE = [
