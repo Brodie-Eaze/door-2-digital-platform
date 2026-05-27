@@ -322,7 +322,7 @@ function buildWorkflows(slug: string): WorkflowDef[] {
     {
       id: 'w1',
       name: 'New lead → SMS welcome',
-      description: 'Form submission → Welcome SMS → Add to nurture → Notify rep',
+      description: 'Form submission → Welcome SMS → Add to nurture → Notify knocker',
       trigger: 'Quote form submitted',
       triggerIcon: Webhook,
       actions: 4,

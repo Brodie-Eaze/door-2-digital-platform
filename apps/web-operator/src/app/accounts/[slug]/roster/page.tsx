@@ -274,7 +274,7 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
             Rostering for <span className="font-semibold">{account.shortName}</span>&apos;s{' '}
             {account.knockers.toLocaleString()} Knockers (top {reps.length} shown). Hours
             auto-logged from Knocker iOS clock-in. Drag shifts between cells to reassign. Click any
-            shift to edit. Pushes changes instantly to the rep&apos;s iPad.
+            shift to edit. Pushes changes instantly to the knocker&apos;s iPad.
           </span>
         </Banner>
 

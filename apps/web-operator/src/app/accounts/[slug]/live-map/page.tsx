@@ -45,9 +45,9 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Live GPS view of every <strong>{account.shortName}</strong> rep currently in the field.
-            Pins update every 30s. Click any rep for full shift detail — call, message, or send on
-            break without leaving the map.
+            Live GPS view of every <strong>{account.shortName}</strong> knocker currently in the
+            field. Pins update every 30s. Click any knocker for full shift detail — call, message,
+            or send on break without leaving the map.
           </span>
         </Banner>
 
