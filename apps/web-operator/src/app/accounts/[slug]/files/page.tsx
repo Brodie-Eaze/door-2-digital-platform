@@ -22,7 +22,9 @@ import {
 } from 'lucide-react';
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FilesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 interface FolderDef {
   id: string;
@@ -247,10 +249,16 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Not found">
-        <div>Account not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Files">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <FilesEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

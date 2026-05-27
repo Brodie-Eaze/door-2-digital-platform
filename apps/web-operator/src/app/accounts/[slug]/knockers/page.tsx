@@ -1,8 +1,10 @@
 import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { REP_STATUS_LABEL, REP_STATUS_TONE } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
+import { KnockersEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData } from '@/lib/account-fixtures';
 import { rollupFor } from '@/lib/seed/kpis';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 function tenureLabel(days: number): string {
   if (days < 30) return `${days}d`;
@@ -11,13 +13,30 @@ function tenureLabel(days: number): string {
 }
 
 export default function KnockersPage({ params }: { params: { slug: string } }): JSX.Element {
-  const { account, knockers } = accountData(params.slug);
-  if (!account)
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug}>
-        <div>Not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Knockers">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <KnockersEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
+  }
+  const { account, knockers } = accountData(params.slug);
+  if (!account || knockers.length === 0) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Knockers">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <KnockersEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
+      </AccountShell>
+    );
+  }
 
   const rollup = rollupFor(params.slug);
   const active = knockers.filter((n) => n.status === 'active');

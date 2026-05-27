@@ -1,6 +1,8 @@
 import { Mail, MessageSquare, Phone, Clock, ArrowRight, Plus, Split, Sparkles } from 'lucide-react';
-import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, EmptyState, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 const DRIPS = [
   {
@@ -60,6 +62,24 @@ const CH_COLOR = {
 };
 
 export default function DripDesignerPage({ params }: { params: { slug: string } }): JSX.Element {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Email drip designer">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <EmptyState
+            icon={Mail}
+            title="No drip sequences built."
+            description="Drips fire automatically when a lead enters a pipeline stage. Each step is channel-aware (SMS / email / call) and respects per-lead consent records."
+            primaryAction={{ label: 'New drip', href: `/accounts/${params.slug}/drip?new=1` }}
+            secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/drip' }}
+            variant="first-run"
+          />
+        </div>
+      </AccountShell>
+    );
+  }
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Email drip designer">
       <div className="space-y-6 max-w-[1400px]">

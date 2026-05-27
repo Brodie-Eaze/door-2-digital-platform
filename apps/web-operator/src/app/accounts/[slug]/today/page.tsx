@@ -26,16 +26,27 @@ import {
 } from 'lucide-react';
 import { AnomalyCard, KpiCard, Money, Section, StatusPill, Banner, Reveal } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { TodayFirstRun } from '@/components/AccountEmptyStates';
 import { accountData, PIPELINE_STAGES } from '@/lib/account-fixtures';
 import { rollupFor } from '@/lib/seed/kpis';
 import { values as seriesValues } from '@/lib/seed/time-series';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 export default function TodayPage({ params }: { params: { slug: string } }): JSX.Element {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Command centre">
+        <TodayFirstRun slug={params.slug} accountName={firstRun.accountName} />
+      </AccountShell>
+    );
+  }
+
   const { account, anomalies, knockers, leads } = accountData(params.slug);
   if (!account) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Not found">
-        <div>Account not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Command centre">
+        <TodayFirstRun slug={params.slug} accountName={firstRun.accountName} />
       </AccountShell>
     );
   }

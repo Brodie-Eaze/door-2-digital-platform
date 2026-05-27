@@ -15,9 +15,11 @@ import { notFound, redirect } from 'next/navigation';
 import { ArrowRight, Inbox, Phone, Megaphone, Database, AlertTriangle } from 'lucide-react';
 import { Banner, KpiCard, LeadCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { LeadsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData } from '@/lib/account-fixtures';
 import { getSession } from '@/lib/session';
 import { maskEmail, maskPhone } from '@/lib/db-helpers';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -165,6 +167,19 @@ export default async function LeadsInboxPage({
   const door = leads.filter((l) => l.source === 'door').length;
   const inside = leads.filter((l) => l.source === 'inside_sales').length;
   const retarget = leads.filter((l) => l.source === 'retargeting').length;
+  const firstRun = firstRunSnapshot(params.slug);
+  if (leads.length === 0) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Leads inbox">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <LeadsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
+      </AccountShell>
+    );
+  }
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Leads inbox">

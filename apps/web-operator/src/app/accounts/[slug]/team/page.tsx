@@ -1,6 +1,8 @@
 import { Plus } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { TeamEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 const TEAM = [
   {
@@ -69,6 +71,17 @@ const TEAM = [
 ];
 
 export default function TeamPage({ params }: { params: { slug: string } }): JSX.Element {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Team">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <TeamEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
+      </AccountShell>
+    );
+  }
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Team">
       <div className="space-y-6 max-w-[1400px]">

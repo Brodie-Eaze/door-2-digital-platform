@@ -34,7 +34,9 @@ import { Banner, Button, KpiCard, Money, StatusPill } from '@d2d/ui-web';
 import { LEAD_STATUS_LABEL, LEAD_STATUS_TONE, type LeadStatus } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
 import { PipelineLeadConversation } from '@/components/PipelineLeadConversation';
+import { PipelineEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData, PIPELINE_STAGES, type LeadRow } from '@/lib/account-fixtures';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 interface PipelineLead extends LeadRow {
   valueCents: bigint;
@@ -251,12 +253,19 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
     return () => document.removeEventListener('keydown', k);
   }, []);
 
-  if (!account)
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || initialLeads.length === 0) {
     return (
-      <AccountShell accountSlug={params.slug}>
-        <div>Not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Pipeline">
+        <div className="space-y-5 max-w-[1500px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <PipelineEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
+  }
 
   const PipelineIcon = PIPELINES[activePipeline].icon;
   const region = account.region === 'AU' ? 'AU' : 'US';

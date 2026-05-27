@@ -1,6 +1,8 @@
 import { Plus, Play, Pause, ExternalLink, ListChecks } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { CampaignsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 const CAMPAIGNS = [
   {
@@ -61,6 +63,17 @@ const CAMPAIGNS = [
 ];
 
 export default function CampaignsPage({ params }: { params: { slug: string } }): JSX.Element {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Marketing campaigns">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <CampaignsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
+      </AccountShell>
+    );
+  }
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Marketing campaigns">
       <div className="space-y-6 max-w-[1400px]">

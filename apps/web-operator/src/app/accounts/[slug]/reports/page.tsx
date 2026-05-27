@@ -1,16 +1,24 @@
 import { BarChart3, Download, Sparkles, ChevronRight } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { ReportsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
 import { seedFor } from '@/lib/seed';
 import { rollupFor } from '@/lib/seed/kpis';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Reports">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <ReportsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

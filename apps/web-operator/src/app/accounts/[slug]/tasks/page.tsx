@@ -19,7 +19,9 @@ import {
 } from 'lucide-react';
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { TasksEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
 type Priority = 'low' | 'medium' | 'high' | 'critical';
@@ -293,10 +295,16 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
     return () => document.removeEventListener('keydown', k);
   }, []);
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Not found">
-        <div>Account not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Tasks">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <TasksEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

@@ -26,6 +26,7 @@ import {
 } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
+import { AccountsEmpty } from '@/components/AccountEmptyStates';
 import { ACCOUNTS, type Account } from '@/lib/accounts';
 import { getSession } from '@/lib/session';
 
@@ -142,6 +143,16 @@ export default async function AccountsPage({
   const totalKnockers = accounts.reduce((s, a) => s + a.knockers, 0);
   const totalLeadsToday = entries.reduce((s, e) => s + e.leadsToday, 0);
   const totalRevenue = accounts.reduce((s, a) => s + a.revenueCentsMTD, 0n);
+
+  if (accounts.length === 0) {
+    return (
+      <PlatformShell pageTitle="Accounts">
+        <div className="space-y-5 max-w-[1400px]">
+          <AccountsEmpty />
+        </div>
+      </PlatformShell>
+    );
+  }
 
   return (
     <PlatformShell pageTitle="Accounts">

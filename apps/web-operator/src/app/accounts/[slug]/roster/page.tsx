@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { RosterEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
 import { buildRoster } from '@/lib/seed/roster';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
@@ -250,10 +252,16 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
 
   const editingShift = shifts.find((s) => s.id === editShiftId) ?? null;
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Roster & shifts">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <RosterEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

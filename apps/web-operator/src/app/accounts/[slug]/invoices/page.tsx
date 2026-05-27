@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { InvoicesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount, type Account } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 interface Invoice {
   id: string;
@@ -72,10 +74,16 @@ function buildInvoiceHistory(account: Account): Invoice[] {
 
 export default function AccountInvoicesPage({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Invoices">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <InvoicesEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

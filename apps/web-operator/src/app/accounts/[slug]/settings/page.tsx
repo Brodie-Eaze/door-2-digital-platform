@@ -1,16 +1,32 @@
-import { Plug } from 'lucide-react';
-import { Banner, Section, StatusPill } from '@d2d/ui-web';
+import { Plug, Settings as SettingsIcon } from 'lucide-react';
+import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 export default function SettingsPage({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
-  if (!account)
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account) {
     return (
-      <AccountShell accountSlug={params.slug}>
-        <div>Not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Settings">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <EmptyState
+            icon={SettingsIcon}
+            title="Account profile is pending."
+            description="Settings for this workspace appear once the onboard-account flow finishes provisioning the org row and brand kit. Refresh if you just finished onboarding."
+            primaryAction={{ label: 'Open accounts list', href: '/accounts' }}
+            secondaryAction={{ label: 'Onboard new account', href: '/onboard-account' }}
+            variant="first-run"
+          />
+        </div>
       </AccountShell>
     );
+  }
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Settings">

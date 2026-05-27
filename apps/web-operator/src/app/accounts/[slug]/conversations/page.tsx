@@ -1,6 +1,8 @@
 import { Phone, Mail, MessageSquare, Search } from 'lucide-react';
-import { Banner, KpiCard, Section } from '@d2d/ui-web';
+import { Banner, EmptyState, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 const THREADS = [
   {
@@ -49,6 +51,27 @@ const THREADS = [
 const ICON = { sms: MessageSquare, call: Phone, email: Mail };
 
 export default function ConversationsPage({ params }: { params: { slug: string } }): JSX.Element {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Conversations">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <EmptyState
+            icon={MessageSquare}
+            title="No conversations on this workspace yet."
+            description="Every SMS, call, and email with a lead lives here. Backed by Twilio + Aircall + Resend with full delivery + read receipts. Threads appear the moment your first lead replies."
+            primaryAction={{ label: 'Open leads inbox', href: `/accounts/${params.slug}/leads` }}
+            secondaryAction={{
+              label: 'See an example',
+              href: '/accounts/hope-forward/conversations',
+            }}
+            variant="first-run"
+          />
+        </div>
+      </AccountShell>
+    );
+  }
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Conversations">
       <div className="space-y-6 max-w-[1400px]">

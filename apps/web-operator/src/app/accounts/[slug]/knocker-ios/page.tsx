@@ -1,8 +1,10 @@
 import { Smartphone, Apple, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import { Banner, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 function teamPhrasing(account: Account): string {
   if (account.vertical === 'charity') return 'your fundraising team';
@@ -20,10 +22,26 @@ export default function KnockerIOSPreviewPage({
   params: { slug: string };
 }): JSX.Element {
   const account = getAccount(params.slug);
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Knocker iOS · Preview">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <EmptyState
+            icon={Smartphone}
+            title="Knocker iOS preview unlocks after brand kit."
+            description="The white-label preview renders once you've uploaded a logo and confirmed your monogram colours in account settings. Then a TestFlight bundle is provisioned automatically."
+            primaryAction={{ label: 'Open settings', href: `/accounts/${params.slug}/settings` }}
+            secondaryAction={{
+              label: 'See an example',
+              href: '/accounts/hope-forward/knocker-ios',
+            }}
+            variant="first-run"
+          />
+        </div>
       </AccountShell>
     );
   }

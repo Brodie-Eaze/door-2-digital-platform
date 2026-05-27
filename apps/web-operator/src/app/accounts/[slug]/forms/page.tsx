@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { FormsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 interface FormDef {
   id: string;
@@ -347,10 +349,16 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'draft' | 'paused'>('all');
   const [query, setQuery] = useState('');
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Not found">
-        <div>Account not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Forms">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <FormsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

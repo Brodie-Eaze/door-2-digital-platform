@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { SitesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 interface Site {
   id: string;
@@ -348,10 +350,16 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
   const account = getAccount(params.slug);
   const [filter, setFilter] = useState<'all' | 'site' | 'funnel'>('all');
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Not found">
-        <div>Account not found</div>
+      <AccountShell accountSlug={params.slug} pageTitle="Sites & Funnels">
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <SitesEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

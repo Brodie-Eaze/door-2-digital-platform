@@ -1,9 +1,12 @@
-import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { CheckCircle2 } from 'lucide-react';
+import { Banner, EmptyState, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { ATTRIBUTION_LABEL, type AttributionSource } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
 import { seedFor } from '@/lib/seed';
 import { rollupFor } from '@/lib/seed/kpis';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 const FREQ_LABEL: Record<string, string> = {
   monthly: 'Monthly',
@@ -35,10 +38,29 @@ function timeAgo(iso: string, now = new Date()): string {
 
 export default function ConversionsPage({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Conversions">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <EmptyState
+            icon={CheckCircle2}
+            title="No conversions yet."
+            description="Every door, call, and retarget click that lands a sale shows up here with full attribution: which rep, which campaign, which ticket size. The first one usually lands inside 90 minutes of the first shift."
+            primaryAction={{
+              label: 'Onboard knockers',
+              href: `/accounts/${params.slug}/knockers`,
+            }}
+            secondaryAction={{
+              label: 'See an example',
+              href: '/accounts/hope-forward/conversions',
+            }}
+            variant="first-run"
+          />
+        </div>
       </AccountShell>
     );
   }

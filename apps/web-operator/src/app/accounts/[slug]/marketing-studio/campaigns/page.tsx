@@ -16,7 +16,9 @@ import {
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { MarketingCampaignsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 import {
   getAccountMarketing,
   CHANNEL_LABEL,
@@ -52,10 +54,16 @@ export default function Page({ params }: PageProps): JSX.Element {
   const data = getAccountMarketing(params.slug);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  if (!account || !data) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || !data || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Campaigns">
-        <div className="text-[13px] text-muted">No marketing data wired for this account.</div>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <MarketingCampaignsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

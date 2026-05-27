@@ -10,8 +10,10 @@ import {
   type CellStatus,
   type ZoneSelection,
 } from '@/components/TerritoryHeatmap';
+import { TerritoriesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount, type Account } from '@/lib/accounts';
 import { getAccountTerritory } from '@/lib/account-territory-cells';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 type StatusFilter = 'all' | CellStatus;
 
@@ -104,10 +106,16 @@ export default function AccountTerritoriesPage({
     };
   }, [selectedCell]);
 
-  if (!account) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || firstRun.isFirstRun || !territory || territory.cells.length === 0) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Territories">
-        <Banner tone="danger">Account not found.</Banner>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <TerritoriesEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
       </AccountShell>
     );
   }

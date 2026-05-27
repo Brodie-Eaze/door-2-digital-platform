@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { SmartListsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { firstRunSnapshot } from '@/lib/first-run';
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Types + fixtures
@@ -243,6 +245,17 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
 
   const selected = useMemo(() => LISTS.find((l) => l.id === selectedId)!, [selectedId]);
   const totalMembers = LISTS.reduce((s, l) => s + l.memberCount, 0);
+  const firstRun = firstRunSnapshot(params.slug);
+  if (firstRun.isFirstRun) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Smart Lists">
+        <div className="space-y-5 max-w-[1400px]">
+          <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          <SmartListsEmpty slug={params.slug} accountName={firstRun.accountName} />
+        </div>
+      </AccountShell>
+    );
+  }
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Smart Lists">

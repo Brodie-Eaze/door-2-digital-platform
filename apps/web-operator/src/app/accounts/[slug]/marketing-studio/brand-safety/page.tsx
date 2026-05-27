@@ -8,10 +8,12 @@ import {
   Eye,
   Edit3,
 } from 'lucide-react';
-import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, Button, EmptyState, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
+import { firstRunSnapshot } from '@/lib/first-run';
 import {
   getAccountMarketing,
   type ScopedBrandRule,
@@ -56,10 +58,29 @@ export default function Page({ params }: PageProps): JSX.Element {
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 
-  if (!account || !data) {
+  const firstRun = firstRunSnapshot(params.slug);
+  if (!account || !data || firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Brand safety">
-        <div className="text-[13px] text-muted">No marketing data wired for this account.</div>
+        <div className="space-y-5 max-w-[1400px]">
+          {firstRun.isFirstRun && (
+            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
+          )}
+          <EmptyState
+            icon={ShieldCheck}
+            title="Brand safety rules pending."
+            description="Once you've connected ad providers and generated your first creatives, brand-safety rules + blocklist evidence start populating here. Rules also surface in Studio at generate time."
+            primaryAction={{
+              label: 'Open settings',
+              href: `/accounts/${params.slug}/settings`,
+            }}
+            secondaryAction={{
+              label: 'See an example',
+              href: '/accounts/hope-forward/marketing-studio/brand-safety',
+            }}
+            variant="first-run"
+          />
+        </div>
       </AccountShell>
     );
   }

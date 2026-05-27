@@ -22,6 +22,9 @@ export { FilterChip, FilterChipStrip } from './components/FilterChip';
 export { Money } from './components/Money';
 export { RegionBadge } from './components/RegionBadge';
 export { EmptyState } from './components/EmptyState';
+export type { EmptyStateVariant } from './components/EmptyState';
+export { FirstRunChecklist } from './components/FirstRunChecklist';
+export type { FirstRunMilestone } from './components/FirstRunChecklist';
 export { Banner } from './components/Banner';
 
 // Motion primitives

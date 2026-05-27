@@ -4,6 +4,7 @@ import { Radio } from 'lucide-react';
 import { Banner, KpiCard, Money, Reveal } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
+import { CommandCentreEmpty } from '@/components/AccountEmptyStates';
 import { FLEET_REPS } from '@/lib/fleet-reps';
 import { hqRollup } from '@/lib/seed/kpis';
 import {
@@ -149,6 +150,18 @@ export default function CommandCentrePage(): JSX.Element {
   const idle = FLEET_REPS.filter((r) => r.status === 'idle').length;
   const offline = FLEET_REPS.filter((r) => r.status === 'offline').length;
   const convRate = hq.totalKnocksToday > 0 ? (hq.totalConvToday / hq.totalKnocksToday) * 100 : 0;
+
+  // Rare but possible: no per-account activity at all. Render the platform
+  // empty state instead of a wall of zeros.
+  if (hq.perAccount.length === 0 || hq.totalReps === 0) {
+    return (
+      <PlatformShell pageTitle="Command Centre · Live field map">
+        <div className="space-y-5 max-w-[1400px]">
+          <CommandCentreEmpty />
+        </div>
+      </PlatformShell>
+    );
+  }
 
   return (
     <PlatformShell pageTitle="Command Centre · Live field map">
