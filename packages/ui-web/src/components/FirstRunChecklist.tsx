@@ -74,11 +74,10 @@ export function FirstRunChecklist({
             <Sparkles size={11} strokeWidth={2} /> Get this account live
           </div>
           <h2 className="mt-1 text-[15px] font-semibold text-ink tracking-tight">
-            Welcome to {accountName}. Finish setup to start capturing leads.
+            Get {accountName} live — finish setup to start capturing leads.
           </h2>
           <p className="mt-0.5 text-[12px] text-muted">
-            {completed} of {milestones.length} complete · this card auto-hides when every step
-            lands.
+            {completed} of {milestones.length} complete · card auto-hides when every step lands.
           </p>
         </div>
         {onDismiss && (

@@ -253,9 +253,9 @@ function LoginPageInner(): JSX.Element {
 
           <Card>
             <div className="space-y-1 mb-5">
-              <div className="text-[18px] font-semibold tracking-tight">Welcome back</div>
+              <div className="text-[18px] font-semibold tracking-tight">Sign in</div>
               <div className="text-[12px] text-muted leading-tight">
-                Use your email + password or click a demo account below.
+                Use your email and password, or pick a demo account below.
               </div>
             </div>
 

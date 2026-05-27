@@ -8,7 +8,7 @@ const THREADS = [
   {
     name: 'Maria Santos',
     channel: 'sms',
-    preview: 'Got it — see you Tuesday. Looking forward to learning more!',
+    preview: 'Got it — see you Tuesday. Looking forward to learning more.',
     unread: 2,
     time: '12m',
   },
@@ -36,7 +36,7 @@ const THREADS = [
   {
     name: 'Sophia Patel',
     channel: 'sms',
-    preview: 'Done — card on file. Thanks!',
+    preview: 'Done — card on file. Thanks.',
     unread: 0,
     time: '4h',
   },

@@ -172,7 +172,7 @@ export default function CommandCentrePage(): JSX.Element {
             <span>
               Live satellite view of every <span className="font-semibold">Knocker iOS</span> iPad
               in the field, across all accounts. Pins update from GPS every 30 seconds. AI-suggested
-              next zones pulse blue. Click any rep for shift + activity detail.
+              next zones pulse blue. Click any knocker for shift + activity detail.
             </span>
           </span>
         </Banner>

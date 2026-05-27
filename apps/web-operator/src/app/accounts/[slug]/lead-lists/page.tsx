@@ -11,7 +11,7 @@ const LISTS = [
     rule: 'tier=high AND source=door AND status NOT IN (converted, lost) AND age <= 7d',
     members: 142,
     growthDelta: '+18',
-    linkedCampaigns: ['Q3 push retargeting', 'Day-7 drip'],
+    linkedCampaigns: ['Q3 push retargeting', 'Day-7 sequence'],
   },
   {
     name: 'Texas-only door knocks last 30d',
@@ -19,7 +19,7 @@ const LISTS = [
     rule: 'territory.state = TX AND source = door AND age <= 30d',
     members: 1240,
     growthDelta: '+82',
-    linkedCampaigns: ['TX Meta ads', 'TX-specific drip'],
+    linkedCampaigns: ['TX Meta ads', 'TX-specific sequence'],
   },
   {
     name: 'Converted donors, $20+/mo',
@@ -27,7 +27,7 @@ const LISTS = [
     rule: 'status = converted AND donation.amountCents >= 2000 AND donation.frequency IN (monthly, fortnightly)',
     members: 481,
     growthDelta: '+12',
-    linkedCampaigns: ['Donor upgrade drip', 'Annual impact report'],
+    linkedCampaigns: ['Donor upgrade sequence', 'Annual impact report'],
   },
   {
     name: 'Cold leads — final reactivation push',
@@ -65,7 +65,7 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={14} />
-            Saved filter rules that auto-populate. Lists feed into marketing campaigns + drips.
+            Saved filter rules that auto-populate. Lists feed into marketing campaigns + sequences.
             &ldquo;Smart&rdquo; lists update continuously — &ldquo;Static&rdquo; lists are manual
             snapshots.
           </span>
@@ -213,8 +213,8 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
               },
               {
                 icon: MailPlus,
-                title: 'Email drip',
-                desc: 'Multi-step drip with day-by-day cadence',
+                title: 'Email sequence',
+                desc: 'Multi-step sequence with day-by-day cadence',
               },
               {
                 icon: ListChecks,

@@ -205,8 +205,8 @@ export default async function AccountsPage({
           <span className="text-[13px]">
             <span className="font-semibold">Door 2 Digital Command Centre</span> — your team&apos;s
             home. Click any account to drop into its full CRM workspace (territories, Knockers,
-            leads, pipeline, campaigns, drip). Each account is a tiny operating system inside the
-            one.
+            leads, pipeline, campaigns, sequences). Each account is a tiny operating system inside
+            the one.
           </span>
         </Banner>
 

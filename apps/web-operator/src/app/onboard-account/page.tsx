@@ -859,7 +859,7 @@ function Step3Contract({
               value={form.retargetingRake}
               onChange={(v) => update('retargetingRake', v)}
               tone="warn"
-              sub="Drip/web → conversion"
+              sub="Sequence/web → conversion"
             />
           </div>
         </div>

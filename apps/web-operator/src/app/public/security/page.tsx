@@ -22,7 +22,6 @@ export const metadata = {
 
 interface Foundation {
   icon: typeof ShieldCheck;
-  symbol: string;
   title: string;
   body: string;
   link: { href: string; label: string };
@@ -32,46 +31,44 @@ interface Foundation {
  * The 6 foundations grid. Each one MUST link to an artifact that
  * actually exists in this repo (docs/, ADR, or live page). Honesty rule:
  * if a link goes nowhere yet, mark it Phase 1.x target — don't fake it.
+ *
+ * Sprint D dropped the emoji glyph next to each Lucide icon — the icon
+ * already carries the visual, the emoji was redundant + violated the
+ * no-emoji voice rule.
  */
 const FOUNDATIONS: Foundation[] = [
   {
     icon: Link2,
-    symbol: '⛓',
     title: 'Hash-chained audit log',
     body: 'Every regulated mutation written to an append-only, hash-chained audit trail. Replay-verifiable end-to-end — operators can prove no row was tampered with after the fact.',
     link: { href: '/public/security/review#audit', label: 'See architecture' },
   },
   {
     icon: Lock,
-    symbol: '🔐',
     title: 'PII Vault (envelope encryption)',
     body: 'AES-256-GCM with AAD binding to row identity. Two-person JIT unmask grants expire in 30 minutes and land in the audit chain. No long-lived plaintext PII anywhere.',
     link: { href: '/public/security/review', label: 'Read the review' },
   },
   {
     icon: ShieldCheck,
-    symbol: '🛡',
     title: 'Multi-tenant isolation',
     body: 'Tenant guard middleware + region pinning + per-org scoped queries. Cross-tenant reads return 403 + audit row, not silent data. No way to forget a tenant filter.',
     link: { href: '/public/security/review', label: 'See guarantees' },
   },
   {
     icon: ListChecks,
-    symbol: '📋',
     title: 'SOC 2 Type I (scoping)',
     body: 'Phase 1.4 target. CC1–CC9 control matrix in flight. Type I scoping doc + control evidence collection underway with continuous monitoring via Vanta.',
     link: { href: '/public/security/review', label: 'Current controls' },
   },
   {
     icon: Bug,
-    symbol: '🔍',
     title: 'Pen-test readiness checklist',
     body: '20-item public checklist tracked across releases — auth, session, CSRF, IDOR, secrets, headers, dependencies, observability. Updated each Phase.',
     link: { href: '/public/security/pen-test-readiness', label: 'View checklist' },
   },
   {
     icon: Globe2,
-    symbol: '🌐',
     title: 'Region-pinned residency',
     body: 'AU data stays in AU. SG data stays in SG. US data stays in US. Org region is immutable at the DB level — enforced by trigger + RegionGuard middleware.',
     link: { href: '/public/security/region-pinning', label: 'Read ADR-0016' },
@@ -253,9 +250,8 @@ export default function PublicSecurityPage(): JSX.Element {
             return (
               <div key={f.title} className="card card-pad p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-accentSoft text-accent text-lg">
-                    <span aria-hidden>{f.symbol}</span>
-                    <Icon className="h-5 w-5 sr-only" />
+                  <div className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-accentSoft text-accent">
+                    <Icon aria-hidden className="h-5 w-5" />
                   </div>
                   <h4 className="text-[16px] font-semibold text-ink tracking-tight">{f.title}</h4>
                 </div>

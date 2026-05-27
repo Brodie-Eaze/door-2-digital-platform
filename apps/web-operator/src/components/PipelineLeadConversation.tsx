@@ -20,7 +20,7 @@ interface Message {
   authorColor: string;
   body: string;
   ts: string;
-  reactions?: Array<{ emoji: string; count: number; mine?: boolean }>;
+  reactions?: Array<{ label: string; count: number; mine?: boolean }>;
   system?: boolean;
 }
 
@@ -54,7 +54,7 @@ const SEED_MESSAGES: Message[] = [
     authorColor: '#1D4ED8',
     body: 'High interest. Wants $24/mo monthly — has two kids in college so prefers card auto-debit on the 5th.',
     ts: '2026-05-23 14:58',
-    reactions: [{ emoji: '👍', count: 2 }],
+    reactions: [{ label: 'ack', count: 2 }],
   },
   {
     id: 'm3',
@@ -80,7 +80,7 @@ const SEED_MESSAGES: Message[] = [
     authorColor: '#3B82F6',
     body: 'Heads up team — push the impact story angle harder. Last cohort uplifted 11pp when reps mentioned ACFR audit numbers.',
     ts: '2026-05-24 15:12',
-    reactions: [{ emoji: '🎯', count: 3, mine: true }],
+    reactions: [{ label: 'on it', count: 3, mine: true }],
   },
   {
     id: 'm6',
@@ -90,8 +90,8 @@ const SEED_MESSAGES: Message[] = [
     body: 'Got the callback, $24/mo recurring signed. Receipt sent.',
     ts: '2026-05-24 16:46',
     reactions: [
-      { emoji: '🎉', count: 4 },
-      { emoji: '💪', count: 2 },
+      { label: 'win', count: 4 },
+      { label: 'strong', count: 2 },
     ],
   },
 ];
@@ -197,7 +197,8 @@ export function PipelineLeadConversation(): JSX.Element {
                             : 'bg-surface border-line2 text-muted'
                         }`}
                       >
-                        {r.emoji} {r.count}
+                        <span className="font-medium">{r.label}</span>
+                        <span className="numeric opacity-70">{r.count}</span>
                       </span>
                     ))}
                   </div>

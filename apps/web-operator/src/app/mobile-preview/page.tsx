@@ -486,7 +486,7 @@ function InboxScreen() {
         {[
           {
             from: 'Sarah (Manager)',
-            msg: 'Killer shift Jordan — 31 conv already!',
+            msg: 'Strong shift Jordan — 31 conv already.',
             time: '12m',
             unread: true,
           },
@@ -507,7 +507,7 @@ function InboxScreen() {
             time: 'Yest',
             system: true,
           },
-          { from: 'Sarah (Manager)', msg: 'Q3 pitch script update — please review', time: 'Yest' },
+          { from: 'Sarah (Manager)', msg: 'Q3 pitch script update — review by EOD', time: 'Yest' },
         ].map((m, i) => (
           <div
             key={i}
@@ -575,7 +575,7 @@ function PitchScriptScreen() {
           </div>
         </div>
         <button className="w-full py-3 rounded-xl bg-ink text-surface font-semibold text-[13px] flex items-center justify-center gap-2">
-          Mark as read · ✓
+          <Check size={14} aria-hidden /> Mark as read
         </button>
       </div>
     </div>

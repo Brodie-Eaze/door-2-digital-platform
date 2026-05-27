@@ -448,7 +448,7 @@ export default function AuTerritoryIntelPage(): JSX.Element {
                   <td>
                     {z.status === 'AI suggested' ? (
                       <button className="text-[11px] font-semibold text-accent hover:underline">
-                        Send rep →
+                        Send knocker
                       </button>
                     ) : (
                       <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">

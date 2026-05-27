@@ -516,7 +516,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                 <div className="text-[10px] text-muted">{selected.durationHours}h block</div>
               </div>
               <div className="card card-pad">
-                <div className="text-[10px] uppercase tracking-wider text-muted">Rep</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">Knocker</div>
                 <div className="text-[13px] font-semibold text-ink mt-1 flex items-center gap-2">
                   <span className="mono">{selected.repInitials}</span> {selected.rep}
                 </div>

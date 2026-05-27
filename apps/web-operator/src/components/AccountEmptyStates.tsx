@@ -62,7 +62,7 @@ export function FirstRunBanner({ slug, accountName }: AccountEmptyProps): JSX.El
         <a className="font-semibold text-accent hover:underline" href={`/accounts/${slug}/today`}>
           today
         </a>{' '}
-        to unlock live data here.
+        to unlock live data on this surface.
       </span>
     </Banner>
   );
@@ -103,9 +103,9 @@ export function LeadsEmpty({ slug, accountName, placement }: SurfaceProps): JSX.
     <EmptyState
       icon={Inbox}
       title="No leads captured yet."
-      description={`Every knock by a ${accountName} rep creates a lead — even if they didn't sell on the spot. Install the Knocker iOS app on a field device to start.`}
+      description={`Every knock by a ${accountName} knocker creates a lead — even if they did not sell on the spot. Install the Knocker iOS app on a field device to start.`}
       primaryAction={{ label: 'Open Knocker iOS preview', href: `/accounts/${slug}/knocker-ios` }}
-      secondaryAction={{ label: 'Invite a rep', href: `/accounts/${slug}/knockers` }}
+      secondaryAction={{ label: 'Invite a knocker', href: `/accounts/${slug}/knockers` }}
       variant="first-run"
       {...VARIANT_FROM_PLACEMENT(placement)}
     />
@@ -117,7 +117,7 @@ export function PipelineEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={Kanban}
       title="No leads in the pipeline."
-      description="Leads flow into stages as reps qualify them. Configure your pipeline stages first so qualification looks right when the first lead lands."
+      description="Leads flow into stages as knockers and inside sales qualify them. Configure your pipeline stages first so qualification looks right when the first lead lands."
       primaryAction={{ label: 'Pipeline settings', href: `/accounts/${slug}/settings` }}
       secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/pipeline' }}
       variant="first-run"
@@ -130,8 +130,8 @@ export function InsideSalesEmpty({ slug, placement }: SurfaceProps): JSX.Element
   return (
     <EmptyState
       icon={Phone}
-      title="Inside sales hasn't dialled anyone yet."
-      description="Drop a number into a Smart List to start a call session. Sequences, drip touches, and disposition tracking spin up automatically."
+      title="Inside sales has not dialled anyone yet."
+      description="Drop a number into a Smart List to start a call session. Sequences and disposition tracking spin up automatically."
       primaryAction={{ label: 'Build a Smart List', href: `/accounts/${slug}/smart-lists` }}
       secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/inside-sales' }}
       variant="first-run"
@@ -158,7 +158,7 @@ export function CampaignsEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={Megaphone}
       title="No campaigns launched."
-      description="Marketing campaigns are where you spend $ on retargeting + lead-gen so your door reps walk into warm doors instead of cold ones."
+      description="Marketing campaigns spend on retargeting and lead-gen so your knockers walk into warm doors instead of cold ones."
       primaryAction={{ label: 'Open Marketing Studio', href: `/accounts/${slug}/marketing-studio` }}
       secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/campaigns' }}
       variant="first-run"
@@ -171,8 +171,8 @@ export function MarketingStudioEmpty({ slug, placement }: SurfaceProps): JSX.Ele
   return (
     <EmptyState
       icon={Sparkles}
-      title="Generate your first ad creative."
-      description="Claude writes the copy, FLUX creates the image. Approve in Library and it's eligible to publish to Meta or Google."
+      title="Generate your first creative."
+      description="Claude writes the copy, FLUX paints the image. Approve in Library and it becomes eligible to publish to Meta or Google."
       primaryAction={{
         label: 'Generate creative',
         href: `/accounts/${slug}/marketing-studio/generate`,
@@ -258,9 +258,9 @@ export function LiveMapEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={Radio}
       title="All knockers offline."
-      description="Either nobody's clocked in, or your shift is between sessions. Live pings reappear the moment a rep starts their next door."
+      description="Either nobody has clocked in, or your shift is between sessions. Live pings reappear the moment a knocker starts their next door."
       primaryAction={{ label: 'Open roster', href: `/accounts/${slug}/roster` }}
-      secondaryAction={{ label: 'Invite a rep', href: `/accounts/${slug}/knockers` }}
+      secondaryAction={{ label: 'Invite a knocker', href: `/accounts/${slug}/knockers` }}
       variant="anomaly"
       {...VARIANT_FROM_PLACEMENT(placement)}
     />
@@ -272,7 +272,7 @@ export function KnockersEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={Users}
       title="No knockers on the roster."
-      description="Onboard your first rep via the Knocker iOS app or invite them by email. Once they're on, they show up here with live status, knocks, conversions, and revenue."
+      description="Onboard your first knocker via the Knocker iOS app or invite them by email. Once on, they show up here with live status, knocks, conversions, and revenue."
       primaryAction={{ label: 'Invite by email', href: `/accounts/${slug}/knockers?invite=1` }}
       secondaryAction={{ label: 'iOS app preview', href: `/accounts/${slug}/knocker-ios` }}
       variant="first-run"
@@ -286,7 +286,7 @@ export function TerritoriesEmpty({ slug, placement }: SurfaceProps): JSX.Element
     <EmptyState
       icon={MapIcon}
       title="No territories drawn yet."
-      description="Polygon the streets your reps will work. Census + Mesh Block + heatmap layers paint on top, and reps see boundaries in the iOS app immediately."
+      description="Polygon the streets your knockers will work. Census + Mesh Block + heatmap layers paint on top, and knockers see boundaries in the iOS app immediately."
       primaryAction={{ label: 'Draw territory', href: `/accounts/${slug}/territories?new=1` }}
       secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/territories' }}
       variant="first-run"
@@ -300,7 +300,7 @@ export function RosterEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={CalendarClock}
       title="No shifts scheduled."
-      description="Block out next week's shifts so reps know when to clock in. Roster + territories combine to staff every door without overlap."
+      description="Block out next week so knockers know when to clock in. Roster + territories combine to staff every door without overlap."
       primaryAction={{ label: 'Schedule a shift', href: `/accounts/${slug}/roster?new=1` }}
       secondaryAction={{ label: 'Onboard knockers', href: `/accounts/${slug}/knockers` }}
       variant="first-run"
@@ -341,7 +341,7 @@ export function FormsEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={FileText}
       title="No capture forms built."
-      description="Build a form once and embed it in your site, in a campaign, or have a rep open it on the iOS app at the door. Submissions flow into Leads."
+      description="Build a form once and embed it in your site, in a campaign, or have a knocker open it on the iOS app at the door. Submissions flow into Leads."
       primaryAction={{ label: 'Build a form', href: `/accounts/${slug}/forms?new=1` }}
       variant="first-run"
       {...VARIANT_FROM_PLACEMENT(placement)}
@@ -367,7 +367,7 @@ export function MembershipsEmpty({ slug, placement }: SurfaceProps): JSX.Element
     <EmptyState
       icon={Heart}
       title="No membership programs yet."
-      description="Run a recurring program — donor club, customer rewards, or a sustainer ladder. Stripe billing, drip nurture, and member portal all bundled in."
+      description="Run a recurring program — donor club, customer rewards, or a sustainer ladder. Stripe billing, sequence nurture, and member portal all bundled in."
       primaryAction={{ label: 'New program', href: `/accounts/${slug}/memberships?new=1` }}
       variant="first-run"
       {...VARIANT_FROM_PLACEMENT(placement)}
@@ -380,7 +380,7 @@ export function TasksEmpty({ slug, placement }: SurfaceProps): JSX.Element {
     <EmptyState
       icon={CheckSquare}
       title="Inbox zero."
-      description="Tasks appear when a knocker pings you from the field, a lead callback comes due, or a campaign needs approval. Until then, everything's on track."
+      description="Tasks appear when a knocker pings you from the field, a lead callback comes due, or a campaign needs approval. Until then, everything is on track."
       primaryAction={{ label: 'New task', href: `/accounts/${slug}/tasks?new=1` }}
       variant="default"
       {...VARIANT_FROM_PLACEMENT(placement)}

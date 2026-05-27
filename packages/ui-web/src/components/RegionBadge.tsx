@@ -1,3 +1,4 @@
+import { Globe2 } from 'lucide-react';
 import { cn } from '../lib/cn';
 import type { RegionCode } from '../types';
 
@@ -6,18 +7,20 @@ interface RegionBadgeProps {
   className?: string;
 }
 
-const FLAGS: Record<RegionCode, string> = {
-  AU: '🇦🇺',
-  US: '🇺🇸',
-  SG: '🇸🇬',
-};
-
 const LABEL: Record<RegionCode, string> = {
   AU: 'Australia',
   US: 'United States',
   SG: 'Singapore',
 };
 
+/**
+ * Compact region pill — 2-letter ISO code prefixed by a Globe icon.
+ *
+ * Sprint D removed the flag emoji prefix: emoji rendering is OS-dependent
+ * (macOS shows Apple's flag art, Windows often shows letter pairs), the
+ * glyphs read as decorative in an operator console, and the no-emoji
+ * voice rule is lint-enforced. Hover for the full country name.
+ */
 export function RegionBadge({ region, className }: RegionBadgeProps): JSX.Element {
   return (
     <span
@@ -27,7 +30,7 @@ export function RegionBadge({ region, className }: RegionBadgeProps): JSX.Elemen
       )}
       title={LABEL[region]}
     >
-      <span aria-hidden>{FLAGS[region]}</span>
+      <Globe2 aria-hidden size={11} className="opacity-70" />
       <span>{region}</span>
     </span>
   );

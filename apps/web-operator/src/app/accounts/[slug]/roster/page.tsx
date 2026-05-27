@@ -699,9 +699,10 @@ function QuickAddInline({
         </button>
         <button
           onClick={onCancel}
-          className="px-1.5 text-[10px] py-0.5 bg-paper text-muted rounded"
+          aria-label="Cancel"
+          className="px-1.5 text-[10px] py-0.5 bg-paper text-muted rounded inline-flex items-center"
         >
-          ✕
+          <X size={10} aria-hidden />
         </button>
       </div>
     </div>

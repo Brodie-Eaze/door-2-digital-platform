@@ -49,7 +49,7 @@ export default function ConversionsPage({ params }: { params: { slug: string } }
           <EmptyState
             icon={CheckCircle2}
             title="No conversions yet."
-            description="Every door, call, and retarget click that lands a sale shows up here with full attribution: which rep, which campaign, which ticket size. The first one usually lands inside 90 minutes of the first shift."
+            description="Every door, call, and retarget click that lands a sale shows up here with full attribution: which knocker, which campaign, which ticket size. The first one usually lands inside 90 minutes of the first shift."
             primaryAction={{
               label: 'Onboard knockers',
               href: `/accounts/${params.slug}/knockers`,

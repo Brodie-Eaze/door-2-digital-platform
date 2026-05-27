@@ -280,7 +280,7 @@ export default async function LeadsInboxPage({
               {
                 icon: Phone,
                 label: 'Sales calls (7d)',
-                sub: 'sequence + drip',
+                sub: 'sequence + nurture',
                 tone: 'bg-accentSoft text-accent',
               },
               { icon: ArrowRight, arrow: true },

@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Layers,
   Zap,
+  Check,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -129,7 +130,7 @@ const LISTS: SmartList[] = [
     memberCount: 481,
     growthDelta: 12,
     campaigns: ['Donor upgrade — $20 → $40'],
-    drips: ['Donor upgrade drip', 'Annual impact report'],
+    drips: ['Donor upgrade sequence', 'Annual impact report'],
     lastUsed: 'Yesterday',
     status: 'active',
     groups: [
@@ -506,7 +507,7 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                   sub={selected.campaigns[0] ?? 'unused'}
                 />
                 <Stat
-                  label="In drips"
+                  label="In sequences"
                   value={selected.drips.length.toString()}
                   sub={selected.drips[0] ?? 'unused'}
                 />
@@ -907,8 +908,8 @@ function PushModal({
                   <div className="flex items-center justify-between">
                     <span className="text-[12px] font-medium text-ink">{ch.label}</span>
                     {channels.includes(ch.id) && (
-                      <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[10px]">
-                        ✓
+                      <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center">
+                        <Check size={9} strokeWidth={3} aria-hidden />
                       </span>
                     )}
                   </div>

@@ -303,7 +303,7 @@ export default function AccountTerritoriesPage({
                 {topZones.map((z) => {
                   const assigned = assignedSet.has(z.name);
                   const statusLabel = assigned
-                    ? 'Assigned ✓'
+                    ? 'Assigned'
                     : z.status === 'ai_suggested'
                       ? 'AI suggested'
                       : z.status === 'active'
@@ -589,7 +589,7 @@ function ZoneDetailPanel({
           <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
             Status
           </div>
-          <StatusPill tone={statusTone}>{isAssigned ? 'Assigned ✓' : statusLabel}</StatusPill>
+          <StatusPill tone={statusTone}>{isAssigned ? 'Assigned' : statusLabel}</StatusPill>
         </div>
 
         <div>
@@ -655,7 +655,7 @@ function ZoneDetailPanel({
             disabled={cell.status === 'blocked'}
             className="flex-1 px-3 py-2 rounded-md bg-accent text-white text-[12px] font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {cell.status === 'blocked' ? 'Blocked' : 'Send rep →'}
+            {cell.status === 'blocked' ? 'Blocked' : 'Send knocker'}
           </button>
         )}
         <button

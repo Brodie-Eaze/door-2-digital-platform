@@ -65,14 +65,14 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (
-      <AccountShell accountSlug={params.slug} pageTitle="Email drip designer">
+      <AccountShell accountSlug={params.slug} pageTitle="Sequence designer">
         <div className="space-y-5 max-w-[1400px]">
           <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
           <EmptyState
             icon={Mail}
-            title="No drip sequences built."
-            description="Drips fire automatically when a lead enters a pipeline stage. Each step is channel-aware (SMS / email / call) and respects per-lead consent records."
-            primaryAction={{ label: 'New drip', href: `/accounts/${params.slug}/drip?new=1` }}
+            title="No sequences built."
+            description="Sequences fire automatically when a lead enters a pipeline stage. Each step is channel-aware (SMS / email / call) and respects per-lead consent records."
+            primaryAction={{ label: 'New sequence', href: `/accounts/${params.slug}/drip?new=1` }}
             secondaryAction={{ label: 'See an example', href: '/accounts/hope-forward/drip' }}
             variant="first-run"
           />
@@ -81,17 +81,17 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
     );
   }
   return (
-    <AccountShell accountSlug={params.slug} pageTitle="Email drip designer">
+    <AccountShell accountSlug={params.slug} pageTitle="Sequence designer">
       <div className="space-y-6 max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Multi-step drips fire automatically when a lead enters a pipeline stage. Each step is
-            channel-aware (SMS / email / call) and respects per-lead consent records.
+            Multi-step sequences fire automatically when a lead enters a pipeline stage. Each step
+            is channel-aware (SMS / email / call) and respects per-lead consent records.
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Active drips" value={DRIPS.length} hint="one per pipeline stage" />
+          <KpiCard label="Active sequences" value={DRIPS.length} hint="one per pipeline stage" />
           <KpiCard
             label="Enrolled leads"
             value={DRIPS.reduce((s, d) => s + d.enrolledCount, 0)}
@@ -101,12 +101,12 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
           <KpiCard
             label="Avg conv. rate"
             value={`${(DRIPS.reduce((s, d) => s + d.convRate, 0) / DRIPS.length).toFixed(1)}%`}
-            hint="drip-driven"
+            hint="sequence-driven"
           />
           <KpiCard
             label="Steps total"
             value={DRIPS.reduce((s, d) => s + d.steps.length, 0)}
-            hint="across all drips"
+            hint="across all sequences"
           />
         </div>
 
@@ -168,14 +168,14 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
         ))}
 
         <Section
-          title="AI-suggested drip refinement"
-          subtitle="Claude analyses 30d of drip performance"
+          title="AI-suggested sequence refinement"
+          subtitle="Claude analyses 30d of sequence performance"
         >
           <div className="card !shadow-none border border-accent/20 bg-accentSoft/30 card-pad flex items-start gap-3">
             <Sparkles size={16} className="text-accent mt-0.5 shrink-0" />
             <div className="flex-1">
               <div className="text-[13px] font-semibold text-ink">
-                &ldquo;Qualified → close drip&rdquo; Day-2 call is converting only at 28%
+                &ldquo;Qualified → close sequence&rdquo; Day-2 call is converting only at 28%
               </div>
               <div className="text-[12px] text-muted mt-1">
                 Consider replacing Day-2 call with a 2-min branded video sent over SMS (Heygen AI

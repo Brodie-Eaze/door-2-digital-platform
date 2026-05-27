@@ -562,7 +562,7 @@ export default function RosterPage(): JSX.Element {
           <span className="text-[13px]">
             Full rostering for every Knocker iOS user. Hours auto-logged from app clock-in. Drag
             shifts between cells to reassign. Click any shift to edit. Pushes changes instantly to
-            the rep&apos;s iPad.
+            the knocker&apos;s iPad.
           </span>
         </Banner>
 
@@ -793,9 +793,9 @@ export default function RosterPage(): JSX.Element {
                                         </div>
                                         {sh.lunch && (
                                           <div
-                                            className={`text-[9px] mt-1 font-medium ${onLunch ? 'text-amber-700' : 'text-soft'}`}
+                                            className={`text-[9px] mt-1 font-medium inline-flex items-center gap-1 ${onLunch ? 'text-amber-700' : 'text-soft'}`}
                                           >
-                                            🍽 {sh.lunch}
+                                            <Coffee size={9} aria-hidden /> {sh.lunch}
                                           </div>
                                         )}
                                         {missed && (
@@ -995,9 +995,10 @@ function QuickAddInline({
         </button>
         <button
           onClick={onCancel}
-          className="px-1.5 text-[10px] py-0.5 bg-paper text-muted rounded"
+          aria-label="Cancel"
+          className="px-1.5 text-[10px] py-0.5 bg-paper text-muted rounded inline-flex items-center"
         >
-          ✕
+          <X size={10} aria-hidden />
         </button>
       </div>
     </div>

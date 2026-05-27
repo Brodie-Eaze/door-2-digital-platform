@@ -269,7 +269,7 @@ export default function TerritoryIntelPage(): JSX.Element {
               Propensity scores blend <span className="font-semibold">external data</span> (ACS
               census income, density, charity-giving index, ESRI Tapestry segments) with internal
               data (your historical conversion rates per profile). AI ranks zones, manager assigns
-              reps.
+              knockers.
             </span>
           </span>
         </Banner>
@@ -277,8 +277,8 @@ export default function TerritoryIntelPage(): JSX.Element {
         {showNewZoneBanner && (
           <Banner tone="warn">
             <span className="text-[13px]">
-              Draw mode coming in Phase 1.2 — for now, click any cell on the map to drill in and
-              assign a rep.
+              Draw mode ships in Phase 1.2 — for now, click any cell on the map to drill in and
+              assign a knocker.
             </span>
           </Banner>
         )}
@@ -294,7 +294,7 @@ export default function TerritoryIntelPage(): JSX.Element {
           <KpiCard
             label="Active"
             value={ZONES.filter((z) => z.status === 'Active').length}
-            hint="reps deployed"
+            hint="knockers deployed"
           />
           <KpiCard
             label="Avg propensity"
@@ -341,7 +341,7 @@ export default function TerritoryIntelPage(): JSX.Element {
         {/* Zone table */}
         <Section
           title="All zones · ranked by AI propensity"
-          subtitle="Click any row to open detail · click 'Send rep' to assign"
+          subtitle="Click any row to open detail · click 'Send knocker' to assign"
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
@@ -376,7 +376,7 @@ export default function TerritoryIntelPage(): JSX.Element {
             <tbody>
               {ZONES.map((z) => {
                 const assigned = assignedSet.has(z.name);
-                const displayStatus = assigned ? 'Assigned ✓' : z.status;
+                const displayStatus = assigned ? 'Assigned' : z.status;
                 const displayTone: 'success' | 'info' | 'muted' | 'danger' = assigned
                   ? 'success'
                   : z.tone;
@@ -417,7 +417,7 @@ export default function TerritoryIntelPage(): JSX.Element {
                           }}
                           className="text-[11px] font-semibold text-accent hover:underline"
                         >
-                          Send rep →
+                          Send knocker
                         </button>
                       ) : assigned ? (
                         <span className="text-[11px] font-semibold text-success inline-flex items-center gap-1">
@@ -608,7 +608,7 @@ function ZoneDetailPanel({
           <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">
             Status
           </div>
-          <StatusPill tone={statusTone}>{isAssigned ? 'Assigned ✓' : statusLabel}</StatusPill>
+          <StatusPill tone={statusTone}>{isAssigned ? 'Assigned' : statusLabel}</StatusPill>
         </div>
 
         <div>
@@ -673,7 +673,7 @@ function ZoneDetailPanel({
             disabled={cell.status === 'blocked'}
             className="flex-1 px-3 py-2 rounded-md bg-accent text-white text-[12px] font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {cell.status === 'blocked' ? 'Blocked' : 'Send rep →'}
+            {cell.status === 'blocked' ? 'Blocked' : 'Send knocker'}
           </button>
         )}
         <button

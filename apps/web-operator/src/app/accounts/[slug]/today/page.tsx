@@ -180,7 +180,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Command centre">
       <div className="space-y-5 max-w-[1500px]">
-        {/* Welcome banner */}
+        {/* Scope + freshness banner */}
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={13} />
@@ -307,7 +307,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
                   <li className="flex items-start gap-2">
                     <span className="text-success mt-0.5">·</span>
                     <span>
-                      <span className="font-medium">{performers[0]?.name ?? 'Top rep'}</span> at
+                      <span className="font-medium">{performers[0]?.name ?? 'Top knocker'}</span> at
                       +47% vs personal baseline
                     </span>
                   </li>
@@ -365,7 +365,8 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
                   <li className="flex items-start gap-2">
                     <span className="text-accent mt-0.5">·</span>
                     <span>
-                      Push v3.3 script to {account.region === 'AU' ? 'Melbourne' : 'Austin'} reps
+                      Push v3.3 script to {account.region === 'AU' ? 'Melbourne' : 'Austin'}{' '}
+                      knockers
                     </span>
                   </li>
                   <li className="flex items-start gap-2">

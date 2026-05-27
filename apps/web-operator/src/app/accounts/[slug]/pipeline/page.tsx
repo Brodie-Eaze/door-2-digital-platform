@@ -67,7 +67,7 @@ const PIPELINES: Record<
   recruiting: {
     name: 'Knocker recruiting',
     icon: UserPlus,
-    description: 'Field-rep applicant funnel (high-churn)',
+    description: 'Knocker applicant funnel (high-churn)',
     valueLabel: 'lifetime productivity',
   },
 };
@@ -738,7 +738,7 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
               <Insight
                 icon={Zap}
                 title="Convert 'Appointment' faster"
-                detail="Cohort with Day-1 video DM converts 38% vs 22% baseline. Trigger drip?"
+                detail="Cohort with Day-1 video DM converts 38% vs 22% baseline. Trigger sequence?"
                 action="Enable A/B test"
               />
               <Insight

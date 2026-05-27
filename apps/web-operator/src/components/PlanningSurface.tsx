@@ -270,7 +270,7 @@ export function PlanningSurface({
         )} conversions`}
         action={
           confirmedCount === plans.length && plans.length > 0 ? (
-            <StatusPill tone="success">All confirmed ✓</StatusPill>
+            <StatusPill tone="success">All confirmed</StatusPill>
           ) : confirmedCount > 0 ? (
             <StatusPill tone="info">
               {confirmedCount}/{plans.length} confirmed
@@ -301,7 +301,7 @@ export function PlanningSurface({
                 <div className="flex items-start justify-between mb-2">
                   <div className="text-[13px] font-semibold text-ink">{p.teamName}</div>
                   {status === 'confirmed' ? (
-                    <StatusPill tone="success">Confirmed ✓</StatusPill>
+                    <StatusPill tone="success">Confirmed</StatusPill>
                   ) : status === 'editing' ? (
                     <StatusPill tone="warn">Edited · re-confirm</StatusPill>
                   ) : (
@@ -355,7 +355,7 @@ export function PlanningSurface({
                   >
                     {status === 'confirmed' ? (
                       <>
-                        <Check size={11} /> Confirmed ✓
+                        <Check size={11} /> Confirmed
                       </>
                     ) : (
                       <>
@@ -493,11 +493,17 @@ export function PlanningSurface({
                     disabled={added}
                     data-action="add-to-plan"
                     data-reco-id={rec.id}
-                    className={`mt-2 text-[11px] font-medium ${
+                    className={`mt-2 text-[11px] font-medium inline-flex items-center gap-1 ${
                       added ? 'text-success cursor-default' : 'text-accent hover:underline'
                     }`}
                   >
-                    {added ? '✓ Added to plan' : 'Add to plan →'}
+                    {added ? (
+                      <>
+                        <Check size={11} aria-hidden /> Added to plan
+                      </>
+                    ) : (
+                      <>Add to plan</>
+                    )}
                   </button>
                 </div>
               );

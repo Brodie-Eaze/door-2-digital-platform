@@ -72,7 +72,7 @@ const SCREENS: ScreenEntry[] = [
     title: 'Smart lead lists',
     scope: 'In-account',
     surface: 'CRM',
-    description: 'Saved filter rules. Auto-updating dynamic lists. Push to campaigns + drips.',
+    description: 'Saved filter rules. Auto-updating dynamic lists. Push to campaigns + sequences.',
     preview: 'sidebar-table',
   },
   {
@@ -85,10 +85,10 @@ const SCREENS: ScreenEntry[] = [
   },
   {
     href: '/accounts/hope-forward/drip',
-    title: 'Email drip designer',
+    title: 'Sequence designer',
     scope: 'In-account',
     surface: 'Marketing',
-    description: 'Per-pipeline-stage multi-step drips. Channel-aware (SMS / email / call).',
+    description: 'Per-pipeline-stage multi-step sequences. Channel-aware (SMS / email / call).',
     preview: 'flow',
   },
   {
@@ -104,7 +104,7 @@ const SCREENS: ScreenEntry[] = [
     title: 'Knockers roster',
     scope: 'In-account',
     surface: 'Field',
-    description: "Today's field-rep performance — knocks, conversions, revenue, idle alerts.",
+    description: "Today's knocker performance — knocks, conversions, revenue, idle alerts.",
     preview: 'sidebar-table',
   },
   {
