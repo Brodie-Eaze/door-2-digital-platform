@@ -21,6 +21,7 @@ import type {
 import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { assertStateCleared } from '../compliance/service';
 import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
 
 interface ActorContext {
@@ -98,15 +99,30 @@ export async function createConversion(
   input: CreateConversionRequest,
   actor: ActorContext,
 ): Promise<ConversionPublic> {
-  // Validate the lead lives in the same org.
+  // Validate the lead lives in the same org. Pull the address region so the
+  // paid-solicitor clearance gate can derive the donor's state authoritatively.
   const lead = await prisma().lead.findUnique({
     where: { id: input.leadId },
-    select: { orgId: true, status: true, regionCode: true, brandCode: true },
+    select: {
+      orgId: true,
+      status: true,
+      regionCode: true,
+      brandCode: true,
+      address: { select: { region: true } },
+    },
   });
   if (!lead) throw new ProblemError(Problems.notFound('Lead', input.leadId));
   if (lead.orgId !== actor.orgId) {
     throw new ProblemError(Problems.tenantMismatch(lead.orgId));
   }
+
+  // Paid-solicitor state-clearance hard-gate (legal P0). A charity conversion
+  // (which carries a campaignId) MUST be cleared for the donor's state before
+  // any row is written. Donor state is the lead's address.region when present
+  // (authoritative); else the caller-supplied donorState fallback. Commercial
+  // sales carry no campaignId and skip the gate inside assertStateCleared.
+  const donorState = lead.address?.region ?? input.donorState ?? null;
+  await assertStateCleared(actor.orgId, input.campaignId, donorState);
 
   // Validate the donation/sale child payload aligns with the conversion type.
   if (input.type === 'sale_commercial' && !input.saleDetails) {

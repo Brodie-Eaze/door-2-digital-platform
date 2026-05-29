@@ -1,7 +1,6 @@
 /**
- * Compliance routes — Phase 0 stubs.
+ * Compliance routes — Phase 1.2.
  *
- * Full implementation Phase 1.2:
  *   - GET  /v1/compliance/state-clearance                          matrix of (campaignId, state, status)
  *   - GET  /v1/compliance/state-clearance/:campaignId/:state       single clearance status + evidence
  *   - POST /v1/compliance/paid-solicitor-registrations             file new registration (or upload evidence)
@@ -18,33 +17,73 @@
  *   - Compliance changes emit `compliance.state_clearance_changed` webhook.
  */
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { paidSolicitorRegistrationRequestSchema } from '@d2d/shared-types';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { withIdempotency } from '../../shared/middleware/idempotency';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+import type { RegionCode } from '@prisma/client';
+import { fileRegistration, getStateClearanceMatrix, transitionRegistration } from './service';
+
+const stateClearanceQuerySchema = z.object({ campaignId: z.string().min(1).optional() }).strict();
+
+// PATCH may only drive the registration toward a terminal/effective state;
+// `pending`/`submitted` are set at filing time, not via transition.
+const transitionRequestSchema = z
+  .object({ status: z.enum(['approved', 'rejected', 'expired']) })
+  .strict();
+
+interface IdParams {
+  id: string;
+}
 
 export async function registerCompliance(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'compliance', status: 'scaffold', phase: '1.2' }));
+  app.get('/_status', async () => ({ domain: 'compliance', status: 'live', phase: '1.2' }));
 
-  app.get('/state-clearance', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'State-clearance matrix lands in Phase 1.2',
-    }),
-  );
+  // GET /v1/compliance/state-clearance — matrix for the org.
+  app.get('/state-clearance', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = stateClearanceQuerySchema.parse(req.query);
+    const data = await getStateClearanceMatrix(ctx.orgId, query.campaignId);
+    return reply.code(200).send({ data });
+  });
 
-  app.post('/paid-solicitor-registrations', async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = paidSolicitorRegistrationRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Paid-solicitor registration filing lands in Phase 1.2',
+  // POST /v1/compliance/paid-solicitor-registrations — file a registration.
+  app.post('/paid-solicitor-registrations', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = paidSolicitorRegistrationRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const registration = await fileRegistration(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as RegionCode,
+        });
+        return { status: 201, body: { registration } };
+      },
     });
   });
 
+  // PATCH /v1/compliance/paid-solicitor-registrations/:id — transition status.
+  app.patch<{ Params: IdParams }>(
+    '/paid-solicitor-registrations/:id',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = transitionRequestSchema.parse(req.body);
+      const registration = await transitionRegistration(req.params.id, body.status, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as RegionCode,
+      });
+      return reply.code(200).send({ registration });
+    },
+  );
+
+  // GET /v1/compliance/cooling-off-windows — out of scope for Phase 1.2.
   app.get('/cooling-off-windows', async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',

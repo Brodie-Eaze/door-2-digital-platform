@@ -12,6 +12,7 @@ import {
   donationFrequencySchema,
   idSchema,
   paymentProviderSchema,
+  usStateSchema,
 } from '@d2d/shared-types';
 
 export const conversionDonationDetailsSchema = z
@@ -41,6 +42,13 @@ export const createConversionRequestSchema = z
     closerId: idSchema.optional(),
     campaignId: idSchema.optional(),
     retargetingCampaignId: idSchema.optional(),
+    // FALLBACK donor-state input for the paid-solicitor clearance gate. The
+    // authoritative source is the lead's Address.region (can't be spoofed);
+    // this is only consulted when the address state is missing. TOCTOU: a
+    // client could lie here, so it is a stopgap until every Lead carries a
+    // populated US-state address. TODO(compliance): drop once addresses are
+    // backfilled and make the gate purely address-derived.
+    donorState: usStateSchema.optional(),
     type: conversionTypeSchema,
     attributionSource: attributionSourceSchema,
     amountCents: bigIntCentsSchema,
