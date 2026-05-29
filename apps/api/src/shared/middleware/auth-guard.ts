@@ -12,6 +12,7 @@ import type { FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastif
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { env } from '../../config/env';
 import { verifyAccessToken } from '../../domains/auth/tokens';
+import { isAccessTokenRevoked } from '../../domains/auth/token-revocation';
 
 function extractToken(req: FastifyRequest): string | null {
   const header = req.headers.authorization;
@@ -39,14 +40,9 @@ export const requireAuth: preHandlerHookHandler = async (
   if (!token) {
     throw new ProblemError(Problems.unauthorized('Bearer token required'));
   }
+  let payload;
   try {
-    const payload = verifyAccessToken(token, env().JWT_ACCESS_SECRET);
-    req.principal = {
-      orgId: payload.orgId,
-      userId: payload.sub,
-      role: payload.role,
-      regionCode: payload.regionCode,
-    };
+    payload = verifyAccessToken(token, env().JWT_ACCESS_SECRET);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Invalid token';
     if (/expired/i.test(msg)) {
@@ -54,6 +50,19 @@ export const requireAuth: preHandlerHookHandler = async (
     }
     throw new ProblemError(Problems.unauthorized('Invalid token'));
   }
+  // SEC-004: reject tokens minted before a per-user revocation epoch (set on
+  // refresh-reuse / compromise). Outside the verify try/catch so the distinct
+  // "Token revoked" reason survives. Fails open on Redis error (see module).
+  const iat = typeof payload.iat === 'number' ? payload.iat : 0;
+  if (await isAccessTokenRevoked(payload.sub, iat)) {
+    throw new ProblemError(Problems.unauthorized('Token revoked'));
+  }
+  req.principal = {
+    orgId: payload.orgId,
+    userId: payload.sub,
+    role: payload.role,
+    regionCode: payload.regionCode,
+  };
 };
 
 /**
@@ -66,15 +75,21 @@ export const optionalAuth: preHandlerHookHandler = async (
 ): Promise<void> => {
   const token = extractToken(req);
   if (!token) return;
+  let payload;
   try {
-    const payload = verifyAccessToken(token, env().JWT_ACCESS_SECRET);
-    req.principal = {
-      orgId: payload.orgId,
-      userId: payload.sub,
-      role: payload.role,
-      regionCode: payload.regionCode,
-    };
+    payload = verifyAccessToken(token, env().JWT_ACCESS_SECRET);
   } catch {
-    // optional: swallow
+    return; // optional: swallow invalid/expired
   }
+  // SEC-004: a revoked token must not populate the principal even on
+  // optional-auth routes — otherwise the ≤5-min post-compromise window stays
+  // open on public+authenticated endpoints. Same epoch check as requireAuth.
+  const iat = typeof payload.iat === 'number' ? payload.iat : 0;
+  if (await isAccessTokenRevoked(payload.sub, iat)) return;
+  req.principal = {
+    orgId: payload.orgId,
+    userId: payload.sub,
+    role: payload.role,
+    regionCode: payload.regionCode,
+  };
 };

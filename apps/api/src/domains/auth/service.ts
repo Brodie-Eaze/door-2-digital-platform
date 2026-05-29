@@ -18,6 +18,7 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
 } from './tokens';
 import { writeAudit } from '../../shared/audit/write';
+import { revokeUserAccessTokens } from './token-revocation';
 
 export interface AuthSuccess {
   accessToken: string;
@@ -110,6 +111,12 @@ export async function refresh(args: {
         resourceId: stored.id,
       });
     });
+    // SEC-004: refresh-chain revocation above only kills future refreshes. Any
+    // access token already minted for this user stays valid until its exp (≤5
+    // min). Stamp the per-user revocation epoch so those stateless tokens are
+    // rejected at the auth guard immediately. Best-effort (fails open on Redis
+    // error) — the refresh chain is already dead in Postgres regardless.
+    await revokeUserAccessTokens(stored.userId);
     throw new ProblemError(Problems.unauthorized('Refresh token reused'));
   }
   if (stored.expiresAt < new Date()) {
