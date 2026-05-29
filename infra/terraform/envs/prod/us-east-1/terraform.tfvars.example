@@ -1,0 +1,41 @@
+# D2D US production — example tfvars.
+# Copy to terraform.tfvars and adjust. NEVER put secret VALUES here — this
+# file configures non-secret infra parameters only. Real secrets are injected
+# out-of-band via `aws secretsmanager put-secret-value` after apply.
+
+region      = "us-east-1"
+env         = "prod"
+owner       = "platform"
+name_prefix = "d2d-prod"
+
+vpc_cidr = "10.40.0.0/16"
+azs      = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+# Aurora Serverless v2
+aurora_engine_version = "16.4"
+aurora_min_acu        = 0.5
+aurora_max_acu        = 4
+aurora_instance_count = 2
+db_name               = "d2d"
+db_master_username    = "d2d_admin"
+
+# Redis
+redis_node_type = "cache.t4g.small"
+redis_replicas  = 1
+
+# API / ECS
+api_image_tag      = "bootstrap" # CI overrides per build via -var or task-def update
+api_container_port = 3010
+api_desired_count  = 2
+api_task_cpu       = "512"
+api_task_memory    = "1024"
+
+# CORS allowlist (prod web origins)
+cors_origins = "https://app.door2digital.com"
+
+# Leave null for the first HTTP-only bring-up; attach after issuing an ACM cert.
+# acm_certificate_arn = "arn:aws:acm:us-east-1:<acct>:certificate/<id>"
+
+# IAM ARNs allowed to administer the KMS CMKs (e.g. your SSO admin role).
+# Leave empty for root-only administration during initial bring-up.
+# kms_key_admin_arns = ["arn:aws:iam::<acct>:role/AWSReservedSSO_AdministratorAccess_xxxx"]

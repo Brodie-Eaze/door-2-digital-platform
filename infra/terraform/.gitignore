@@ -1,0 +1,15 @@
+# Terraform — never commit provider cache, state, or real var files.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Real variable files / plans (commit only *.example).
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+tfplan
+*.tfplan
+
+# Keep the lock file (.terraform.lock.hcl) — it pins provider versions.

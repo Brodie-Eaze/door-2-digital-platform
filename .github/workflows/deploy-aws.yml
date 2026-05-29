@@ -1,0 +1,120 @@
+name: Deploy (AWS ECS)
+
+# Build apps/api -> scan -> push to ECR -> migrate -> update ECS service.
+# Auth is via GitHub OIDC role assumption — NO long-lived AWS keys in CI.
+#
+# Prereqs (one-time, founder; see infra/terraform/README.md):
+#   - AWS Org + d2d-prod account exist, Terraform applied.
+#   - A GitHub OIDC IAM role exists in d2d-prod, trusting this repo, with
+#     permissions: ecr:* on d2d/api, ecs:RegisterTaskDefinition,
+#     ecs:UpdateService, ecs:DescribeServices/TaskDefinition, ecs:RunTask,
+#     iam:PassRole for the api task + execution roles.
+#   - Repo VARIABLES set: AWS_DEPLOY_ROLE_ARN, AWS_REGION (us-east-1),
+#     ECR_REPOSITORY (d2d/api), ECS_CLUSTER, ECS_SERVICE, ECS_TASK_FAMILY,
+#     ECS_MIGRATE_FAMILY, ECS_SUBNETS (comma list), ECS_SECURITY_GROUP.
+
+on:
+  push:
+    tags: ['prod-*'] # immutable release tags only; staging can mirror later
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (defaults to git sha)'
+        required: false
+
+concurrency:
+  group: deploy-aws-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+
+jobs:
+  build-and-deploy:
+    name: Build, scan, push, deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: production # manual approval gate (repo Settings -> Environments)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "tag=${{ inputs.image_tag || format('sha-{0}', github.sha) }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.tag.outputs.tag }}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          docker build -f Dockerfile.api -t "$IMAGE" .
+
+      - name: Scan image (Trivy, fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Push image
+        run: docker push "$IMAGE"
+
+      - name: Render new task definition (service)
+        run: |
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_TASK_FAMILY }}" \
+            --query 'taskDefinition' --output json > taskdef.json
+          # Swap only the image; keep secrets/env/roles from the live revision.
+          jq --arg IMG "$IMAGE" '
+            .containerDefinitions[0].image=$IMG
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+          ' taskdef.json > taskdef.new.json
+          NEW_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "NEW_TASKDEF=$NEW_ARN" >> "$GITHUB_ENV"
+
+      - name: Run DB migrations (one-off task, wait for completion)
+        run: |
+          # Register migrate task def with the same new image.
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_MIGRATE_FAMILY }}" \
+            --query 'taskDefinition' --output json > migratedef.json
+          jq --arg IMG "$IMAGE" '
+            .containerDefinitions[0].image=$IMG
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+          ' migratedef.json > migratedef.new.json
+          MIG_ARN=$(aws ecs register-task-definition --cli-input-json file://migratedef.new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          TASK_ARN=$(aws ecs run-task --cluster "${{ vars.ECS_CLUSTER }}" \
+            --task-definition "$MIG_ARN" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.ECS_SUBNETS }}],securityGroups=[${{ vars.ECS_SECURITY_GROUP }}],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$TASK_ARN"
+          CODE=$(aws ecs describe-tasks --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Migration exit code: $CODE"
+          test "$CODE" = "0"
+
+      - name: Deploy service (rolling, circuit breaker auto-rollback)
+        run: |
+          aws ecs update-service --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --task-definition "$NEW_TASKDEF" --force-new-deployment
+          aws ecs wait services-stable --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_SERVICE }}"
