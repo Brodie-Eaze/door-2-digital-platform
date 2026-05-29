@@ -19,7 +19,7 @@ import type {
   RegionCode,
 } from '@prisma/client';
 import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
 import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
@@ -149,7 +149,13 @@ export async function createConversion(
   // already replays the response, but the DB-level UNIQUE is belt+suspenders.
   const idempotencyKey = newId('cnvidem');
 
-  const result = await prisma().$transaction(async (tx) => {
+  // SEC-005 — run the finalise inside a tenant-pinned transaction. tenantTx
+  // sets the `app.current_org_id` GUC so Postgres RLS scopes every row written
+  // here to actor.orgId at the database layer (the "belt"). Under the current
+  // owner DB role RLS is a no-op and this behaves exactly as the prior
+  // $transaction; after the d2d_app cutover (docs/runbooks/rls-cutover.md) the
+  // database itself enforces tenant isolation on this money path.
+  const result = await tenantTx(actor.orgId, async (tx) => {
     const conv = await tx.conversion.create({
       data: {
         id: conversionId,

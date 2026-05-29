@@ -219,6 +219,55 @@ export function tenantPrisma(orgId: string): TenantPrismaClient {
   return buildTenantClient(orgId);
 }
 
+/**
+ * Run `fn` inside a transaction pinned to `orgId` (SEC-005 — the RLS "belt").
+ *
+ * Sets the transaction-local `app.current_org_id` GUC that Postgres RLS
+ * policies consume (`USING ("orgId" = current_setting('app.current_org_id',
+ * true))`). Because the app's runtime DB role is a *non-owner* role with RLS
+ * enforced (see prisma/rls/bootstrap-app-role.sql + the rls_belt migration),
+ * any tenant table read/written inside this transaction is constrained to
+ * `orgId` by the database itself — not just the app layer.
+ *
+ * `set_config(key, value, true)` is transaction-scoped: it is rolled back at
+ * COMMIT/ROLLBACK, so it never leaks to the next user of a pooled connection.
+ * Parameterised via the tagged template — never string-interpolated — so the
+ * orgId can't break out of the GUC assignment.
+ *
+ * The `tx` handed to `fn` is a plain `Prisma.TransactionClient`, so existing
+ * helpers (`writeAudit(tx, …)`, `AuditService.recordEvent(tx, …)`) work
+ * unchanged. Callers still pass `orgId` in their `data`/`where` as today; the
+ * GUC is the database-enforced floor underneath that.
+ */
+export async function tenantTx<T>(
+  orgId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: { maxWait?: number; timeout?: number },
+): Promise<T> {
+  return runTenantTx(prisma(), orgId, fn, options);
+}
+
+/**
+ * Implementation seam behind {@link tenantTx}, parameterised on the client so
+ * tests can prove RLS actually bites by running it against the non-owner
+ * `d2d_app` role (the global `prisma()` connects as the table owner, which
+ * bypasses non-FORCEd RLS). Production code should call `tenantTx`.
+ */
+export async function runTenantTx<T>(
+  client: Pick<PrismaClient, '$transaction'>,
+  orgId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: { maxWait?: number; timeout?: number },
+): Promise<T> {
+  if (!orgId) {
+    throw new Error('tenantTx: orgId is required');
+  }
+  return client.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_org_id', ${orgId}, true)`;
+    return fn(tx);
+  }, options);
+}
+
 export async function shutdownDb(): Promise<void> {
   await _prisma?.$disconnect();
 }

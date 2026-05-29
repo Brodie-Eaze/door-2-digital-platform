@@ -2,18 +2,17 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Vitest config — runs unit + integration tests.
+ * Integration test config — CI "Integration tests" gate
+ * (`pnpm --filter api test:integration`).
  *
- * The integration tests boot an in-process Fastify app via inject() so we
- * never bind a port. They use a separate Postgres DB (`d2d_test`) seeded
- * with the migrated schema; teardown wipes mutable rows between suites.
+ * Runs the DB-backed suite under tests/ against the `d2d_test` Postgres
+ * service after migrations are applied (`prisma migrate deploy`). Mirrors the
+ * base vitest config (forks pool so module-level singletons reset per file,
+ * shared tests/setup.ts that pins DATABASE_URL to d2d_test). Kept standalone
+ * and explicit rather than merged so the include glob is unambiguous — this
+ * gate is the floor that the SEC-005 RLS isolation test runs under in CI.
  */
 
-/**
- * Resolve a workspace package's source entry RELATIVE to this config file so
- * the aliases work in any checkout (CI's `/home/runner/...`, a teammate's
- * machine), not just one absolute path. apps/api → ../../packages/<name>.
- */
 const pkg = (name: string): string =>
   fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url));
 
@@ -21,7 +20,7 @@ export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
-    include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
     setupFiles: ['./tests/setup.ts'],
     pool: 'forks', // each file gets a fresh process — avoids module-level singletons
     poolOptions: {
