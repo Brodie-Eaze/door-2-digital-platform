@@ -55,6 +55,11 @@ const envSchema = z.object({
   COGNITO_REGION: z.string().default('us-east-1'),
 
   OKTA_SAML_METADATA_URL: z.string().url().optional(),
+  // SAML SSO (enterprise / Pilot-Charlie). Public origin of THIS API — used to
+  // derive the SP entityId + ACS callback URL published in SP metadata and sent
+  // to the IdP. Defaults to local dev; set to the real api origin in each env.
+  // RelayState is signed with the existing OAUTH_STATE_SECRET (no new secret).
+  SAML_SP_BASE_URL: z.string().url().default('http://localhost:3010'),
 
   // MiCamp (US)
   MICAMP_API_KEY: z.string().optional(),

@@ -219,14 +219,14 @@ export async function setUserPassword(userId: string, plaintext: string): Promis
   });
 }
 
-interface IssueArgs {
+export interface IssueArgs {
   ip?: string;
   userAgent?: string;
   rotateFromId?: string;
   audit: string;
 }
 
-interface IssueUser {
+export interface IssueUser {
   id: string;
   email: string;
   role: PlatformRole;
@@ -237,7 +237,13 @@ interface IssueUser {
   familyName: string;
 }
 
-async function issueTokens(user: IssueUser, args: IssueArgs): Promise<AuthSuccess> {
+/**
+ * Mint an access+refresh session for an already-authenticated user. Exported
+ * so the SAML SSO flow (domains/auth/saml) can issue a session after the IdP
+ * assertion validates — it reuses the exact same token-issuance + audit path
+ * as password login, so SSO sessions are indistinguishable downstream.
+ */
+export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<AuthSuccess> {
   const e = env();
   const { token: accessToken } = signAccessToken(
     {

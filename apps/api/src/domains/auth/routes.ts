@@ -1,19 +1,37 @@
 /**
- * Auth routes — POST /login, /refresh, /logout; GET /me.
+ * Auth routes — POST /login, /refresh, /logout; GET /me; SAML SSO.
  *
  * Sessions are returned both as JSON tokens (for native/CLI/test clients) AND
  * as httpOnly cookies (for browser clients — `d2d_at` and `d2d_rt`). The
  * cookie path on `d2d_rt` is scoped to `/v1/auth` so the refresh secret is
  * never sent to any other route.
  *
- * SSO / MFA / WebAuthn remain 501 stubs (Phase 1.2).
+ * SAML SSO (Phase 1.1 enterprise table-stakes):
+ *   - GET  /sso/:orgSlug/start    → 302 to the IdP (SP-initiated)
+ *   - POST /sso/:orgSlug/acs      → IdP posts the signed SAMLResponse here
+ *   - GET  /sso/:orgSlug/metadata → this SP's SAML metadata XML
+ *   - GET  /sso/:orgSlug/config   → cert-free config view (org_admin+)
+ *   - PUT  /sso/:orgSlug/config   → upsert IdP config (org_admin+)
+ *
+ * MFA / WebAuthn remain 501 stubs (Phase 1.2).
  */
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import * as querystring from 'node:querystring';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { loginRequestSchema, refreshRequestSchema, logoutRequestSchema } from './schemas';
 import { login, refresh, logout, getCurrentUser } from './service';
 import { optionalAuth, requireAuth } from '../../shared/middleware/auth-guard';
 import { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from './tokens';
+import { env } from '../../config/env';
+import {
+  startSso,
+  consumeAcs,
+  samlMetadata,
+  getSsoConfigPublic,
+  upsertSsoConfigurationBySlug,
+  type SsoActor,
+} from './saml/service';
+import { acsBodySchema, upsertSsoConfigSchema } from './saml/schemas';
 
 /**
  * Write the access + refresh tokens to httpOnly cookies. Browser flows rely
@@ -55,7 +73,59 @@ function clearAuthCookies(reply: FastifyReply): void {
   cookieReply.clearCookie('d2d_rt', { path: '/v1/auth' });
 }
 
+/**
+ * Gate SSO config mutations to org admins. Requires an authenticated principal
+ * (401 if none) carrying `super_admin` (D2D ops) or `org_admin` (this org).
+ * Per-org ownership is enforced downstream in the service (an org_admin of org
+ * A cannot configure org B). Returns the actor shape the service expects.
+ */
+function assertSsoAdmin(req: FastifyRequest): SsoActor {
+  const principal = req.principal;
+  if (!principal?.userId) {
+    throw new ProblemError(Problems.unauthorized());
+  }
+  if (principal.role !== 'super_admin' && principal.role !== 'org_admin') {
+    throw new ProblemError(Problems.forbidden('SSO configuration requires an org admin'));
+  }
+  return {
+    userId: principal.userId,
+    orgId: principal.orgId,
+    role: principal.role,
+    regionCode: principal.regionCode,
+  };
+}
+
+/**
+ * Where the browser lands after a successful SSO login. The session is in
+ * httpOnly cookies by this point, so we redirect to the first configured app
+ * origin (CORS_ORIGINS), falling back to '/'. A per-org post-login URL
+ * (BrandKit.customDomain) is a documented follow-up.
+ */
+function postLoginRedirect(): string {
+  const first = env()
+    .CORS_ORIGINS.split(',')
+    .map((o) => o.trim())
+    .find((o) => o.length > 0);
+  return first ?? '/';
+}
+
 export async function registerAuth(app: FastifyInstance): Promise<void> {
+  // The SAML ACS receives application/x-www-form-urlencoded from the IdP.
+  // `registerAuth` runs in an encapsulated child instance (registered with a
+  // /v1/auth prefix), so this parser is scoped to auth routes only and does
+  // not affect the JSON-only surface elsewhere.
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      try {
+        done(null, querystring.parse(body as string));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   app.get('/_status', async () => ({ domain: 'auth', status: 'live', phase: '1.1' }));
 
   // POST /v1/auth/login
@@ -134,22 +204,64 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     }),
   );
 
-  app.post('/sso/:orgSlug/start', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'SAML SP lands in Phase 1.2',
-    }),
+  // ── SAML SSO (Phase 1.1 enterprise table-stakes) ──────────────────────
+
+  // GET /v1/auth/sso/:orgSlug/start — SP-initiated login. 302 to the IdP with
+  // a signed RelayState. GET (not POST) so it's link/bookmark friendly.
+  app.get<{ Params: { orgSlug: string } }>('/sso/:orgSlug/start', async (req, reply) => {
+    const { redirectUrl } = await startSso(req.params.orgSlug);
+    return reply.redirect(redirectUrl);
+  });
+
+  // POST /v1/auth/sso/:orgSlug/acs — the IdP posts the signed SAMLResponse
+  // here (application/x-www-form-urlencoded). On success the session lands in
+  // httpOnly cookies and we 302 the browser into the app.
+  app.post<{ Params: { orgSlug: string } }>('/sso/:orgSlug/acs', async (req, reply) => {
+    const body = acsBodySchema.parse(req.body);
+    const { session } = await consumeAcs({
+      slug: req.params.orgSlug,
+      samlResponse: body.SAMLResponse,
+      relayState: body.RelayState,
+      ip: req.ip,
+      userAgent:
+        typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
+    });
+    setAuthCookies(reply, session.accessToken, session.refreshToken);
+    return reply.redirect(postLoginRedirect());
+  });
+
+  // GET /v1/auth/sso/:orgSlug/metadata — this SP's SAML metadata XML, to hand
+  // to the IdP admin. Requires the org's SSO config to exist (404 otherwise).
+  app.get<{ Params: { orgSlug: string } }>('/sso/:orgSlug/metadata', async (req, reply) => {
+    const xml = await samlMetadata(req.params.orgSlug);
+    return reply.code(200).type('application/xml').send(xml);
+  });
+
+  // GET /v1/auth/sso/:orgSlug/config — cert-free config view (org_admin+).
+  app.get<{ Params: { orgSlug: string } }>(
+    '/sso/:orgSlug/config',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      assertSsoAdmin(req);
+      const ssoConfiguration = await getSsoConfigPublic(req.params.orgSlug);
+      if (!ssoConfiguration) {
+        throw new ProblemError(Problems.notFound('SsoConfiguration', req.params.orgSlug));
+      }
+      return reply.code(200).send({ ssoConfiguration });
+    },
   );
 
-  app.post('/sso/:orgSlug/acs', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'SAML SP lands in Phase 1.2',
-    }),
+  // PUT /v1/auth/sso/:orgSlug/config — upsert the IdP config (org_admin+). The
+  // cert is encrypted at rest; the response is always the cert-free view.
+  app.put<{ Params: { orgSlug: string } }>(
+    '/sso/:orgSlug/config',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const actor = assertSsoAdmin(req);
+      const body = upsertSsoConfigSchema.parse(req.body);
+      const ssoConfiguration = await upsertSsoConfigurationBySlug(req.params.orgSlug, body, actor);
+      return reply.code(200).send({ ssoConfiguration });
+    },
   );
 
   app.post('/webauthn/begin', async (_req, reply) =>
