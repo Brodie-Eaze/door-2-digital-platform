@@ -9,6 +9,7 @@
  */
 import type { FastifyRequest } from 'fastify';
 import { Problems, ProblemError } from '@d2d/shared-utils';
+import { tenantPrisma, type TenantPrismaClient } from '../../config/db';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -35,4 +36,17 @@ export function requireTenant(req: FastifyRequest): Principal {
     throw new ProblemError(Problems.unauthorized('No tenant context'));
   }
   return req.principal;
+}
+
+/**
+ * Convenience accessor — returns a tenant-scoped Prisma client bound to the
+ * authenticated principal's orgId. Services that adopt the "suspenders"
+ * injector should reach for this instead of `prisma()` so every query is
+ * automatically constrained to the caller's tenant.
+ *
+ * Throws ProblemError(unauthorized) when no principal/orgId is present.
+ */
+export function tenantDb(req: FastifyRequest): TenantPrismaClient {
+  const principal = requireTenant(req);
+  return tenantPrisma(principal.orgId);
 }
