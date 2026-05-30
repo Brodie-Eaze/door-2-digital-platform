@@ -101,17 +101,24 @@ async function buildServer() {
     maxAge: 600,
   });
 
-  // Rate limiter — tiered buckets per (IP, API key, user)
+  // Rate limiter — bucket per client IP.
+  //
+  // SEC-010 / PEN-011: the bucket key MUST derive from a TRUSTED identifier.
+  // It previously preferred the caller-supplied `x-api-key` header, so an
+  // attacker could rotate that header to a fresh value on every request and
+  // mint an unlimited number of empty buckets — fully bypassing the limit.
+  //
+  // This global limiter runs on the `onRequest` hook (before any auth
+  // preHandler), so no verified principal / API-key id exists yet, and this
+  // service has no API-key auth layer to derive one from. We therefore key on
+  // `req.ip` — Fastify-derived from the connection (with `trustProxy` honouring
+  // the validated X-Forwarded-For), which the caller cannot freely forge — and
+  // never read the attacker-controlled header for keying.
   await app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
     redis: redis(),
-    keyGenerator: (req) => {
-      // Prefer per-API-key bucket if present
-      const apiKey = req.headers['x-api-key'];
-      if (typeof apiKey === 'string') return `key:${apiKey}`;
-      return `ip:${req.ip}`;
-    },
+    keyGenerator: (req) => `ip:${req.ip}`,
   });
 
   await app.register(sensible);

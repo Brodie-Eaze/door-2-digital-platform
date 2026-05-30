@@ -12,7 +12,10 @@ import type { FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastif
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { env } from '../../config/env';
 import { verifyAccessToken } from '../../domains/auth/tokens';
-import { isAccessTokenRevoked } from '../../domains/auth/token-revocation';
+import {
+  isAccessTokenRevoked,
+  TokenRevocationUnavailableError,
+} from '../../domains/auth/token-revocation';
 
 function extractToken(req: FastifyRequest): string | null {
   const header = req.headers.authorization;
@@ -52,9 +55,27 @@ export const requireAuth: preHandlerHookHandler = async (
   }
   // SEC-004: reject tokens minted before a per-user revocation epoch (set on
   // refresh-reuse / compromise). Outside the verify try/catch so the distinct
-  // "Token revoked" reason survives. Fails open on Redis error (see module).
+  // "Token revoked" reason survives.
+  //
+  // D12 — fail CLOSED here: on an authenticated route we cannot serve a token
+  // we are unable to prove is un-revoked. If the revocation store is down we
+  // reject (401) and log so the outage is observable, rather than letting a
+  // possibly-revoked (compromised) session through for the rest of its TTL.
   const iat = typeof payload.iat === 'number' ? payload.iat : 0;
-  if (await isAccessTokenRevoked(payload.sub, iat)) {
+  let revoked: boolean;
+  try {
+    revoked = await isAccessTokenRevoked(payload.sub, iat);
+  } catch (e) {
+    if (e instanceof TokenRevocationUnavailableError) {
+      req.log.error(
+        { err: e.cause, userId: payload.sub },
+        'token revocation check failed; failing closed on authenticated route',
+      );
+      throw new ProblemError(Problems.unauthorized('Token validation temporarily unavailable'));
+    }
+    throw e;
+  }
+  if (revoked) {
     throw new ProblemError(Problems.unauthorized('Token revoked'));
   }
   req.principal = {
@@ -84,8 +105,25 @@ export const optionalAuth: preHandlerHookHandler = async (
   // SEC-004: a revoked token must not populate the principal even on
   // optional-auth routes — otherwise the ≤5-min post-compromise window stays
   // open on public+authenticated endpoints. Same epoch check as requireAuth.
+  //
+  // D12 — fail OPEN here, but safely: if the revocation store is down we cannot
+  // confirm the token is un-revoked, so we decline to populate the principal
+  // (degrade to anonymous) instead of granting it. This never *grants* access
+  // on a Redis outage; it only withholds the optional principal. Logged so the
+  // outage is still observable.
   const iat = typeof payload.iat === 'number' ? payload.iat : 0;
-  if (await isAccessTokenRevoked(payload.sub, iat)) return;
+  try {
+    if (await isAccessTokenRevoked(payload.sub, iat)) return;
+  } catch (e) {
+    if (e instanceof TokenRevocationUnavailableError) {
+      req.log.warn(
+        { err: e.cause, userId: payload.sub },
+        'token revocation check failed on optional-auth route; degrading to anonymous',
+      );
+      return;
+    }
+    throw e;
+  }
   req.principal = {
     orgId: payload.orgId,
     userId: payload.sub,

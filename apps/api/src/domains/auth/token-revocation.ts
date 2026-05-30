@@ -21,16 +21,38 @@
  * legitimate token is being issued (we throw), so there is nothing to falsely
  * revoke — we only ever err toward killing more.
  *
- * Availability note: this is defence-in-depth layered on top of signature +
- * expiry, which are always enforced. If Redis is unreachable we FAIL OPEN
- * (treat as not-revoked) rather than 401 the entire authenticated surface on a
- * cache blip. The exposure of failing open is at most the ≤5-minute window we
- * already had before this control existed.
+ * Availability note (D12 — fail CLOSED on the authenticated surface): this is
+ * defence-in-depth layered on top of signature + expiry, which are always
+ * enforced. Originally a Redis error here was swallowed and the check returned
+ * "not revoked" (fail OPEN) — but that meant a *revoked* (compromised) session
+ * stayed alive for the rest of its ≤5-min TTL whenever Redis was down, and an
+ * attacker who can DoS Redis can deliberately keep a revoked token usable.
+ *
+ * The revocation check no longer decides the availability policy itself: on a
+ * Redis error it raises {@link TokenRevocationUnavailableError} and lets the
+ * caller decide. `requireAuth` treats that as fail CLOSED (reject the request);
+ * `optionalAuth` treats it as fail OPEN (proceed WITHOUT a principal — no
+ * elevated access is ever granted, since the principal stays unset). This way
+ * the authenticated surface cannot serve a possibly-revoked token during an
+ * outage, while public+optional routes degrade to their anonymous behaviour.
  */
 import { redis } from '../../config/redis';
 import { ACCESS_TOKEN_TTL_SECONDS } from './tokens';
 
 const KEY_PREFIX = 'auth:revoked-before:';
+
+/**
+ * Raised by {@link isAccessTokenRevoked} when the revocation store (Redis) is
+ * unreachable, so the caller can choose its own fail policy. We cannot prove a
+ * token is *not* revoked while the store is down, so authenticated callers must
+ * fail CLOSED on this error.
+ */
+export class TokenRevocationUnavailableError extends Error {
+  constructor(public override readonly cause: unknown) {
+    super('Token revocation store unavailable');
+    this.name = 'TokenRevocationUnavailableError';
+  }
+}
 
 /** Buffer added to the key TTL so a token minted at the cutoff second (valid
  * until cutoff + access-TTL) is still covered by the epoch when it is checked. */
@@ -65,14 +87,19 @@ export async function revokeUserAccessTokens(userId: string): Promise<void> {
 
 /**
  * True if a token for `userId` with the given `iat` (unix seconds) has been
- * revoked. Fails open on any Redis error or unparseable value.
+ * revoked.
+ *
+ * On a Redis error this THROWS {@link TokenRevocationUnavailableError} rather
+ * than silently returning `false` — we cannot confirm the token is un-revoked
+ * while the store is down, so the decision is handed to the caller (D12). A
+ * `null` (no epoch) or unparseable value is still a definite "not revoked".
  */
 export async function isAccessTokenRevoked(userId: string, iat: number): Promise<boolean> {
   let raw: string | null;
   try {
     raw = await redis().get(key(userId));
-  } catch {
-    return false; // fail open
+  } catch (err) {
+    throw new TokenRevocationUnavailableError(err);
   }
   if (raw === null) return false;
   const cutoff = Number(raw);
