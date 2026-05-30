@@ -58,6 +58,18 @@ const superActor: SsoActor = {
   regionCode: 'US',
 };
 
+/**
+ * Org-bound admin actor for the pilot org. After D4 the upsert is strictly
+ * org-bound (no super_admin cross-tenant bypass), so config seeding must use an
+ * actor whose orgId matches the slug's org.
+ */
+const pilotAdminActor: SsoActor = {
+  userId: adminId,
+  orgId,
+  role: 'org_admin',
+  regionCode: 'US',
+};
+
 async function seedOrg(id: string, orgSlug: string | null): Promise<void> {
   await prisma().org.create({
     data: {
@@ -106,7 +118,7 @@ async function configure(): Promise<void> {
       idpCertificate: FAKE_CERT,
       attributeMapping,
     },
-    superActor,
+    pilotAdminActor, // org-bound: actor.orgId === slug's org (post-D4)
   );
 }
 
@@ -188,6 +200,47 @@ describe('PUT /v1/auth/sso/:slug/config (authz + cert at rest)', () => {
       },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  // D4 — the `isSuper` cross-tenant bypass is removed. A super_admin from
+  // `org_OPS` may NOT install an IdP cert on a victim org's slug. This is the
+  // chain that turns a forged super_admin (D3) into full org takeover: without
+  // this guard, the attacker installs their own IdP cert for the victim slug
+  // and SP-logs-in as that org. The upsert is now strictly org-bound.
+  it('forbids a super_admin from configuring ANOTHER org (no isSuper bypass)', async () => {
+    await expect(
+      upsertSsoConfigurationBySlug(
+        slug, // slug belongs to org_SSO_PILOT, NOT the super-actor's org_OPS
+        {
+          provider: 'okta',
+          entityId: 'https://attacker-idp.test/saml/metadata',
+          ssoUrl: 'https://attacker-idp.test/saml/sso',
+          idpCertificate: FAKE_CERT,
+          attributeMapping,
+        },
+        superActor, // role: super_admin, orgId: org_OPS
+      ),
+    ).rejects.toMatchObject({ problem: { status: 403 } });
+    // And no config row was written for the victim org.
+    const row = await prisma().ssoConfiguration.findUnique({ where: { orgId } });
+    expect(row).toBeNull();
+  });
+
+  it('lets a super_admin configure their OWN org (org-bound upsert still works)', async () => {
+    // Give the super-actor a real org so the org-equality check can pass.
+    await seedOrg(superActor.orgId, 'ops-org');
+    const cfg = await upsertSsoConfigurationBySlug(
+      'ops-org',
+      {
+        provider: 'okta',
+        entityId: 'https://idp.ops.test/saml/metadata',
+        ssoUrl: 'https://idp.ops.test/saml/sso',
+        idpCertificate: FAKE_CERT,
+        attributeMapping,
+      },
+      superActor,
+    );
+    expect(cfg.orgId).toBe(superActor.orgId);
   });
 });
 
