@@ -102,6 +102,18 @@ export async function requireSession(): Promise<Session | NextResponse> {
   return session;
 }
 
+/**
+ * The ONLY roles permitted to read/write across tenant boundaries. Everything
+ * else is pinned to its own `session.orgId`. Default-deny: an unknown role is
+ * never cross-tenant. Centralised so every BFF query scopes identically and a
+ * new role can't silently inherit god-mode.
+ */
+const CROSS_TENANT_ROLES: ReadonlySet<string> = new Set(['super_admin']);
+
+export function isCrossTenantOperator(session: Session): boolean {
+  return CROSS_TENANT_ROLES.has(session.role);
+}
+
 export function requireIdempotencyKey(req: NextRequest): string | NextResponse {
   const key = req.headers.get('idempotency-key');
   if (!key || key.length < 8) return idempotencyKeyMissing();

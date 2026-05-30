@@ -29,6 +29,7 @@ import { AccountAvatar } from '@/components/AccountAvatar';
 import { AccountsEmpty } from '@/components/AccountEmptyStates';
 import { ACCOUNTS, type Account } from '@/lib/accounts';
 import { getSession } from '@/lib/session';
+import { isCrossTenantOperator } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -55,12 +56,14 @@ async function loadPortfolio(): Promise<PortfolioData> {
   try {
     // Dynamic import keeps Prisma off the Edge/middleware bundle.
     const { db } = await import('@d2d/database');
-    const where =
-      session.role === 'super_admin'
-        ? { status: { not: 'archived' as const }, slug: { not: null } }
-        : session.orgId
-          ? { id: session.orgId, status: { not: 'archived' as const }, slug: { not: null } }
-          : { id: '__no_org__' };
+    // Tenant scope over a cryptographically verified session: only a genuine
+    // cross-tenant operator sees every org; everyone else is pinned to their
+    // own session.orgId (default-deny via the centralised helper).
+    const where = isCrossTenantOperator(session)
+      ? { status: { not: 'archived' as const }, slug: { not: null } }
+      : session.orgId
+        ? { id: session.orgId, status: { not: 'archived' as const }, slug: { not: null } }
+        : { id: '__no_org__' };
 
     const orgs = await db.org.findMany({
       where,

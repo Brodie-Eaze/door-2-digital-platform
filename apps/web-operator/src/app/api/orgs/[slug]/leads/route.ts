@@ -16,7 +16,14 @@
  */
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
-import { forbidden, internal, notFound, ok, requireSession } from '@/lib/api-helpers';
+import {
+  forbidden,
+  internal,
+  isCrossTenantOperator,
+  notFound,
+  ok,
+  requireSession,
+} from '@/lib/api-helpers';
 import { maskEmail, maskPhone } from '@/lib/db-helpers';
 
 export const runtime = 'nodejs';
@@ -49,8 +56,11 @@ export async function GET(
   }
   if (!org || !org.slug) return notFound('Org', slug);
 
-  // Authorization: super_admin can read any org; everyone else only their own.
-  if (session.role !== 'super_admin' && session.orgId !== org.id) {
+  // Authorization (over a cryptographically verified session): a genuine
+  // cross-tenant operator can read any org's leads; everyone else only their
+  // own org's. Tenant scope is also enforced in the lead query below
+  // (where: { orgId: org.id }), so PII never leaks across tenants.
+  if (!isCrossTenantOperator(session) && session.orgId !== org.id) {
     return forbidden('You do not have access to this sub-account');
   }
 

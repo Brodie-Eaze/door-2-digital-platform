@@ -19,6 +19,7 @@ import { Prisma, db } from '@d2d/database';
 import {
   forbidden,
   internal,
+  isCrossTenantOperator,
   ok,
   problemResponse,
   problem,
@@ -90,13 +91,16 @@ export async function GET(): Promise<Response> {
   const session = sessionOrErr;
 
   try {
+    // Tenant scope (defense-in-depth, now over a CRYPTOGRAPHICALLY VERIFIED
+    // session): only a genuine cross-tenant operator lists every org. A valid
+    // org_admin/lesser role is pinned to its own session.orgId; a session with
+    // no orgId resolves to an impossible id (empty result), never all orgs.
     const orgs = await db.org.findMany({
-      where:
-        session.role === 'super_admin'
-          ? { status: { not: 'archived' }, slug: { not: null } }
-          : session.orgId
-            ? { id: session.orgId, status: { not: 'archived' }, slug: { not: null } }
-            : { id: '__no_org__' },
+      where: isCrossTenantOperator(session)
+        ? { status: { not: 'archived' }, slug: { not: null } }
+        : session.orgId
+          ? { id: session.orgId, status: { not: 'archived' }, slug: { not: null } }
+          : { id: '__no_org__' },
       orderBy: { createdAt: 'asc' },
       include: { brandKit: true, billing: true },
     });
@@ -143,8 +147,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
 
-  // Only super_admin can mint new sub-accounts.
-  if (session.role !== 'super_admin') {
+  // Only a genuine cross-tenant operator can mint new sub-accounts.
+  if (!isCrossTenantOperator(session)) {
     return forbidden('Only platform admins may create sub-accounts');
   }
 
