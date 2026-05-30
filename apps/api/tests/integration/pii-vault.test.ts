@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildTestApp, truncateAll, teardown } from '../helpers/app';
 import { setUserPassword } from '../../src/domains/auth/service';
 import { prisma } from '../../src/config/db';
-import { emailDigest } from '@d2d/shared-utils';
+import { emailDigest, newId } from '@d2d/shared-utils';
 import { PiiVaultService } from '../../src/domains/pii-vault/service';
 
 let app: FastifyInstance;
@@ -26,6 +26,12 @@ const insideSalesEmailA = 'is@pii.test';
 const insideSalesPassA = 'PiiInsideSalesPwd_1';
 
 const orgB = 'org_TEST_PII_BRAVO';
+const adminB = 'usr_TEST_PII_BRAVO_ADMIN';
+const adminEmailB = 'admin@piib.test';
+const adminPassB = 'PiiBAdminPwd_1';
+const secondAdminB = 'usr_TEST_PII_BRAVO_ADMIN2';
+const secondAdminEmailB = 'admin2@piib.test';
+const secondAdminPassB = 'PiiBAdminPwd_2';
 
 async function seed(): Promise<void> {
   await prisma().org.createMany({
@@ -80,11 +86,95 @@ async function seed(): Promise<void> {
         role: 'inside_sales',
         regionCode: 'US',
       },
+      {
+        id: adminB,
+        orgId: orgB,
+        email: adminEmailB,
+        emailDigest: emailDigest(adminEmailB, process.env.PII_SEARCH_KEY!),
+        givenName: 'B',
+        familyName: 'Admin',
+        role: 'org_admin',
+        regionCode: 'US',
+      },
+      {
+        id: secondAdminB,
+        orgId: orgB,
+        email: secondAdminEmailB,
+        emailDigest: emailDigest(secondAdminEmailB, process.env.PII_SEARCH_KEY!),
+        givenName: 'B',
+        familyName: 'Admin2',
+        role: 'org_admin',
+        regionCode: 'US',
+      },
     ],
   });
   await setUserPassword(adminA, adminPassA);
   await setUserPassword(secondAdminA, secondAdminPassA);
   await setUserPassword(insideSalesA, insideSalesPassA);
+  await setUserPassword(adminB, adminPassB);
+  await setUserPassword(secondAdminB, secondAdminPassB);
+}
+
+/**
+ * Insert a Lead row directly for a given org (bypasses the create API so we
+ * can plant cross-tenant fixtures). Returns the lead id.
+ */
+async function seedLead(orgId: string, plaintextEmail: string): Promise<string> {
+  const id = newId('lead');
+  await prisma().lead.create({
+    data: {
+      id,
+      orgId,
+      regionCode: 'US',
+      vertical: 'charity',
+      status: 'new',
+      givenName: 'Victim',
+      familyName: 'Donor',
+      emailVault: PiiVaultService.encryptForRow('Lead', id, plaintextEmail) as never,
+    },
+  });
+  return id;
+}
+
+/**
+ * Insert a Conversion + Donation pair for a given org. Donation has no orgId
+ * column — it inherits tenancy from its Conversion FK, which is exactly the
+ * path assertRowOwnedByOrg must resolve. Returns both ids.
+ */
+async function seedDonation(
+  orgId: string,
+  donorEmail: string,
+): Promise<{ conversionId: string; donationId: string }> {
+  const leadId = await seedLead(orgId, donorEmail);
+  const conversionId = newId('cnv');
+  await prisma().conversion.create({
+    data: {
+      id: conversionId,
+      orgId,
+      regionCode: 'US',
+      leadId,
+      type: 'donation_recurring',
+      attributionSource: 'door',
+      amountCents: BigInt(5000),
+      currency: 'USD',
+      signedAt: new Date(),
+      paymentProvider: 'micamp',
+      idempotencyKey: newId('idem'),
+    },
+  });
+  const donationId = newId('don');
+  await prisma().donation.create({
+    data: {
+      id: donationId,
+      conversionId,
+      donorEmail,
+      amountCents: BigInt(5000),
+      currency: 'USD',
+      paymentMethodToken: 'tok_test',
+      startedAt: new Date(),
+    },
+  });
+  return { conversionId, donationId };
 }
 
 async function tokenFor(email: string, password: string): Promise<string> {
@@ -412,5 +502,242 @@ describe('GET /v1/pii/unmask-grants/:requestId', () => {
     expect(status.json().status).toBe('pending');
     expect(status.json().rowType).toBe('Lead');
     expect(status.json()).not.toHaveProperty('grantToken');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D2 — Cross-tenant JIT-unmask donor-PII exfil (P0)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('D2 — cross-tenant unmask is refused (404, no info leak)', () => {
+  it('request-time: orgA cannot request unmask of orgB Lead → 404', async () => {
+    const foreignLead = await seedLead(orgB, 'victim-lead@orgb.test');
+    const tA = await tokenFor(adminEmailA, adminPassA);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tA}`, 'idempotency-key': 'd2-xt-lead-req-1' },
+      payload: {
+        rowType: 'Lead',
+        rowId: foreignLead,
+        fields: ['email'],
+        justification: 'Attempting cross-tenant donor exfil via Lead row',
+      },
+    });
+    // 404 (not 403) so we do not confirm the foreign row exists.
+    expect(res.statusCode).toBe(404);
+    // And no request row was persisted for the attacker org.
+    const planted = await prisma().piiUnmaskRequest.findFirst({
+      where: { orgId: orgA, rowId: foreignLead },
+    });
+    expect(planted).toBeNull();
+  });
+
+  it('request-time: orgA cannot request unmask of orgB Donation (owner via Conversion FK) → 404', async () => {
+    const { donationId } = await seedDonation(orgB, 'victim-donor@orgb.test');
+    const tA = await tokenFor(adminEmailA, adminPassA);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tA}`, 'idempotency-key': 'd2-xt-don-req-1' },
+      payload: {
+        rowType: 'Donation',
+        rowId: donationId,
+        fields: ['email'],
+        justification: 'Attempting cross-tenant donor exfil via Donation row',
+      },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('owner can still request unmask of its OWN Donation (resolver allows valid owner)', async () => {
+    const { donationId } = await seedDonation(orgB, 'own-donor@orgb.test');
+    const tB = await tokenFor(adminEmailB, adminPassB);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tB}`, 'idempotency-key': 'd2-own-don-req-1' },
+      payload: {
+        rowType: 'Donation',
+        rowId: donationId,
+        fields: ['email'],
+        justification: 'Owner org needs donor receipt — legitimate in-tenant unmask',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().status).toBe('pending');
+  });
+
+  it('reveal-time: a request whose rowId points at a foreign org is refused, leaks no plaintext, and writes no attacker-org audit', async () => {
+    // Plant an in-orgA request row that targets orgB's Lead — simulates a
+    // forged/legacy row or any path that bypassed the request-time guard.
+    const foreignLead = await seedLead(orgB, 'reveal-victim@orgb.test');
+    const reqId = newId('pur');
+    await prisma().piiUnmaskRequest.create({
+      data: {
+        id: reqId,
+        orgId: orgA, // attacker org — passes the request.orgId === actor.orgId gate
+        regionCode: 'US',
+        requesterId: insideSalesA,
+        rowType: 'Lead',
+        rowId: foreignLead, // but the TARGET belongs to orgB
+        fields: ['email'],
+        justification: 'forged cross-tenant request',
+        status: 'pending',
+      },
+    });
+
+    // A colluding orgA approver mints a grant (approve only checks the
+    // request's own orgId, which is orgA — so this succeeds).
+    const tApprover = await tokenFor(adminEmailA, adminPassA);
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask-approve/${reqId}`,
+      headers: { authorization: `Bearer ${tApprover}`, 'idempotency-key': 'd2-reveal-approve-1' },
+      payload: { approved: true },
+    });
+    expect(approve.statusCode).toBe(200);
+    const grant = approve.json().grantToken;
+
+    // Reveal must now 404 at the ownership re-assert — before any decrypt.
+    const tReq = await tokenFor(insideSalesEmailA, insideSalesPassA);
+    const reveal = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask/${reqId}/reveal`,
+      headers: { authorization: `Bearer ${tReq}`, 'idempotency-key': 'd2-reveal-reveal-1' },
+      payload: { grantToken: grant },
+    });
+    expect(reveal.statusCode).toBe(404);
+    expect(reveal.json()).not.toHaveProperty('values');
+
+    // No pii.unmask reveal audit row was written under the attacker org.
+    const attackerAudit = await prisma().auditEvent.findFirst({
+      where: { orgId: orgA, action: 'pii.unmask', resourceId: foreignLead },
+    });
+    expect(attackerAudit).toBeNull();
+    // The request was NOT consumed (still approved) — no silent state change
+    // that would mask the row's plaintext under the attacker.
+    const after = await prisma().piiUnmaskRequest.findUnique({ where: { id: reqId } });
+    expect(after?.status).toBe('approved');
+  });
+
+  it('reveal-time: a legitimate in-tenant reveal writes the pii.unmask audit under the OWNER org', async () => {
+    const t = await tokenFor(adminEmailA, adminPassA);
+    const leadId = await createLead(t, 'd2-owner-audit-create-1');
+    const tIS = await tokenFor(insideSalesEmailA, insideSalesPassA);
+    const reqRes = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': 'd2-owner-audit-req-1' },
+      payload: {
+        rowType: 'Lead',
+        rowId: leadId,
+        fields: ['email'],
+        justification: 'Legitimate in-tenant unmask for audit attribution check',
+      },
+    });
+    const reqId = reqRes.json().requestId;
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask-approve/${reqId}`,
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'd2-owner-audit-approve-1' },
+      payload: { approved: true },
+    });
+    const grant = approve.json().grantToken;
+    const reveal = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask/${reqId}/reveal`,
+      headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': 'd2-owner-audit-reveal-1' },
+      payload: { grantToken: grant },
+    });
+    expect(reveal.statusCode).toBe(200);
+    const audit = await prisma().auditEvent.findFirst({
+      where: { action: 'pii.unmask', resourceId: leadId },
+    });
+    expect(audit?.orgId).toBe(orgA); // owner == actor here; attributed to owner
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// PEN-012 / PRIV-010 — single-use grant (TOCTOU)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('PEN-012 — grant is strictly single-use', () => {
+  async function approvedGrant(idemPrefix: string): Promise<{ reqId: string; grant: string }> {
+    const t = await tokenFor(adminEmailA, adminPassA);
+    const leadId = await createLead(t, `${idemPrefix}-create`);
+    const tIS = await tokenFor(insideSalesEmailA, insideSalesPassA);
+    const reqRes = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': `${idemPrefix}-req` },
+      payload: {
+        rowType: 'Lead',
+        rowId: leadId,
+        fields: ['email'],
+        justification: 'Single-use grant verification for the reveal endpoint',
+      },
+    });
+    const reqId = reqRes.json().requestId;
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask-approve/${reqId}`,
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': `${idemPrefix}-approve` },
+      payload: { approved: true },
+    });
+    return { reqId, grant: approve.json().grantToken };
+  }
+
+  it('a second reveal with the same grant is refused (409)', async () => {
+    const { reqId, grant } = await approvedGrant('pen012-seq');
+    const tIS = await tokenFor(insideSalesEmailA, insideSalesPassA);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask/${reqId}/reveal`,
+      headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': 'pen012-seq-reveal-1' },
+      payload: { grantToken: grant },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().values.email).toBe('alice@example.com');
+
+    // Replay the exact same grant on a fresh request (new idempotency key so
+    // we hit the service, not the idempotency cache).
+    const second = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask/${reqId}/reveal`,
+      headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': 'pen012-seq-reveal-2' },
+      payload: { grantToken: grant },
+    });
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).not.toHaveProperty('values');
+  });
+
+  it('two concurrent reveals with the same grant yield exactly one success (TOCTOU closed)', async () => {
+    const { reqId, grant } = await approvedGrant('pen012-race');
+    const tIS = await tokenFor(insideSalesEmailA, insideSalesPassA);
+
+    const fire = (n: number) =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/pii/unmask/${reqId}/reveal`,
+        headers: { authorization: `Bearer ${tIS}`, 'idempotency-key': `pen012-race-reveal-${n}` },
+        payload: { grantToken: grant },
+      });
+
+    const results = await Promise.all([fire(1), fire(2), fire(3), fire(4)]);
+    const codes = results.map((r) => r.statusCode).sort();
+    const successes = codes.filter((c) => c === 200);
+    // Exactly one reveal may consume the grant; the rest are refused (409).
+    expect(successes).toHaveLength(1);
+    for (const r of results) {
+      if (r.statusCode !== 200) {
+        expect(r.statusCode).toBe(409);
+        expect(r.json()).not.toHaveProperty('values');
+      }
+    }
+    // The row ends in a single terminal 'revealed' state.
+    const row = await prisma().piiUnmaskRequest.findUnique({ where: { id: reqId } });
+    expect(row?.status).toBe('revealed');
   });
 });

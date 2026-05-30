@@ -44,7 +44,7 @@ import {
 } from 'node:crypto';
 import type { Prisma, RegionCode } from '@prisma/client';
 import { Problems, ProblemError, newId } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { AuditService } from '../audit/service';
 import type { UnmaskRequestInput, UnmaskApproveInput, UnmaskRevealInput } from './schemas';
@@ -183,6 +183,10 @@ export const PiiVaultService = {
     input: UnmaskRequestInput,
     actor: { userId: string; orgId: string; regionCode: RegionCode },
   ): Promise<{ requestId: string; status: string }> {
+    // D2: refuse before we ever create a request for a row the actor's org
+    // does not own. Resolves the target's owning org per rowType and 404s on
+    // mismatch (not 403) so we never confirm a cross-tenant row exists.
+    await assertRowOwnedByOrg(actor.orgId, input.rowType, input.rowId);
     const id = newId('pur');
     await prisma().$transaction(async (tx) => {
       await tx.piiUnmaskRequest.create({
@@ -337,16 +341,44 @@ export const PiiVaultService = {
       throw new ProblemError(Problems.forbidden('Invalid grant token'));
     }
 
-    // Fetch the row and decrypt requested fields.
-    const values = await fetchAndDecryptFields(existing.rowType, existing.rowId, existing.fields);
+    // D2: re-assert tenant ownership of the TARGET row before decrypting. The
+    // request row's own orgId matching the actor is NOT proof that the
+    // referenced (rowType, rowId) belongs to this tenant — an attacker can
+    // file an in-org request that points at another org's rowId. Resolve the
+    // owning org per type (Donation/Sale via their Conversion FK) and 404 on
+    // mismatch, so a cross-tenant target is refused before any plaintext.
+    const ownerOrgId = await assertRowOwnedByOrg(actor.orgId, existing.rowType, existing.rowId);
 
-    await prisma().$transaction(async (tx) => {
-      await tx.piiUnmaskRequest.update({
-        where: { id: requestId },
-        data: { status: 'revealed', revealedAt: new Date() },
-      });
+    // PEN-012 / PRIV-010: atomically consume the grant BEFORE decrypting.
+    // Compare-and-set on (id, status='approved'): exactly one caller can flip
+    // approved→revealed; any concurrent or replayed reveal sees count===0 and
+    // is refused. This closes the TOCTOU window that let a grant be reused.
+    const revealedAt = new Date();
+    const consumed = await tenantTx(actor.orgId, (tx) =>
+      tx.piiUnmaskRequest.updateMany({
+        where: { id: requestId, status: 'approved' },
+        data: { status: 'revealed', revealedAt },
+      }),
+    );
+    if (consumed.count !== 1) {
+      // Lost the race (or already consumed/expired between checks). Strictly
+      // single-use: no plaintext is decrypted or returned.
+      throw new ProblemError(Problems.conflict('Grant already consumed'));
+    }
+
+    // Only after we exclusively own the grant do we decrypt + audit. The audit
+    // row is attributed to the TARGET row's owning org (the owner/victim), so a
+    // cross-tenant attempt can never be invisible to the org that owns the data.
+    const values = await fetchAndDecryptFields(
+      actor.orgId,
+      existing.rowType,
+      existing.rowId,
+      existing.fields,
+    );
+
+    await tenantTx(ownerOrgId, async (tx) => {
       await AuditService.recordEvent(tx, {
-        orgId: actor.orgId,
+        orgId: ownerOrgId,
         regionCode: actor.regionCode,
         actorUserId: actor.userId,
         action: 'pii.unmask',
@@ -356,6 +388,7 @@ export const PiiVaultService = {
           requestId,
           fields: existing.fields,
           approverId: existing.approverId,
+          requesterOrgId: actor.orgId,
         },
       });
     });
@@ -406,16 +439,99 @@ export const PiiVaultService = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
+// Tenant ownership resolver (D2 — cross-tenant JIT-unmask donor-PII exfil)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the org that OWNS the target (rowType, rowId) and assert it equals
+ * the actor's org. Returns the owning orgId so callers can attribute the
+ * reveal audit row to the owner (the victim), never the attacker.
+ *
+ * Isolation is structural, not a manual `if`: rows are loaded through the
+ * tenant-scoped client `tenantPrisma(actorOrgId)`, which AND-injects
+ * `orgId = actorOrgId` into the query (rewriting `findUnique` → `findFirst`).
+ * A row in another org therefore reads back as `null` and we raise 404 — we
+ * never confirm the row exists across the tenant boundary (no 403 oracle).
+ *
+ * Per-type owner resolution (several rowTypes carry no `orgId` column):
+ *   - Lead, Conversion → org-scoped models: a scoped `findUnique` returns the
+ *     row only when it belongs to the actor; null ⇒ 404.
+ *   - Donation, Sale → NO `orgId` column, so they are NOT org-scoped and
+ *     `tenantPrisma` passes them through UNFILTERED. Ownership must be derived
+ *     via their `Conversion` FK: read the child to learn `conversionId`, then
+ *     require the parent Conversion to be visible under the actor's tenant
+ *     scope. Donation has no `orgId`, so Donation → Conversion.orgId is the
+ *     ONLY correct owner derivation.
+ */
+async function assertRowOwnedByOrg(
+  actorOrgId: string,
+  rowType: string,
+  rowId: string,
+): Promise<string> {
+  const db = tenantPrisma(actorOrgId);
+
+  if (rowType === 'Lead') {
+    const row = await db.lead.findUnique({ where: { id: rowId }, select: { orgId: true } });
+    if (!row) throw new ProblemError(Problems.notFound(rowType, rowId));
+    return row.orgId;
+  }
+
+  if (rowType === 'Conversion') {
+    const row = await db.conversion.findUnique({ where: { id: rowId }, select: { orgId: true } });
+    if (!row) throw new ProblemError(Problems.notFound(rowType, rowId));
+    return row.orgId;
+  }
+
+  if (rowType === 'Donation') {
+    // Donation has no orgId → resolve owner via its Conversion FK. The child
+    // read is unscoped (Donation isn't org-scoped), so the AUTHORITATIVE check
+    // is that the parent Conversion is visible under the actor's tenant scope.
+    const child = await prisma().donation.findUnique({
+      where: { id: rowId },
+      select: { conversionId: true },
+    });
+    if (!child) throw new ProblemError(Problems.notFound(rowType, rowId));
+    const parent = await db.conversion.findUnique({
+      where: { id: child.conversionId },
+      select: { orgId: true },
+    });
+    if (!parent) throw new ProblemError(Problems.notFound(rowType, rowId));
+    return parent.orgId;
+  }
+
+  if (rowType === 'Sale') {
+    // Sale likewise has no orgId → owner via Conversion FK (same shape).
+    const child = await prisma().sale.findUnique({
+      where: { id: rowId },
+      select: { conversionId: true },
+    });
+    if (!child) throw new ProblemError(Problems.notFound(rowType, rowId));
+    const parent = await db.conversion.findUnique({
+      where: { id: child.conversionId },
+      select: { orgId: true },
+    });
+    if (!parent) throw new ProblemError(Problems.notFound(rowType, rowId));
+    return parent.orgId;
+  }
+
+  throw new ProblemError(Problems.validation(`Unsupported rowType: ${rowType}`));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Field fetcher — picks the right table + columns by rowType
 // ───────────────────────────────────────────────────────────────────────────
 
 async function fetchAndDecryptFields(
+  actorOrgId: string,
   rowType: string,
   rowId: string,
   fields: string[],
 ): Promise<Record<string, string | null>> {
   if (rowType === 'Lead') {
-    const lead = await prisma().lead.findUnique({ where: { id: rowId } });
+    // Defense-in-depth: load through the tenant-scoped client so even this
+    // decrypt site cannot read a Lead outside the actor's org (Lead is an
+    // org-scoped model → a scoped findUnique returns null cross-tenant).
+    const lead = await tenantPrisma(actorOrgId).lead.findUnique({ where: { id: rowId } });
     if (!lead) throw new ProblemError(Problems.notFound(rowType, rowId));
     const out: Record<string, string | null> = {};
     for (const f of fields) {
