@@ -23,7 +23,7 @@ import {
   newId,
   type AuditEventForHash,
 } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx } from '../../config/db';
 import { env } from '../../config/env';
 
 export interface AuditEventInput {
@@ -152,10 +152,14 @@ export const AuditService = {
       where.ulid = ulidRange;
     }
 
-    const rows = await prisma().auditEvent.findMany({
-      where,
-      orderBy: { id: 'asc' },
-    });
+    // An org chain reads through the belt (`tenantPrismaTx` pins the GUC, RLS
+    // enforces); the platform chain (`orgId IS NULL`) is owner-only — RLS hides
+    // NULL-org rows from ANY GUC'd role, so only a worker/cron on the owner
+    // connection can verify it. The request path (`POST /audit/events/verify`)
+    // always passes a concrete actor orgId; see docs/runbooks/rls-cutover.md §4b.
+    const rows = args.orgId
+      ? await tenantPrismaTx(args.orgId).auditEvent.findMany({ where, orderBy: { id: 'asc' } })
+      : await prisma().auditEvent.findMany({ where, orderBy: { id: 'asc' } });
 
     // SEC-002 fix: thread `expectedPrev` forward from the actual previous
     // row's `rowHash` rather than trusting each row's own self-declared
@@ -167,14 +171,18 @@ export const AuditService = {
     // first selected row so the walk has a real anchor.
     let expectedPrev: string = GENESIS_PREV_HASH;
     if (args.fromUlid && rows.length > 0) {
-      const anchor = await prisma().auditEvent.findFirst({
-        where: {
-          ...where,
-          ulid: { lt: rows[0]!.ulid },
-        },
-        orderBy: { id: 'desc' },
-        select: { rowHash: true },
-      });
+      const anchorWhere: Prisma.AuditEventWhereInput = { ...where, ulid: { lt: rows[0]!.ulid } };
+      const anchor = args.orgId
+        ? await tenantPrismaTx(args.orgId).auditEvent.findFirst({
+            where: anchorWhere,
+            orderBy: { id: 'desc' },
+            select: { rowHash: true },
+          })
+        : await prisma().auditEvent.findFirst({
+            where: anchorWhere,
+            orderBy: { id: 'desc' },
+            select: { rowHash: true },
+          });
       if (anchor) expectedPrev = anchor.rowHash;
     }
 
@@ -233,8 +241,10 @@ export const AuditService = {
     cursor?: string;
     limit: number;
   }): Promise<{ data: AuditEventPublic[]; nextCursor: string | null }> {
+    // orgId is injected by tenantPrismaTx (suspenders) and enforced by RLS
+    // (belt); see docs/runbooks/rls-cutover.md §4b. regionCode stays an explicit
+    // filter (an org is region-pinned, so it's a no-op narrowing, kept for parity).
     const where: Prisma.AuditEventWhereInput = {
-      orgId: args.orgId,
       regionCode: args.regionCode,
     };
     if (args.actorUserId) where.actorUserId = args.actorUserId;
@@ -248,7 +258,7 @@ export const AuditService = {
       where.occurredAt = range;
     }
 
-    const rows = await prisma().auditEvent.findMany({
+    const rows = await tenantPrismaTx(args.orgId).auditEvent.findMany({
       where,
       take: args.limit + 1,
       ...(args.cursor && { cursor: { ulid: args.cursor }, skip: 1 }),

@@ -30,7 +30,7 @@ import type {
   ProviderKind,
   ProviderCapability,
 } from '@d2d/integrations';
-import { prisma } from '../../config/db';
+import { tenantPrismaTx, tenantTx } from '../../config/db';
 import { PiiVaultService, type EncryptedField } from '../pii-vault/service';
 import { AuditService } from '../audit/service';
 import type {
@@ -177,7 +177,7 @@ export class MarketingService {
   /** Snapshot of every adapter the registry knows about + per-org connection state. */
   async listProviders(orgId: string): Promise<ProviderDescriptorPublic[]> {
     const descriptors = this.registry.describe();
-    const conns = await prisma().providerConnection.findMany({ where: { orgId } });
+    const conns = await tenantPrismaTx(orgId).providerConnection.findMany({ where: { orgId } });
     const byKind = new Map(conns.map((c) => [c.kind, c]));
     return descriptors.map((d) => {
       const conn = byKind.get(d.kind);
@@ -215,8 +215,10 @@ export class MarketingService {
     }
 
     // Look up an existing row so we can reuse the id (deterministic AAD).
-    const existing = await prisma().providerConnection.findUnique({
-      where: { orgId_kind: { orgId: actor.orgId, kind } },
+    // §4b: scoped read — compound (orgId, kind) unique → scalar findFirst
+    // (tenantPrismaTx pins the GUC + RLS scopes to actor.orgId).
+    const existing = await tenantPrismaTx(actor.orgId).providerConnection.findFirst({
+      where: { kind },
     });
 
     const rowId = existing?.id ?? newId('prc');
@@ -235,7 +237,7 @@ export class MarketingService {
     const ping = await adapter.ping(cfg);
     const pingAt = new Date();
 
-    const row = await prisma().$transaction(async (tx) => {
+    const row = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.providerConnection.upsert({
         where: { orgId_kind: { orgId: actor.orgId, kind } },
         update: {
@@ -297,20 +299,21 @@ export class MarketingService {
     kind: ProviderKind,
     actor: ActorContext,
   ): Promise<ProviderConnectionPublic> {
-    const existing = await prisma().providerConnection.findUnique({
-      where: { orgId_kind: { orgId: actor.orgId, kind } },
+    // §4b: scoped read — compound (orgId, kind) unique → scalar findFirst.
+    // The old `existing.orgId !== actor.orgId` guard was already dead (the
+    // compound key pinned orgId=actor.orgId) and is now structurally
+    // impossible under RLS; dropped.
+    const existing = await tenantPrismaTx(actor.orgId).providerConnection.findFirst({
+      where: { kind },
     });
     if (!existing) {
       throw new ProblemError(Problems.notFound('ProviderConnection', kind));
-    }
-    if (existing.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(existing.orgId));
     }
     if (existing.status === 'disconnected') {
       return toConnectionPublic(existing);
     }
 
-    const row = await prisma().$transaction(async (tx) => {
+    const row = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.providerConnection.update({
         where: { id: existing.id },
         data: { status: 'disconnected', disconnectedAt: new Date() },
@@ -335,20 +338,19 @@ export class MarketingService {
     kind: ProviderKind,
     actor: ActorContext,
   ): Promise<ProviderConnectionPublic> {
-    const existing = await prisma().providerConnection.findUnique({
-      where: { orgId_kind: { orgId: actor.orgId, kind } },
+    // §4b: scoped read — compound (orgId, kind) unique → scalar findFirst.
+    // Dead cross-tenant guard dropped (see disconnectProvider).
+    const existing = await tenantPrismaTx(actor.orgId).providerConnection.findFirst({
+      where: { kind },
     });
     if (!existing) {
       throw new ProblemError(Problems.notFound('ProviderConnection', kind));
-    }
-    if (existing.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(existing.orgId));
     }
     const adapter = this.registry.get(kind);
     const cfg = this.configFor(existing);
     const ping = await adapter.ping(cfg);
     const pingAt = new Date();
-    const row = await prisma().providerConnection.update({
+    const row = await tenantPrismaTx(actor.orgId).providerConnection.update({
       where: { id: existing.id },
       data: {
         accountLabel: ping.ok ? ping.data.accountLabel : existing.accountLabel,
@@ -386,7 +388,7 @@ export class MarketingService {
         : null;
 
     // Persist row with status='running' so a crash mid-call leaves a trace.
-    const initial = await prisma().contentGenerationJob.create({
+    const initial = await tenantPrismaTx(actor.orgId).contentGenerationJob.create({
       data: {
         id: jobId,
         orgId: actor.orgId,
@@ -475,7 +477,7 @@ export class MarketingService {
       if (typeof data.c2paManifestId === 'string') updateData.c2paManifestId = data.c2paManifestId;
     }
 
-    const updated = await prisma().$transaction(async (tx) => {
+    const updated = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.contentGenerationJob.update({
         where: { id: jobId },
         data: updateData,
@@ -517,20 +519,22 @@ export class MarketingService {
     }
     const cfg = this.configFor(conn);
     const jobId = newId('cgj');
-    await prisma().contentGenerationJob.create({
-      data: {
-        id: jobId,
-        orgId: actor.orgId,
-        providerConnectionId: conn.id,
-        providerKind,
-        capability: 'audience.build',
-        status: 'running',
-        inputJson: input as unknown as Prisma.InputJsonValue,
-        createdById: actor.userId,
-      },
-    });
+    await tenantTx(actor.orgId, (tx) =>
+      tx.contentGenerationJob.create({
+        data: {
+          id: jobId,
+          orgId: actor.orgId,
+          providerConnectionId: conn.id,
+          providerKind,
+          capability: 'audience.build',
+          status: 'running',
+          inputJson: input as unknown as Prisma.InputJsonValue,
+          createdById: actor.userId,
+        },
+      }),
+    );
     const r = await adapter.buildAudience(input, cfg);
-    const updated = await prisma().$transaction(async (tx) => {
+    const updated = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.contentGenerationJob.update({
         where: { id: jobId },
         data: r.ok
@@ -576,20 +580,22 @@ export class MarketingService {
     }
     const cfg = this.configFor(conn);
     const jobId = newId('cgj');
-    await prisma().contentGenerationJob.create({
-      data: {
-        id: jobId,
-        orgId: actor.orgId,
-        providerConnectionId: conn.id,
-        providerKind,
-        capability: 'campaign.deliver',
-        status: 'running',
-        inputJson: input as unknown as Prisma.InputJsonValue,
-        createdById: actor.userId,
-      },
-    });
+    await tenantTx(actor.orgId, (tx) =>
+      tx.contentGenerationJob.create({
+        data: {
+          id: jobId,
+          orgId: actor.orgId,
+          providerConnectionId: conn.id,
+          providerKind,
+          capability: 'campaign.deliver',
+          status: 'running',
+          inputJson: input as unknown as Prisma.InputJsonValue,
+          createdById: actor.userId,
+        },
+      }),
+    );
     const r = await adapter.deliverCampaign(input, cfg);
-    const updated = await prisma().$transaction(async (tx) => {
+    const updated = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.contentGenerationJob.update({
         where: { id: jobId },
         data: r.ok
@@ -625,18 +631,20 @@ export class MarketingService {
    * we synchronously poll once and update the row before returning.
    */
   async getJob(jobId: string, actor: ActorContext): Promise<ContentGenerationJobPublic> {
-    const job = await prisma().contentGenerationJob.findUnique({ where: { id: jobId } });
+    // §4b.1: scoped read — a job owned by another org is invisible under RLS,
+    // so the cross-tenant GET resolves to null → 404 (was 403 tenantMismatch).
+    // This is the one public-contract status change in the marketing migration.
+    const job = await tenantPrismaTx(actor.orgId).contentGenerationJob.findFirst({
+      where: { id: jobId },
+    });
     if (!job) throw new ProblemError(Problems.notFound('ContentGenerationJob', jobId));
-    if (job.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(job.orgId));
-    }
     if (job.status !== 'running') return toJobPublic(job);
 
     const adapter = this.registry.tryGet(job.providerKind as ProviderKind);
     if (!adapter || !adapter.pollJob || !job.externalJobId) {
       return toJobPublic(job);
     }
-    const conn = await prisma().providerConnection.findUnique({
+    const conn = await tenantPrismaTx(actor.orgId).providerConnection.findFirst({
       where: { id: job.providerConnectionId },
     });
     if (!conn) return toJobPublic(job);
@@ -647,7 +655,7 @@ export class MarketingService {
     }
     const { status, output, error } = poll.data;
     if (status === 'ready') {
-      const updated = await prisma().contentGenerationJob.update({
+      const updated = await tenantPrismaTx(actor.orgId).contentGenerationJob.update({
         where: { id: jobId },
         data: {
           status: 'ready',
@@ -658,7 +666,7 @@ export class MarketingService {
       return toJobPublic(updated);
     }
     if (status === 'failed') {
-      const updated = await prisma().contentGenerationJob.update({
+      const updated = await tenantPrismaTx(actor.orgId).contentGenerationJob.update({
         where: { id: jobId },
         data: {
           status: 'failed',
@@ -682,7 +690,7 @@ export class MarketingService {
     if (query.providerKind) where.providerKind = query.providerKind;
     if (query.capability) where.capability = query.capability;
     if (query.status) where.status = query.status;
-    const rows = await prisma().contentGenerationJob.findMany({
+    const rows = await tenantPrismaTx(actor.orgId).contentGenerationJob.findMany({
       where,
       take: query.limit + 1,
       ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -714,8 +722,9 @@ export class MarketingService {
     if (!adapter.parseWebhook) {
       throw new ProblemError(Problems.validation(`${kind} does not accept inbound webhooks`));
     }
-    const conn = await prisma().providerConnection.findUnique({
-      where: { orgId_kind: { orgId, kind } },
+    // §4b: scoped read — compound (orgId, kind) unique → scalar findFirst.
+    const conn = await tenantPrismaTx(orgId).providerConnection.findFirst({
+      where: { kind },
     });
     if (!conn) {
       throw new ProblemError(Problems.notFound('ProviderConnection', kind));
@@ -727,7 +736,7 @@ export class MarketingService {
       // operators can see attempts. Use a synthetic externalId to avoid
       // clashing with the unique index on (kind, externalId).
       const failId = newId('pwe');
-      const failRow = await prisma().providerWebhookEvent.create({
+      const failRow = await tenantPrismaTx(orgId).providerWebhookEvent.create({
         data: {
           id: failId,
           orgId,
@@ -750,7 +759,7 @@ export class MarketingService {
     }
     // Persist verified event. Replay protection via unique (kind, externalId).
     try {
-      const row = await prisma().providerWebhookEvent.create({
+      const row = await tenantPrismaTx(orgId).providerWebhookEvent.create({
         data: {
           id: newId('pwe'),
           orgId,
@@ -767,12 +776,15 @@ export class MarketingService {
     } catch (e) {
       // P2002 → unique violation → replay. Treat as already-processed.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        const existing = await prisma().providerWebhookEvent.findUnique({
+        // §4b: scoped read — the (providerKind, externalId) unique is GLOBAL,
+        // so the pre-belt owner read could surface another org's event. The
+        // scoped findFirst closes that latent cross-tenant leak: a foreign
+        // collision now returns null → re-throw P2002 (a near-impossible
+        // cross-org externalId clash 500s; same-org replay still resolves).
+        const existing = await tenantPrismaTx(orgId).providerWebhookEvent.findFirst({
           where: {
-            providerKind_externalId: {
-              providerKind: kind,
-              externalId: parsed.data.externalId,
-            },
+            providerKind: kind,
+            externalId: parsed.data.externalId,
           },
         });
         if (existing) return toEventPublic(existing);
@@ -791,7 +803,7 @@ export class MarketingService {
       orgId: actor.orgId,
       providerKind: kind,
     };
-    const rows = await prisma().providerWebhookEvent.findMany({
+    const rows = await tenantPrismaTx(actor.orgId).providerWebhookEvent.findMany({
       where,
       take: query.limit + 1,
       ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -812,8 +824,9 @@ export class MarketingService {
     kind: ProviderKind,
     orgId: string,
   ): Promise<ProviderConnectionRow> {
-    const conn = await prisma().providerConnection.findUnique({
-      where: { orgId_kind: { orgId, kind } },
+    // §4b: scoped read — compound (orgId, kind) unique → scalar findFirst.
+    const conn = await tenantPrismaTx(orgId).providerConnection.findFirst({
+      where: { kind },
     });
     if (!conn) {
       throw new ProblemError({

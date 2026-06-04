@@ -18,7 +18,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { Prisma, RegionCode } from '@prisma/client';
 import { newId, problem, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import type {
   CreateWebhookEndpointRequest,
@@ -277,7 +277,7 @@ export const WebhookService = {
     const id = newId('whk');
     const secret = generateSecret();
     const hashed = hashSecret(secret);
-    const row = await prisma().$transaction(async (tx) => {
+    const row = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.webhookEndpoint.create({
         data: {
           id,
@@ -312,7 +312,10 @@ export const WebhookService = {
   ): Promise<{ data: WebhookEndpointPublic[]; nextCursor: string | null }> {
     const where: Prisma.WebhookEndpointWhereInput = { orgId: actor.orgId };
     if (query.status) where.status = query.status;
-    const rows = await prisma().webhookEndpoint.findMany({
+    // §4b: org-scoped list through the tenant client (orgId filter +
+    // GUC-pinned RLS belt under d2d_app). The where.orgId stays — scopeWhere
+    // is idempotent on a matching tenant id.
+    const rows = await tenantPrismaTx(actor.orgId).webhookEndpoint.findMany({
       where,
       take: query.limit + 1,
       ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -325,14 +328,18 @@ export const WebhookService = {
   },
 
   async rotateSecret(id: string, actor: ActorContext): Promise<WebhookEndpointWithSecret> {
-    const existing = await prisma().webhookEndpoint.findUnique({ where: { id } });
+    // §4b: read through the tenant-scoped client. A foreign endpoint is
+    // invisible (app-layer orgId filter + RLS belt under d2d_app) → null →
+    // notFound, not the pre-belt tenantMismatch 403. The existence oracle
+    // closes — a cross-tenant caller can't tell "forbidden" from "doesn't
+    // exist". See docs/runbooks/rls-cutover.md §4b.1.
+    const existing = await tenantPrismaTx(actor.orgId).webhookEndpoint.findUnique({
+      where: { id },
+    });
     if (!existing) throw new ProblemError(Problems.notFound('WebhookEndpoint', id));
-    if (existing.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-    }
     const secret = generateSecret();
     const hashed = hashSecret(secret);
-    const row = await prisma().$transaction(async (tx) => {
+    const row = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.webhookEndpoint.update({
         where: { id },
         data: { secretCipher: hashed },
@@ -352,13 +359,14 @@ export const WebhookService = {
   },
 
   async softDeleteEndpoint(id: string, actor: ActorContext): Promise<WebhookEndpointPublic> {
-    const existing = await prisma().webhookEndpoint.findUnique({ where: { id } });
+    // §4b: tenant-scoped read — a foreign endpoint resolves to null → notFound
+    // (404), not the pre-belt tenantMismatch 403. See rls-cutover.md §4b.1.
+    const existing = await tenantPrismaTx(actor.orgId).webhookEndpoint.findUnique({
+      where: { id },
+    });
     if (!existing) throw new ProblemError(Problems.notFound('WebhookEndpoint', id));
-    if (existing.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-    }
     if (existing.status === 'archived') return toPublic(existing);
-    const row = await prisma().$transaction(async (tx) => {
+    const row = await tenantTx(actor.orgId, async (tx) => {
       const next = await tx.webhookEndpoint.update({
         where: { id },
         data: { status: 'archived' },
@@ -383,11 +391,16 @@ export const WebhookService = {
     query: ListWebhookDeliveriesQuery,
     actor: ActorContext,
   ): Promise<{ data: WebhookDeliveryPublic[]; nextCursor: string | null }> {
-    const endpoint = await prisma().webhookEndpoint.findUnique({ where: { id: endpointId } });
+    // §4b: the tenant-scoped endpoint read gates delivery visibility. A
+    // foreign endpoint resolves to null → notFound (404), so we never reach
+    // the delivery query for an endpoint the caller doesn't own. The flip
+    // from the pre-belt tenantMismatch 403 closes the existence oracle.
+    // WebhookDelivery itself carries no orgId and is not RLS-enabled; it's
+    // read on the bare client, transitively scoped by the verified endpointId.
+    const endpoint = await tenantPrismaTx(actor.orgId).webhookEndpoint.findUnique({
+      where: { id: endpointId },
+    });
     if (!endpoint) throw new ProblemError(Problems.notFound('WebhookEndpoint', endpointId));
-    if (endpoint.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(endpoint.orgId));
-    }
     const where: Prisma.WebhookDeliveryWhereInput = { endpointId };
     if (query.status) where.status = query.status;
     const rows = await prisma().webhookDelivery.findMany({

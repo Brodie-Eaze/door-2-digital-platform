@@ -146,7 +146,11 @@ describe('GET /v1/sales/:id', () => {
     expect(res.json().sale.status).toBe('pending_install');
   });
 
-  it('cross-tenant returns 403', async () => {
+  it("cross-tenant returns 404 — the sale's parent conversion is invisible (not 403)", async () => {
+    // RLS belt (SEC-005): a Sale has no orgId of its own; tenancy lives on its
+    // parent Conversion. Org B's read pins the belt to org B, so org A's parent
+    // conversion is RLS-invisible → null → 404 (not 403 — withholding cross-tenant
+    // existence is the point of tenant isolation).
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createSale(tA, 'iso-1');
@@ -155,7 +159,7 @@ describe('GET /v1/sales/:id', () => {
       url: `/v1/sales/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
   });
 
   it('returns 404 unknown id', async () => {
@@ -207,7 +211,9 @@ describe('POST /v1/sales/:id/installer-handoff', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('cross-tenant handoff returns 403', async () => {
+  it('cross-tenant handoff returns 404 — parent conversion invisible to org B (not 403)', async () => {
+    // Same belt semantics as the read: the handoff's tenant guard loads the parent
+    // Conversion through the belt, so org A's sale is invisible to org B → 404.
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createSale(tA, 'handoff-iso-1');
@@ -220,7 +226,7 @@ describe('POST /v1/sales/:id/installer-handoff', () => {
         scheduledInstallAt: '2026-06-01T09:00:00.000Z',
       },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
   });
 });
 

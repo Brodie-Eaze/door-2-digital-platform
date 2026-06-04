@@ -246,7 +246,7 @@ describe('GET /v1/leads', () => {
 });
 
 describe('GET /v1/leads/:id', () => {
-  it('returns lead with last 20 activities + cross-tenant 403', async () => {
+  it('returns lead with last 20 activities + cross-tenant 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const created = await app.inject({
@@ -264,12 +264,15 @@ describe('GET /v1/leads/:id', () => {
     expect(get.statusCode).toBe(200);
     expect(get.json().lead.activities).toEqual([]);
 
+    // RLS belt (SEC-005): org B cannot see org A's lead — the row is invisible, so
+    // the read resolves to null → 404 (not 403). Withholding existence is the point
+    // of tenant isolation; a 403 would itself disclose that the resource exists.
     const peek = await app.inject({
       method: 'GET',
       url: `/v1/leads/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(peek.statusCode).toBe(403);
+    expect(peek.statusCode).toBe(404);
   });
 });
 

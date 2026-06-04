@@ -179,7 +179,11 @@ describe('POST /v1/sessions', () => {
     expect(body.session.endedAt).toBeNull();
   });
 
-  it('rejects starting a session on another tenant territory', async () => {
+  it('hides another tenant territory when starting a session (belt: 404, not 403)', async () => {
+    // Under the RLS belt (SEC-005 §4b), startSession reads the territory through
+    // tenantPrismaTx — org B's territory is invisible to org A, so the service maps
+    // the null read to a 404 (withhold existence) rather than a 403 tenantMismatch
+    // (which would leak that the foreign territory exists — the existence oracle).
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
@@ -191,7 +195,8 @@ describe('POST /v1/sessions', () => {
         startGeo: { lat: 30.275, lng: -97.695 },
       },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
+    expect(res.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 
   it('returns 401 without JWT', async () => {
@@ -392,7 +397,10 @@ describe('GET /v1/knocks', () => {
 });
 
 describe('GET /v1/knocks/:id', () => {
-  it('returns 403 cross-tenant', async () => {
+  it('hides a cross-tenant knock (belt: 404, not 403)', async () => {
+    // Under the RLS belt, getKnock reads through tenantPrismaTx — org A's knock is
+    // invisible to org B, so the service returns 404 (withhold existence) rather than
+    // a 403 tenantMismatch that would confirm the knock exists in another tenant.
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const sessionA = await startSession(tokenA, territoryA);
@@ -408,7 +416,8 @@ describe('GET /v1/knocks/:id', () => {
       url: `/v1/knocks/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
+    expect(res.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 });
 

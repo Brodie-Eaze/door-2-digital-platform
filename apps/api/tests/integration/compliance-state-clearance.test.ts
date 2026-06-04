@@ -265,7 +265,7 @@ describe('Registration status state-machine', () => {
     expect(ids).toEqual([campaignId, campaign2].sort());
   });
 
-  it('rejects filing against another org’s campaign', async () => {
+  it('rejects filing against another org’s campaign (foreign campaign is invisible → 404)', async () => {
     const otherOrg = 'org_TEST_CLR_OTHER';
     await prisma().org.create({
       data: {
@@ -277,8 +277,13 @@ describe('Registration status state-machine', () => {
         regionCode: 'US',
       },
     });
+    // fileRegistration now reads the Campaign through the RLS belt
+    // (tenantPrismaTx(actor.orgId)): orgA's campaign is invisible to otherOrg, so
+    // the read returns null → notFound (404), not the pre-belt 403 tenantMismatch.
+    // The existence oracle closes — a cross-tenant filer can't tell "forbidden"
+    // from "doesn't exist". See docs/runbooks/rls-cutover.md §4b.
     await expect(
       fileRegistration({ campaignId, state: 'CA' }, { ...actor, orgId: otherOrg }),
-    ).rejects.toMatchObject({ problem: { status: 403 } });
+    ).rejects.toMatchObject({ problem: { status: 404 } });
   });
 });
