@@ -42,3 +42,24 @@ RBAC role-change mass-assignment (F-003) · PII unmask single-use replay (F-005)
 ## Cannot do without infra (honest)
 
 A real 50k-concurrent **load test** needs the deployed stack (AWS account + DB). The static stress analysis above is the substitute; the live k6 run stays gated on infra.
+
+## STATUS — 2026-06-05 15:07 (autonomous completion run)
+
+### FIXED + on stacked PRs (#1 floor → #2 batch-1 → #3 batch-2 → #4 batch-3)
+
+- P0 F-001 invite escalation; P1 SEC-002 update guard (PR #1)
+- PERF-INDEXES, HEATMAP-N+1, VERIFYCHAIN-CAP, WEBHOOK-DNS, MARKETING-LISTJOBS, SEC-013, SEC-010, SEC-003 rate-limit (PR #2)
+- F-010 demo reject, F-RECON-001 status-auth, SEC-004 SAML replay, SEC-012 PII-logs, SEC-009 timing (PR #3)
+- LEAD-ROUTING, MARKETING-ASYNC, SEC-003 lockout, SEC-011 invite-timing (PR #4)
+
+### REMAINING autonomous (hourly cron 0de540bf works these):
+
+- F-004 donorEmail→vault; lockout admin-unlock endpoint; SCRYPT-THREADPOOL (IaC UV_THREADPOOL_SIZE); regression tests; M5 wire screens→api; M8 write k6 load tests; M10 day-2 ops docs.
+
+### NEEDS HUMAN DECISION (cron attempts on a branch or queues — never merges):
+
+- AUDIT-CHAIN-SERIALIZATION (P0-perf, audit hot path — needs DB integration-test verification before merge); DEP-NEXT15 + DEP-FASTIFY5 (breaking major upgrades).
+
+### HUMAN-ONLY (queued):
+
+- Merge PRs #1-4 → main; AWS account+apply; MiCamp creds; domain; PII key rotation; external pen-test; SOC2 auditor; lawyer; live 50k load run.
