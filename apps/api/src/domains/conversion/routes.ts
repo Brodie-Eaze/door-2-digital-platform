@@ -23,7 +23,11 @@ interface IdParams {
 }
 
 export async function registerConversion(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'conversion', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'conversion',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // POST /v1/conversions — polymorphic create
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {

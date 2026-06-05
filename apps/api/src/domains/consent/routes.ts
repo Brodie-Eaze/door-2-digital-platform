@@ -21,9 +21,14 @@
 import type { FastifyInstance } from 'fastify';
 import { captureConsentRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerConsent(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'consent', status: 'scaffold', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'consent',
+    status: 'scaffold',
+    phase: '1.2',
+  }));
 
   app.post('/capture', async (req, reply) => {
     requireIdempotencyKey(req);

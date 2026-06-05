@@ -31,7 +31,7 @@ export async function registerContentStudio(app: FastifyInstance): Promise<void>
   const marketing = new MarketingService(app.integrations);
   const service = new ContentStudioService(marketing);
 
-  app.get('/_status', async () => ({
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
     domain: 'content-studio',
     status: 'live',
     phase: '3.1',

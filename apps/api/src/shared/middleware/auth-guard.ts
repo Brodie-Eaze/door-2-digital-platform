@@ -78,6 +78,15 @@ export const requireAuth: preHandlerHookHandler = async (
   if (revoked) {
     throw new ProblemError(Problems.unauthorized('Token revoked'));
   }
+  // F-010 / SEC-005: a demo-minted token (demo === true) must never be accepted
+  // by the real API.  The demo issuer signs with the same JWT_ACCESS_SECRET so
+  // the token passes cryptographic verification — this explicit claim check is
+  // the API-side rejection layer.  We return 401 ("not authenticated") rather
+  // than 403 so demo tooling can prompt for real credentials without leaking
+  // whether the endpoint exists.
+  if (payload.demo === true) {
+    throw new ProblemError(Problems.unauthorized('Demo tokens are not accepted by the API'));
+  }
   req.principal = {
     orgId: payload.orgId,
     userId: payload.sub,

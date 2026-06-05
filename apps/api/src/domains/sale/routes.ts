@@ -18,7 +18,11 @@ interface IdParams {
 }
 
 export async function registerSale(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'sale', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'sale',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // POST /v1/sales — 501, sales are created via /v1/conversions
   app.post('/', { preHandler: requireAuth }, async (_req, reply) =>

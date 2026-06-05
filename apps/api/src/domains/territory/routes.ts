@@ -42,7 +42,11 @@ interface AssignmentParams {
 }
 
 export async function registerTerritory(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'territory', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'territory',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // GET /heatmap — must be declared before GET /:id so Fastify doesn't
   // capture the literal segment as a route parameter.

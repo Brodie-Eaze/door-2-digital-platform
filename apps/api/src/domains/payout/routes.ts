@@ -21,9 +21,14 @@
 import type { FastifyInstance } from 'fastify';
 import { createPayoutBatchRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerPayout(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'payout', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'payout',
+    status: 'scaffold',
+    phase: '1.3',
+  }));
 
   app.post('/', async (req, reply) => {
     requireIdempotencyKey(req);

@@ -38,7 +38,11 @@ interface IdParams {
 }
 
 export async function registerCompliance(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'compliance', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'compliance',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // GET /v1/compliance/state-clearance — matrix for the org.
   app.get('/state-clearance', { preHandler: requireAuth }, async (req, reply) => {

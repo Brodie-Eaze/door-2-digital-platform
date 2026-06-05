@@ -16,9 +16,14 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { commissionQuerySchema } from '@d2d/shared-types';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerCommission(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'commission', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'commission',
+    status: 'scaffold',
+    phase: '1.3',
+  }));
 
   app.get('/', async (req, reply) => {
     const parsed = commissionQuerySchema.parse(req.query);

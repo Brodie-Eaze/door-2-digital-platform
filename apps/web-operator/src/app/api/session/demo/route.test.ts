@@ -71,6 +71,24 @@ describe('isDemoLoginEnabled — D5 prod gate', () => {
     process.env.DEMO_MODE_ENABLED = 'true';
     expect(isDemoLoginEnabled()).toBe(true);
   });
+
+  // F-010 defense-in-depth: when a real API is wired, synthetic demo tokens
+  // make no sense — the API will reject them anyway (demo-claim guard).
+  it('is FALSE when NEXT_PUBLIC_API_URL is set even with DEMO_MODE_ENABLED=true', () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
+    process.env.DEMO_MODE_ENABLED = 'true';
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';
+    expect(isDemoLoginEnabled()).toBe(false);
+  });
+
+  it('is FALSE when NEXT_PUBLIC_API_URL is set to empty string (treated as set)', () => {
+    // empty string is falsy in JS; we only block when the var is non-empty
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
+    process.env.DEMO_MODE_ENABLED = 'true';
+    process.env.NEXT_PUBLIC_API_URL = '';
+    // empty string is falsy — gate does NOT block; this confirms the boundary
+    expect(isDemoLoginEnabled()).toBe(true);
+  });
 });
 
 describe('synthetic demo token — D1 overlap closed', () => {

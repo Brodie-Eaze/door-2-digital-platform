@@ -126,7 +126,11 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get('/_status', async () => ({ domain: 'auth', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'auth',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/auth/login
   // SEC-003: tighter per-route rate limit — 5 attempts per IP per minute.

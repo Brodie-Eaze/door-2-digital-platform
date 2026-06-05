@@ -38,7 +38,11 @@ function requireRole(actorRole: string, allowed: Set<string>): void {
 }
 
 export async function registerPiiVault(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'pii-vault', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'pii-vault',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/pii/unmask-request
   app.post('/unmask-request', { preHandler: requireAuth }, async (req, reply) => {

@@ -17,10 +17,12 @@
  *   - emailDigest is globally unique → an email already bound to another org
  *     is rejected rather than cross-linked.
  */
+import { createHash } from 'node:crypto';
 import type { Org, SsoConfiguration, SsoProvider, User, Prisma } from '@prisma/client';
 import { Problems, ProblemError, emailDigest, newId } from '@d2d/shared-utils';
 import { prisma } from '../../../config/db';
 import { env } from '../../../config/env';
+import { redis } from '../../../config/redis';
 import { writeAudit } from '../../../shared/audit/write';
 import { issueTokens, type IssueUser, type AuthSuccess } from '../service';
 import { buildSaml, encryptIdpCert, entityIdFor, acsUrlFor } from './config';
@@ -31,6 +33,48 @@ import {
   type SamlProfileLike,
 } from './attribute-mapping';
 import type { UpsertSsoConfigInput } from './schemas';
+
+/**
+ * Redis key prefix for the SAML assertion-ID single-use cache (SEC-004).
+ * Each entry lives for SAML_ASSERTION_CACHE_TTL_SECONDS and is SET NX so the
+ * second presentation of the same assertion ID is rejected as a replay.
+ */
+const SAML_ASSERTION_KEY_PREFIX = 'saml:used-assertion:';
+/** 10 min = assertion validity window + generous clock-skew headroom. */
+const SAML_ASSERTION_CACHE_TTL_SECONDS = 10 * 60;
+
+/**
+ * Atomically mark an assertion ID as consumed.
+ * Returns true if this is the FIRST use (SET NX succeeded), false if the ID
+ * was already present (replay). On a Redis error this throws — we treat an
+ * unavailable replay-cache as fail-closed: better to reject a valid login than
+ * to silently accept a replay during a Redis outage.
+ */
+async function consumeAssertionId(assertionId: string): Promise<boolean> {
+  const key = `${SAML_ASSERTION_KEY_PREFIX}${assertionId}`;
+  // SET key 1 EX <ttl> NX — returns 'OK' on first use, null if already set.
+  // ioredis overload order: key, value, 'EX', seconds, 'NX'.
+  const result = await redis().set(key, '1', 'EX', SAML_ASSERTION_CACHE_TTL_SECONDS, 'NX');
+  return result === 'OK';
+}
+
+/**
+ * Truncate an IP address for audit metadata (SEC-012 — PII minimisation).
+ *   IPv4 → drop last octet   (192.168.1.42  → 192.168.1.0   = /24)
+ *   IPv6 → keep first 3 groups  (2001:db8:85a3::1 → 2001:db8:85a3::/48)
+ * Returns undefined for missing / unparseable values.
+ */
+export function truncateIp(ip: string | undefined): string | undefined {
+  if (!ip) return undefined;
+  // IPv4 — four dot-separated octets.
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(ip);
+  if (v4) return `${v4[1]}.${v4[2]}.${v4[3]}.0`;
+  // IPv6 — strip optional zone ID then keep first 3 colon-separated groups.
+  const bare = ip.replace(/%.*$/, '');
+  const groups = bare.split(':');
+  if (groups.length >= 3) return `${groups[0]}:${groups[1]}:${groups[2]}::/48`;
+  return undefined;
+}
 
 /** Caller identity for config mutations (from req.principal). */
 export interface SsoActor {
@@ -262,6 +306,21 @@ export async function consumeAcs(
     throw new ProblemError(Problems.unauthorized('SAML assertion validation failed'));
   }
 
+  // 3a. Single-use assertion-ID cache (SEC-004 — replay defence).
+  //     The assertion ID is the SAML <Assertion ID="..."> attribute, available
+  //     on the validated profile as profile.ID (node-saml Profile type). If the
+  //     IdP omits it we fall back to a hash of the raw response — an assertion
+  //     without an ID is unusual but still needs replay protection.
+  const assertionId: string =
+    typeof profile['ID'] === 'string' && profile['ID'].length > 0
+      ? profile['ID']
+      : createHash('sha256').update(input.samlResponse).digest('hex');
+
+  const firstUse = await consumeAssertionId(assertionId);
+  if (!firstUse) {
+    throw new ProblemError(Problems.forbidden('SAML assertion already consumed (replay rejected)'));
+  }
+
   // 4. Map attributes (throws if no usable email).
   const mapping = config.attributeMappingJson as unknown as SamlAttributeMapping;
   let mapped;
@@ -313,7 +372,8 @@ export async function consumeAcs(
         action: 'auth.sso_provisioned',
         resourceType: 'User',
         resourceId: u.id,
-        metadata: { provider: config.provider, role: mapped.role, ip: input.ip },
+        // SEC-012: store truncated /24 (IPv4) or /48 (IPv6) prefix only.
+        metadata: { provider: config.provider, role: mapped.role, ip: truncateIp(input.ip) },
       });
       return u;
     });

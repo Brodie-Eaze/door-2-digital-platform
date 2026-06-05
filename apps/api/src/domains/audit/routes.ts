@@ -27,7 +27,11 @@ function requireAuditRole(role: string): void {
 }
 
 export async function registerAudit(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'audit', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'audit',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // GET /v1/audit/events — list scoped to actor's org
   app.get('/', { preHandler: requireAuth }, async (req, reply) => {
