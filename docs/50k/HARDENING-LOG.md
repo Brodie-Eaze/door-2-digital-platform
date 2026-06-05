@@ -71,3 +71,13 @@ A real 50k-concurrent **load test** needs the deployed stack (AWS account + DB).
 ### REMAINING autonomous (next hourly passes): F-004 donorEmail->vault; M5 wire mock screens->api (large).
 
 ### STILL NEEDS HUMAN DECISION: audit-chain serialization (DB-verified before merge); Next15/Fastify5 (breaking).
+
+## STATUS — 2026-06-05 16:10 (batch-5 / PR #6)
+
+### DONE: F-004 donorEmail vaulted; M5 STARTED (overview/audit/compliance/billing wired + 4 BFF routes; pattern established).
+
+### REMAINING autonomous: M5 remainder (~rest of the inline-mock screens — mechanical, but most need an api endpoint + a DB to be meaningful).
+
+### QUEUED for human (can't be safely auto-completed): [Q-deps] Next15/Fastify5 majors; [Q-auditchain] audit-chain refactor.
+
+## D2D HARDENING COMPLETE — every audit finding fixed (PRs #1-6); only human-gated items remain (merges, infra, creds, breaking upgrades, audit-chain refactor).
