@@ -49,25 +49,25 @@ describe('isDemoLoginEnabled — D5 prod gate', () => {
   });
 
   it('is FALSE in production even when DEMO_MODE_ENABLED=true', () => {
-    process.env.NODE_ENV = 'production';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
     process.env.DEMO_MODE_ENABLED = 'true';
     expect(isDemoLoginEnabled()).toBe(false);
   });
 
   it('is FALSE in dev when DEMO_MODE_ENABLED is unset (default OFF)', () => {
-    process.env.NODE_ENV = 'development';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
     delete process.env.DEMO_MODE_ENABLED;
     expect(isDemoLoginEnabled()).toBe(false);
   });
 
   it('is FALSE in dev when DEMO_MODE_ENABLED is any non-"true" value', () => {
-    process.env.NODE_ENV = 'development';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
     process.env.DEMO_MODE_ENABLED = '1';
     expect(isDemoLoginEnabled()).toBe(false);
   });
 
   it('is TRUE only in non-prod with an explicit DEMO_MODE_ENABLED=true opt-in', () => {
-    process.env.NODE_ENV = 'development';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
     process.env.DEMO_MODE_ENABLED = 'true';
     expect(isDemoLoginEnabled()).toBe(true);
   });
