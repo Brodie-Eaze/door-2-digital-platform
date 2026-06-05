@@ -59,9 +59,31 @@ export async function login(args: {
     await verifyPassword(args.password, 'dummy:00');
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
+
+  // SEC-003: per-account lockout check. Evaluated BEFORE the password hash so
+  // a locked account cannot be brute-forced even with correct timing.
+  if (user.credential.lockedUntil && user.credential.lockedUntil > new Date()) {
+    // Still burn time equivalent to a hash to avoid a timing oracle that reveals
+    // lockout state vs. bad-password state.
+    await verifyPassword(args.password, 'dummy:00');
+    throw new ProblemError(Problems.rateLimited(900)); // 15-minute lockout window
+  }
+
   const ok = await verifyPassword(args.password, user.credential.passwordHash);
   if (!ok) {
+    const LOCKOUT_THRESHOLD = 10;
+    const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+    const nextCount = user.credential.failedLoginCount + 1;
+    const shouldLock = nextCount >= LOCKOUT_THRESHOLD;
+
     await prisma().$transaction(async (tx) => {
+      await tx.userCredential.update({
+        where: { userId: user.id },
+        data: {
+          failedLoginCount: shouldLock ? 0 : nextCount,
+          lockedUntil: shouldLock ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null,
+        },
+      });
       await writeAudit(tx, {
         orgId: user.orgId,
         regionCode: user.regionCode,
@@ -69,11 +91,21 @@ export async function login(args: {
         action: 'auth.login_failed',
         resourceType: 'User',
         resourceId: user.id,
-        metadata: { reason: 'invalid_password' },
+        metadata: {
+          reason: 'invalid_password',
+          failedAttempt: nextCount,
+          accountLocked: shouldLock,
+        },
       });
     });
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
+
+  // Successful login: clear the failure counter and any stale lockout.
+  await prisma().userCredential.update({
+    where: { userId: user.id },
+    data: { failedLoginCount: 0, lockedUntil: null },
+  });
 
   return issueTokens(user, { ip: args.ip, userAgent: args.userAgent, audit: 'auth.login_success' });
 }

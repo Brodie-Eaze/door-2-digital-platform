@@ -174,10 +174,16 @@ export async function acceptInvite(args: {
     where: { inviteTokenHash: hash },
     include: { user: true },
   });
+
+  // SEC-011: always run hashPassword regardless of whether the token was found
+  // or is expired — this normalises the response time across both failure paths
+  // so a probe cannot distinguish "token not found" from "token expired".
+  // The hash result is only used when the token is genuinely valid.
+  const pwHash = await hashPassword(args.password);
+
   if (!cred || !cred.inviteExpiresAt || cred.inviteExpiresAt < new Date()) {
     throw new ProblemError(Problems.unauthorized('Invite token invalid or expired'));
   }
-  const pwHash = await hashPassword(args.password);
   const updated = await prisma().$transaction(async (tx) => {
     await tx.userCredential.update({
       where: { userId: cred.userId },

@@ -887,14 +887,17 @@ model IdempotencyRecord {
 // ───────────────────────────────────────────────────────────────────────────
 
 model UserCredential {
-  userId          String    @id
-  user            User      @relation(fields: [userId], references: [id])
+  userId           String    @id
+  user             User      @relation(fields: [userId], references: [id])
   // scrypt salt:hash hex pair (32-byte salt, 64-byte derived key)
-  passwordHash    String
+  passwordHash     String
   // Optional invite token (HMAC of opaque token), present while user is pending acceptance
-  inviteTokenHash String?   @unique
-  inviteExpiresAt DateTime?
-  updatedAt       DateTime  @updatedAt
+  inviteTokenHash  String?   @unique
+  inviteExpiresAt  DateTime?
+  // SEC-003: per-account login lockout
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  updatedAt        DateTime  @updatedAt
 }
 
 model RefreshToken {

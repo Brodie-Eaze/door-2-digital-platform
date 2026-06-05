@@ -19,6 +19,7 @@ import type { LeadStatus, RegionCode, Vertical } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
+import { redis } from '../../config/redis';
 import { PiiVaultService } from '../pii-vault/service';
 import { writeAudit } from '../../shared/audit/write';
 import type {
@@ -110,30 +111,22 @@ async function pickInsideSalesRep(orgId: string): Promise<string | null> {
   });
   if (candidates.length === 0) return null;
 
-  // Round-robin via least-recently-assigned: pick the rep with the oldest
-  // most-recent assignment. If a rep has never been assigned, they come
-  // first. Implemented as: count leads per rep, take the lowest count,
-  // tie-break by id.
-  const counts = await prisma().lead.groupBy({
-    by: ['assignedToId'],
-    where: {
-      orgId,
-      assignedToId: { in: candidates.map((c) => c.id) },
-    },
-    _count: { _all: true },
-  });
-  const countByUser = new Map<string, number>();
-  for (const c of counts) {
-    if (c.assignedToId) countByUser.set(c.assignedToId, c._count._all);
+  // Redis round-robin: INCR a per-org counter and mod into the candidate list.
+  // This is O(1) regardless of how many leads have been assigned, replacing the
+  // unbounded groupBy that previously grew with the leads table.
+  // Key is never user-scoped because this is an org-level routing counter;
+  // it is intentionally ephemeral — a Redis restart resets the counter to 0
+  // which is still a valid position in the candidate list.
+  const rrKey = `d2d:rr:leadroute:${orgId}`;
+  try {
+    const counter = await redis().incr(rrKey);
+    return candidates[counter % candidates.length]!.id;
+  } catch {
+    // Redis unavailable — fall back to first candidate (stable, never fails
+    // lead creation). No logging here: Redis errors are already captured
+    // at the connection level by the ioredis error event.
+    return candidates[0]!.id;
   }
-  let best: { id: string; count: number } | null = null;
-  for (const cand of candidates) {
-    const count = countByUser.get(cand.id) ?? 0;
-    if (!best || count < best.count) {
-      best = { id: cand.id, count };
-    }
-  }
-  return best?.id ?? null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
