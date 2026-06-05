@@ -518,8 +518,8 @@ model Lead {
   vertical      Vertical
   campaignId    String?
   campaign      Campaign?  @relation(fields: [campaignId], references: [id])
-  givenName     String /// PII (legacy plaintext — name kept readable for routing UIs)
-  familyName    String /// PII (legacy plaintext)
+  givenName     String /// PII (legacy plaintext — vault migration pending — do not use in new features)
+  familyName    String /// PII (legacy plaintext — vault migration pending — do not use in new features)
   email         String? /// PII (legacy plaintext — superseded by emailVault when present)
   emailDigest   String? // HMAC-SHA256 search digest
   phone         String? /// PII (legacy plaintext — superseded by phoneVault when present)

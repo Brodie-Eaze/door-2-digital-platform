@@ -151,12 +151,29 @@ async function loadConversions(slug: string): Promise<ConversionsData> {
       db.conversion.count({ where: { orgId: org.id, signedAt: { gte: todayStart } } }),
     ]);
 
+    // super_admin is the only role permitted to see full lead/rep names on this
+    // surface. All other roles receive initials — the JIT unmask path handles
+    // step-up access. Role is read from a cryptographically verified session
+    // cookie (see session-verify.ts) so the check cannot be spoofed by body/query.
+    const isSuperAdmin = session.role === 'super_admin';
+
     const rows: ConversionRow[] = recent.map((c) => {
-      const firstName = c.lead?.givenName ?? '—';
-      const lastName = c.lead?.familyName ?? '';
+      const givenNameRaw = c.lead?.givenName ?? '—';
+      const familyNameRaw = c.lead?.familyName ?? '';
+      const firstName = isSuperAdmin ? givenNameRaw : `${givenNameRaw[0] ?? '?'}.`;
+      const lastName = isSuperAdmin
+        ? familyNameRaw
+        : familyNameRaw.length > 0
+          ? `${familyNameRaw[0]}.`
+          : '';
       const emailDigest = c.lead?.emailDigest;
-      const repFirst = c.knocker?.givenName ?? '';
-      const repLast = c.knocker?.familyName ?? '';
+      const repFirstRaw = c.knocker?.givenName ?? '';
+      const repLastRaw = c.knocker?.familyName ?? '';
+      // Rep name shown as initials-only on all roles — reps are internal users,
+      // not leads; their name is not regulated PII on this surface, but we keep
+      // initials for consistency with the knockers page convention.
+      const repFirst = repFirstRaw;
+      const repLast = repLastRaw;
       const repInitials =
         repFirst && repLast
           ? `${repFirst[0]!}${repLast[0]!}`.toUpperCase()

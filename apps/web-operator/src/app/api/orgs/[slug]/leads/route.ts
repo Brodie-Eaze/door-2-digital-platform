@@ -80,12 +80,23 @@ export async function GET(
     const hasMore = leads.length > PAGE_SIZE;
     const items = hasMore ? leads.slice(0, PAGE_SIZE) : leads;
 
+    // super_admin is the only role that may see full lead names on the wire.
+    // All other callers receive initials — the JIT unmask path is the upgrade.
+    // Role is resolved from a cryptographically verified session cookie (session-verify.ts).
+    const isSuperAdmin = session.role === 'super_admin';
+
     return ok({
       org: { id: org.id, slug: org.slug, tradingName: org.tradingName, regionCode: org.regionCode },
       leads: items.map((l) => ({
         id: l.id,
-        givenName: l.givenName,
-        familyName: l.familyName,
+        givenName: isSuperAdmin ? l.givenName : `${l.givenName[0] ?? '?'}.`,
+        familyName: isSuperAdmin
+          ? l.familyName
+          : l.familyName.length > 0
+            ? `${l.familyName[0]}.`
+            : '',
+        // TODO: remove plaintext givenName/familyName after vault migration (SEC-010).
+        displayName: `${l.givenName[0] ?? '?'}. ${l.familyName[0] ?? '?'}.`,
         status: l.status,
         vertical: l.vertical,
         // PII vault present → masked; legacy plaintext → also masked.
