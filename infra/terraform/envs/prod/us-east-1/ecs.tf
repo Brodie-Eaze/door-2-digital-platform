@@ -172,6 +172,10 @@ module "api_service" {
   task_memory       = var.api_task_memory
   desired_count     = var.api_desired_count
 
+  # M2: autoscaling bounds sized for 50k concurrent users.
+  min_count = var.api_min_count
+  max_count = var.api_max_count
+
   subnet_ids         = module.network.private_subnet_ids
   security_group_ids = [aws_security_group.app.id]
   target_group_arn   = module.alb.target_group_arn

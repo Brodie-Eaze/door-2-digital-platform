@@ -156,20 +156,63 @@ resource "aws_security_group" "app" {
   tags = merge(local.tags, { Name = "${local.name}-app" })
 }
 
-# Aurora: 5432 from app SG only.
+# RDS Proxy SG — inline rules deliberately empty to break the circular
+# dependency (proxy SG ↔ aurora SG each reference the other).
+# Rules are attached below via aws_security_group_rule resources.
+resource "aws_security_group" "rds_proxy" {
+  name        = "${local.name}-rds-proxy"
+  description = "RDS Proxy; ingress 5432 from app SG; egress 5432 to Aurora SG"
+  vpc_id      = module.network.vpc_id
+  tags        = merge(local.tags, { Name = "${local.name}-rds-proxy" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Aurora SG — inline rules empty for the same reason.
 resource "aws_security_group" "aurora" {
   name        = "${local.name}-aurora"
-  description = "Aurora; ingress 5432 from app SG only"
+  description = "Aurora; ingress 5432 from RDS Proxy SG only"
   vpc_id      = module.network.vpc_id
+  tags        = merge(local.tags, { Name = "${local.name}-aurora" })
 
-  ingress {
-    description     = "Postgres from app"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.app.id]
+  lifecycle {
+    create_before_destroy = true
   }
-  tags = merge(local.tags, { Name = "${local.name}-aurora" })
+}
+
+# Proxy ← app: allow app tasks to reach the proxy on 5432.
+resource "aws_security_group_rule" "proxy_ingress_from_app" {
+  type                     = "ingress"
+  description              = "Postgres from app tasks"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_proxy.id
+  source_security_group_id = aws_security_group.app.id
+}
+
+# Proxy → Aurora: proxy egresses 5432 to Aurora.
+resource "aws_security_group_rule" "proxy_egress_to_aurora" {
+  type                     = "egress"
+  description              = "Postgres to Aurora"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds_proxy.id
+  source_security_group_id = aws_security_group.aurora.id
+}
+
+# Aurora ← proxy: Aurora accepts 5432 from the proxy only.
+resource "aws_security_group_rule" "aurora_ingress_from_proxy" {
+  type                     = "ingress"
+  description              = "Postgres from RDS Proxy"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.aurora.id
+  source_security_group_id = aws_security_group.rds_proxy.id
 }
 
 # Redis: 6379 from app SG only.
@@ -259,6 +302,28 @@ module "aurora" {
   tags                = local.tags
 }
 
+# ── RDS Proxy ────────────────────────────────────────────────────────────────
+# Connection-pooling linchpin: multiplexes 4 000+ app connections onto a stable
+# pool of ≤200 Aurora connections.  App tasks authenticate to the proxy via IAM
+# db-auth tokens (no plaintext DB password in any task).
+module "rds_proxy" {
+  source             = "../../../modules/rds-proxy"
+  name               = local.name
+  db_cluster_id      = module.aurora.cluster_id
+  db_secret_arn      = module.secret_db_master.arn
+  kms_key_arn        = module.kms_rds.key_arn
+  subnet_ids         = module.network.isolated_subnet_ids
+  security_group_ids = [aws_security_group.rds_proxy.id]
+
+  # Pool sizing: 100% of Aurora max_connections available to the proxy,
+  # idle half released.  Tune these after load testing.
+  max_connections_percent      = var.rds_proxy_max_connections_percent
+  max_idle_connections_percent = 50
+  connection_borrow_timeout    = 120
+
+  tags = local.tags
+}
+
 # ── ElastiCache Redis ────────────────────────────────────────────────────────
 module "redis" {
   source             = "../../../modules/redis"
@@ -273,17 +338,21 @@ module "redis" {
 }
 
 # ── Composed connection-string secrets (from in-state refs, no literals) ─────
-# DATABASE_URL: TLS required (Aurora rds.force_ssl=1). sslmode=require.
+# DATABASE_URL: routes through RDS Proxy (not direct Aurora).
+# IAM auth is REQUIRED on the proxy; the app must use iam:GenerateDbAuthToken
+# (the task role already has rds-db:connect permission — wired in ecs.tf).
+# sslmode=require — the proxy enforces TLS on the client leg; Aurora enforces
+# rds.force_ssl=1 on the proxy→Aurora leg.
 module "secret_database_url" {
   source      = "../../../modules/secrets"
   name        = "d2d/${var.env}/DATABASE_URL"
-  description = "Postgres connection string composed from Aurora endpoint + generated password."
+  description = "Postgres connection string via RDS Proxy endpoint (IAM auth). Proxy -> Aurora."
   kms_key_arn = module.kms_redis_secrets.key_arn
   managed_value = format(
     "postgresql://%s:%s@%s:%s/%s?sslmode=require",
     var.db_master_username,
     random_password.db_master.result,
-    module.aurora.cluster_endpoint,
+    module.rds_proxy.proxy_endpoint,
     module.aurora.cluster_port,
     var.db_name,
   )
