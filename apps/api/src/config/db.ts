@@ -10,10 +10,48 @@ import { env } from './env';
 
 let _prisma: PrismaClient | undefined;
 
+/**
+ * Build the Prisma datasource URL with connection-pool parameters for
+ * RDS-Proxy / PgBouncer compatibility.
+ *
+ * Scale maths (50k concurrent users target):
+ *   ECS task count (peak) : ~20 tasks (auto-scale on CPU/memory)
+ *   connection_limit/task  : 5  (Prisma's internal pool per instance)
+ *   Total app→PgBouncer    : 20 × 5 = 100 connections
+ *   PgBouncer pool size    : 100 (transaction-mode, multiplexes to ~10 real PG backends)
+ *   RDS max_connections    : 5_000 on db.r6g.large (enough for failover headroom)
+ *
+ * `pgbouncer=true` disables prepared statements so PgBouncer in
+ * transaction mode doesn't try to persist them across connections.
+ * `connect_timeout=10` prevents a slow DB from blocking new requests.
+ * `pool_timeout=5` surfaces connection exhaustion as a fast error (not a
+ * thread-park) so the circuit-breaker fires before the queue backs up.
+ *
+ * IMPORTANT: DATABASE_URL must NOT already contain `?...` params when this
+ * function appends its own. If the env URL carries no query string the code
+ * below is safe; otherwise use DATABASE_URL_POOLED (set by RDS-Proxy) which
+ * is the clean proxy URL without params.
+ */
+function buildDatasourceUrl(): string {
+  const base = env().DATABASE_URL;
+  const sep = base.includes('?') ? '&' : '?';
+  return (
+    base +
+    sep +
+    [
+      'connection_limit=5', // per-instance pool size (see maths above)
+      'pool_timeout=5', // seconds before "no connection available" error
+      'connect_timeout=10', // seconds to establish a new connection
+      'pgbouncer=true', // disable prepared statements for PgBouncer compat
+      'statement_cache_size=0', // redundant safety with pgbouncer=true
+    ].join('&')
+  );
+}
+
 export function prisma(): PrismaClient {
   if (!_prisma) {
     _prisma = new PrismaClient({
-      datasources: { db: { url: env().DATABASE_URL } },
+      datasources: { db: { url: buildDatasourceUrl() } },
       log: env().NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     });
   }

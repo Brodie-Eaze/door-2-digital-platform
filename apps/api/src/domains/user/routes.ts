@@ -53,11 +53,20 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /v1/users/accept-invite — unauthenticated
+  // POST /v1/users/accept-invite — unauthenticated but idempotent (double-click safe)
   app.post('/accept-invite', async (req, reply) => {
     const body = acceptInviteRequestSchema.parse(req.body);
-    const user = await acceptInvite(body);
-    return reply.code(200).send({ user });
+    // Use '__public__' as orgId — the actual org is not known until the invite
+    // is consumed, and the token itself acts as the per-request scope key.
+    await withIdempotency({
+      req,
+      reply,
+      orgId: '__public__',
+      handler: async () => {
+        const user = await acceptInvite(body);
+        return { status: 200, body: { user } };
+      },
+    });
   });
 
   // GET /v1/users — list within actor's org
@@ -87,13 +96,20 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateUserRequestSchema.parse(req.body);
-    const user = await updateUser(req.params.id, body, {
-      userId: ctx.userId,
+    await withIdempotency({
+      req,
+      reply,
       orgId: ctx.orgId,
-      regionCode: ctx.regionCode as never,
-      role: ctx.role,
+      handler: async () => {
+        const user = await updateUser(req.params.id, body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+          role: ctx.role,
+        });
+        return { status: 200, body: { user } };
+      },
     });
-    return reply.code(200).send({ user });
   });
 
   // POST /v1/users/:id/archive

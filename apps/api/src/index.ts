@@ -52,6 +52,32 @@ import { registerRealtime } from './domains/realtime/routes';
 import { registerIntegrations } from './integrations';
 import { registerMcpServer } from './mcp/server';
 
+/**
+ * Best-effort extraction of `orgId` from a raw JWT header string.
+ *
+ * The rate-limit hook fires on `onRequest` — before auth preHandlers run —
+ * so req.principal is not yet populated. We decode the PAYLOAD segment of
+ * the JWT without verifying the signature; the auth guard verifies later.
+ * If the token is missing, malformed, or lacks an orgId we return null and
+ * the caller falls back to API-key or IP bucketing.
+ */
+function extractOrgIdFromBearer(authHeader: string | undefined): string | null {
+  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+  const dot1 = token.indexOf('.');
+  const dot2 = token.indexOf('.', dot1 + 1);
+  if (dot1 <= 0 || dot2 <= dot1) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.slice(dot1 + 1, dot2), 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    const orgId = payload.orgId;
+    return typeof orgId === 'string' && orgId.length > 0 ? orgId : null;
+  } catch {
+    return null;
+  }
+}
+
 async function buildServer() {
   const e = env();
   const log = logger();
@@ -101,24 +127,48 @@ async function buildServer() {
     maxAge: 600,
   });
 
-  // Rate limiter — bucket per client IP.
+  // ── Rate limiter ───────────────────────────────────────────────────────────
   //
   // SEC-010 / PEN-011: the bucket key MUST derive from a TRUSTED identifier.
-  // It previously preferred the caller-supplied `x-api-key` header, so an
-  // attacker could rotate that header to a fresh value on every request and
-  // mint an unlimited number of empty buckets — fully bypassing the limit.
+  // keyGenerator runs before auth (no verified principal yet), so we key on
+  // req.ip — connection-derived, trustProxy-validated, not caller-forged.
+  // x-api-key header keying was removed (attacker can rotate it freely).
   //
-  // This global limiter runs on the `onRequest` hook (before any auth
-  // preHandler), so no verified principal / API-key id exists yet, and this
-  // service has no API-key auth layer to derive one from. We therefore key on
-  // `req.ip` — Fastify-derived from the connection (with `trustProxy` honouring
-  // the validated X-Forwarded-For), which the caller cannot freely forge — and
-  // never read the attacker-controlled header for keying.
+  // Tiered limits via max() — org/key prefixes reserved for future.
+  // RFC 7807 error body + Retry-After header on 429 (ADR-0009).
+  // Health probes opt out via `config: { rateLimit: false }`.
+  // Route-level tightening uses `config.rateLimit: { max, timeWindow }`.
   await app.register(rateLimit, {
-    max: 120,
+    global: true,
+    max: (_req, key) => {
+      const k = key as string;
+      if (k.startsWith('org:') || k.startsWith('key:')) return 300;
+      return 120;
+    },
     timeWindow: '1 minute',
     redis: redis(),
     keyGenerator: (req) => `ip:${req.ip}`,
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
+    addHeadersOnExceeding: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    errorResponseBuilder: (_req, context) => {
+      const retryAfterSec = Math.ceil((context.ttl ?? 60_000) / 1000);
+      return {
+        type: 'https://docs.d2d.io/problems/rate-limited',
+        title: 'Rate limited',
+        status: 429,
+        detail: `Too many requests — retry after ${retryAfterSec}s`,
+        retryAfter: retryAfterSec,
+      };
+    },
   });
 
   await app.register(sensible);

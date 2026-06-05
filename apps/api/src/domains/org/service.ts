@@ -9,8 +9,62 @@ import type { RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type { CreateOrgRequest } from '@d2d/shared-types';
 import { prisma, tenantTx } from '../../config/db';
+import { redis } from '../../config/redis';
 import { writeAudit } from '../../shared/audit/write';
 import type { UpdateOrgRequest, UpdateBrandKitRequest, UpdateBillingRequest } from './schemas';
+
+// ── Org cache helpers ──────────────────────────────────────────────────────
+//
+// Org records are read on nearly every authenticated request (route guard +
+// billing lookups) but mutate rarely. A short-TTL Redis cache with jitter
+// eliminates the DB round-trip on hot paths.
+//
+// TTL: 5 minutes + ±30s jitter → avoids stampede on deploy or bulk import.
+// Invalidation: every write path (updateOrg / archiveOrg / upsertBrandKit /
+// updateBilling) calls `invalidateOrgCache` so consumers see fresh data
+// within one request cycle. Stale cache is the fallback, not the guarantee.
+//
+// Key format: `org:{orgId}:v1` — per-tenant, versioned namespace.
+
+const ORG_CACHE_TTL_BASE_S = 300; // 5 min
+const ORG_CACHE_JITTER_S = 30;
+
+function orgCacheKey(orgId: string): string {
+  return `org:${orgId}:v1`;
+}
+
+function orgCacheTtl(): number {
+  return (
+    ORG_CACHE_TTL_BASE_S + Math.floor(Math.random() * ORG_CACHE_JITTER_S * 2) - ORG_CACHE_JITTER_S
+  );
+}
+
+async function getCachedOrg(orgId: string): Promise<OrgPublic | null> {
+  try {
+    const raw = await redis().get(orgCacheKey(orgId));
+    if (!raw) return null;
+    return JSON.parse(raw) as OrgPublic;
+  } catch {
+    // Redis hiccup — degrade gracefully to DB
+    return null;
+  }
+}
+
+async function setCachedOrg(org: OrgPublic): Promise<void> {
+  try {
+    await redis().setex(orgCacheKey(org.id), orgCacheTtl(), JSON.stringify(org));
+  } catch {
+    // Non-fatal — DB is the source of truth
+  }
+}
+
+export async function invalidateOrgCache(orgId: string): Promise<void> {
+  try {
+    await redis().del(orgCacheKey(orgId));
+  } catch {
+    // Non-fatal
+  }
+}
 
 interface ActorContext {
   userId?: string;
@@ -82,9 +136,18 @@ export async function getOrg(orgId: string): Promise<OrgPublic> {
   // (db.ts: non-org-scoped models bypass the GUC wrapper), so wrapping it would be a
   // misleading no-op. Tenant isolation for Org is enforced ABOVE this layer: the
   // route guard (req.params.id === ctx.orgId) + WS1 app-layer suspenders.
+  //
+  // Cache-aside: warm path serves from Redis (5-min TTL + jitter). Cold/miss
+  // path falls back to DB and re-populates the cache. Every write path
+  // invalidates via `invalidateOrgCache`.
+  const cached = await getCachedOrg(orgId);
+  if (cached) return cached;
+
   const org = await prisma().org.findUnique({ where: { id: orgId } });
   if (!org) throw new ProblemError(Problems.notFound('Org', orgId));
-  return toOrgPublic(org);
+  const pub = toOrgPublic(org);
+  await setCachedOrg(pub);
+  return pub;
 }
 
 export async function updateOrg(
@@ -138,6 +201,7 @@ export async function updateOrg(
     });
     return next;
   });
+  await invalidateOrgCache(orgId);
   return toOrgPublic(updated);
 }
 
@@ -163,6 +227,7 @@ export async function archiveOrg(orgId: string, actor: ActorContext): Promise<Or
     });
     return next;
   });
+  await invalidateOrgCache(orgId);
   return toOrgPublic(updated);
 }
 
@@ -205,6 +270,9 @@ export async function upsertBrandKit(
     });
     return next;
   });
+  // BrandKit changes update the org's presentation layer; invalidate so any
+  // cached org record (which embedders may derive from) is refreshed.
+  await invalidateOrgCache(orgId);
   return toBrandKitPublic(result);
 }
 
@@ -262,6 +330,8 @@ export async function updateBilling(
     });
     return next;
   });
+  // Billing changes affect rate/limit data often read alongside the org.
+  await invalidateOrgCache(orgId);
   return toBillingPublic(result);
 }
 

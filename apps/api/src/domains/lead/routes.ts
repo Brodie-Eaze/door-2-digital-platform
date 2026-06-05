@@ -76,12 +76,19 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateLeadRequestSchema.parse(req.body);
-    const lead = await updateLead(req.params.id, body, {
-      userId: ctx.userId,
+    await withIdempotency({
+      req,
+      reply,
       orgId: ctx.orgId,
-      regionCode: ctx.regionCode as never,
+      handler: async () => {
+        const lead = await updateLead(req.params.id, body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 200, body: { lead } };
+      },
     });
-    return reply.code(200).send({ lead });
   });
 
   // POST /v1/leads/:id/assign — reassign
