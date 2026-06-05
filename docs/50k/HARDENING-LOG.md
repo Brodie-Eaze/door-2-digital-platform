@@ -63,3 +63,11 @@ A real 50k-concurrent **load test** needs the deployed stack (AWS account + DB).
 ### HUMAN-ONLY (queued):
 
 - Merge PRs #1-4 → main; AWS account+apply; MiCamp creds; domain; PII key rotation; external pen-test; SOC2 auditor; lawyer; live 50k load run.
+
+## STATUS — 2026-06-05 15:24 (batch-4 / PR #5)
+
+### DONE: SCRYPT-THREADPOOL, M8 k6 load tests, lockout admin-unlock, F-001/SEC-002/lockout regression tests, M10 day-2 ops (7 runbooks + SLO + DR).
+
+### REMAINING autonomous (next hourly passes): F-004 donorEmail->vault; M5 wire mock screens->api (large).
+
+### STILL NEEDS HUMAN DECISION: audit-chain serialization (DB-verified before merge); Next15/Fastify5 (breaking).
