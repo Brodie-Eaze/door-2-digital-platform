@@ -49,7 +49,7 @@ export async function registerAudit(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(result);
   });
 
-  // POST /v1/audit/events/verify — chain replay
+  // POST /v1/audit/events/verify — chain replay (capped + paginated)
   app.post('/verify', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     requireAuditRole(ctx.role);
@@ -59,8 +59,15 @@ export async function registerAudit(app: FastifyInstance): Promise<void> {
       regionCode: ctx.regionCode as never,
       ...(body.fromUlid && { fromUlid: body.fromUlid }),
       ...(body.toUlid && { toUlid: body.toUlid }),
+      ...(body.limit !== undefined && { limit: body.limit }),
+      ...(body.afterId !== undefined && { afterId: BigInt(body.afterId) }),
     });
-    return reply.code(200).send(result);
+    // BigInt is not JSON-serialisable — surface nextAfterId as a string cursor.
+    const response = {
+      ...result,
+      nextAfterId: result.nextAfterId !== null ? result.nextAfterId.toString() : null,
+    };
+    return reply.code(200).send(response);
   });
 
   // GET /v1/audit/events/export — 501 (S3 export deferred to Phase 1.4)

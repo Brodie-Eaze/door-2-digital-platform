@@ -129,18 +129,24 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   app.get('/_status', async () => ({ domain: 'auth', status: 'live', phase: '1.1' }));
 
   // POST /v1/auth/login
-  app.post('/login', async (req, reply) => {
-    const body = loginRequestSchema.parse(req.body);
-    const result = await login({
-      email: body.email,
-      password: body.password,
-      ip: req.ip,
-      userAgent:
-        typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
-    });
-    setAuthCookies(reply, result.accessToken, result.refreshToken);
-    return reply.code(200).send(result);
-  });
+  // SEC-003: tighter per-route rate limit — 5 attempts per IP per minute.
+  // This overrides the global 120/min bucket for this endpoint only.
+  app.post(
+    '/login',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = loginRequestSchema.parse(req.body);
+      const result = await login({
+        email: body.email,
+        password: body.password,
+        ip: req.ip,
+        userAgent:
+          typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
+      });
+      setAuthCookies(reply, result.accessToken, result.refreshToken);
+      return reply.code(200).send(result);
+    },
+  );
 
   // POST /v1/auth/refresh — accept refresh token from JSON body OR d2d_rt cookie.
   app.post('/refresh', async (req, reply) => {

@@ -150,9 +150,16 @@ export async function assertSafeWebhookUrl(raw: string): Promise<void> {
     return;
   }
   // Hostname — resolve and range-check.
+  // WEBHOOK-DNS: wrap dns.lookup in a 3 s timeout (no new deps — Promise.race
+  // + setTimeout). A stalled DNS response must not block the hot path.
   let resolved: { address: string; family: number };
   try {
-    resolved = await lookup(parsed.hostname);
+    resolved = await Promise.race([
+      lookup(parsed.hostname),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DNS lookup timed out')), 3_000),
+      ),
+    ]);
   } catch {
     throw new ProblemError(
       ssrfProblem(`Webhook URL hostname does not resolve: ${parsed.hostname}`),
