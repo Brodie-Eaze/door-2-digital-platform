@@ -19,6 +19,7 @@ import type {
   RegionCode,
 } from '@prisma/client';
 import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-utils';
+import { PiiVaultService } from '../pii-vault/service';
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
@@ -57,7 +58,9 @@ export interface ConversionPublic {
 export interface DonationPublic {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  // donorEmail is vaulted — plaintext is never returned in normal responses.
+  // Unmask via POST /v1/pii/unmask-request with rowType='Donation', field='email'.
+  donorEmailDigest: string | null;
   amountCents: string;
   currency: string;
   frequency: string | null;
@@ -185,11 +188,25 @@ export async function createConversion(
     let donation = null;
     let sale = null;
     if (input.type === 'donation_recurring' || input.type === 'donation_oneoff') {
+      const donationId = newId('don');
+      // F-004: envelope-encrypt the donor email before persisting. The AAD binds
+      // the ciphertext to this exact row (rowType='Donation', rowId=donationId)
+      // so the blob is useless if relocated. donorEmailDigest allows future
+      // de-dup / DNC lookups without decrypting.
+      const donorEmailVault = input.donationDetails?.donorEmail
+        ? PiiVaultService.encryptForRow('Donation', donationId, input.donationDetails.donorEmail)
+        : null;
+      const donorEmailDigest = input.donationDetails?.donorEmail
+        ? PiiVaultService.digest(input.donationDetails.donorEmail)
+        : null;
       donation = await tx.donation.create({
         data: {
-          id: newId('don'),
+          id: donationId,
           conversionId,
-          donorEmail: 'redacted@vaulted', // PII vault stores the real value at the Lead row.
+          donorEmailVault: donorEmailVault
+            ? (donorEmailVault as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+          donorEmailDigest: donorEmailDigest ?? undefined,
           amountCents,
           currency: input.currency,
           frequency:
@@ -321,7 +338,7 @@ function toPublic(
   donation: {
     id: string;
     conversionId: string;
-    donorEmail: string;
+    donorEmailDigest: string | null;
     amountCents: bigint;
     currency: string;
     frequency: string | null;
@@ -365,7 +382,7 @@ function toPublic(
       ? {
           id: donation.id,
           conversionId: donation.conversionId,
-          donorEmail: donation.donorEmail,
+          donorEmailDigest: donation.donorEmailDigest,
           amountCents: donation.amountCents.toString(),
           currency: donation.currency,
           frequency: donation.frequency,

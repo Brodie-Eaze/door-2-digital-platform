@@ -162,6 +162,10 @@ describe('GET /v1/donations/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().donation.id).toBe(id);
     expect(res.json().donation.frequency).toBe('monthly');
+    // F-004: plaintext email must never appear in normal read responses.
+    expect(res.json().donation).not.toHaveProperty('donorEmail');
+    // donorEmailDigest is present (may be null when no email was supplied at create time).
+    expect(Object.keys(res.json().donation)).toContain('donorEmailDigest');
   });
 
   it('returns 403 cross-tenant', async () => {

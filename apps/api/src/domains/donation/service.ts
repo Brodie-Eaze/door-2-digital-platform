@@ -23,7 +23,9 @@ interface ActorContext {
 export interface DonationPublic {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  // donorEmail is vaulted — plaintext is never returned in normal responses.
+  // Unmask via POST /v1/pii/unmask-request with rowType='Donation', field='email'.
+  donorEmailDigest: string | null;
   amountCents: string;
   currency: string;
   frequency: string | null;
@@ -40,7 +42,7 @@ async function loadDonationAndAssertTenant(
   row: {
     id: string;
     conversionId: string;
-    donorEmail: string;
+    donorEmailDigest: string | null;
     amountCents: bigint;
     currency: string;
     frequency: string | null;
@@ -187,7 +189,7 @@ export async function changeDonationAmount(
 function toPublic(r: {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  donorEmailDigest: string | null;
   amountCents: bigint;
   currency: string;
   frequency: string | null;
@@ -199,7 +201,7 @@ function toPublic(r: {
   return {
     id: r.id,
     conversionId: r.conversionId,
-    donorEmail: r.donorEmail,
+    donorEmailDigest: r.donorEmailDigest,
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,

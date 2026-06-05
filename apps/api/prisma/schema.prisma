@@ -604,7 +604,11 @@ model Donation {
   id                        String             @id // don_*
   conversionId              String             @unique
   conversion                Conversion         @relation(fields: [conversionId], references: [id])
-  donorEmail                String /// PII
+  // F-004: donorEmail vaulted — envelope-encrypted blob (PiiVaultService.encryptForRow)
+  // bound to (rowType='Donation', rowId=id) via AAD. Nullable only during the
+  // migration window for pre-existing sentinel rows; new rows always set both.
+  donorEmailVault           Json? /// PII — envelope-encrypted via PiiVaultService
+  donorEmailDigest          String? // HMAC-SHA256 search digest (PiiVaultService.digest)
   amountCents               BigInt
   currency                  String
   frequency                 DonationFrequency? // null = one-off
