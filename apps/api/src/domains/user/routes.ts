@@ -46,6 +46,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
           userId: ctx.userId,
           orgId: ctx.orgId,
           regionCode: ctx.regionCode as never,
+          role: ctx.role,
         });
         return { status: 201, body: result };
       },
@@ -90,6 +91,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
     return reply.code(200).send({ user });
   });

@@ -85,6 +85,14 @@ export async function inviteUser(
   input: CreateUserRequest & Partial<InviteUserRequest>,
   actor: ActorContext,
 ): Promise<InviteResult> {
+  // Authorization (P0): only manager+ may invite users, and only an existing
+  // super_admin may mint another super_admin. The role-change path was guarded
+  // but invite was not — any authenticated user could invite themselves an admin.
+  requireActorRole(actor, USER_ADMIN_ROLES);
+  if (input.role === SUPER_ADMIN && actor.role !== SUPER_ADMIN) {
+    throw new ProblemError(Problems.forbidden('Only a super_admin may invite a super_admin'));
+  }
+
   const e = env();
   const digest = emailDigest(input.email, e.PII_SEARCH_KEY);
 
@@ -232,6 +240,11 @@ export async function updateUser(
   input: UpdateUserRequest,
   actor: ActorContext,
 ): Promise<UserPublic> {
+  // Authorization (P1): editing your OWN profile is allowed; editing ANOTHER
+  // user (name/phone/managerId) requires manager+. Previously unguarded.
+  if (userId !== actor.userId) {
+    requireActorRole(actor, USER_ADMIN_ROLES);
+  }
   const existing = await prisma().user.findUnique({ where: { id: userId } });
   if (!existing) throw new ProblemError(Problems.notFound('User', userId));
   if (existing.orgId !== actor.orgId) {
