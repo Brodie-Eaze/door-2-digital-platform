@@ -29,6 +29,9 @@ export interface DonationPublic {
   amountCents: string;
   currency: string;
   frequency: string | null;
+  // SEC-009: paymentMethodToken is vaulted — raw token never returned.
+  // paymentMethodTokenDigest is safe for operational display / recurring lookups.
+  paymentMethodTokenDigest: string | null;
   status: string;
   receiptNumber: string | null;
   startedAt: string;
@@ -46,6 +49,7 @@ async function loadDonationAndAssertTenant(
     amountCents: bigint;
     currency: string;
     frequency: string | null;
+    paymentMethodTokenDigest: string | null;
     status: string;
     receiptNumber: string | null;
     startedAt: Date;
@@ -193,6 +197,7 @@ function toPublic(r: {
   amountCents: bigint;
   currency: string;
   frequency: string | null;
+  paymentMethodTokenDigest: string | null;
   status: string;
   receiptNumber: string | null;
   startedAt: Date;
@@ -205,6 +210,7 @@ function toPublic(r: {
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,
+    paymentMethodTokenDigest: r.paymentMethodTokenDigest,
     status: r.status,
     receiptNumber: r.receiptNumber,
     startedAt: r.startedAt.toISOString(),

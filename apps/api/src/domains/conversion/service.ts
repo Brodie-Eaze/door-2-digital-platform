@@ -64,6 +64,9 @@ export interface DonationPublic {
   amountCents: string;
   currency: string;
   frequency: string | null;
+  // SEC-009: paymentMethodToken is vaulted — raw token never returned.
+  // paymentMethodTokenDigest is safe for operational display / recurring lookups.
+  paymentMethodTokenDigest: string | null;
   status: string;
   receiptNumber: string | null;
   deductibleGiftRecipientNo: string | null;
@@ -199,6 +202,15 @@ export async function createConversion(
       const donorEmailDigest = input.donationDetails?.donorEmail
         ? PiiVaultService.digest(input.donationDetails.donorEmail)
         : null;
+      // SEC-009: vault-encrypt the payment method token before persistence.
+      // The raw token (MiCamp tok_* / Stripe pm_*) is PII that enables
+      // charges; it must never rest in plaintext. The digest allows recurring-
+      // charge lookup without decryption.
+      const rawToken = input.paymentMethodToken ?? input.paymentExternalId ?? null;
+      const paymentMethodTokenVault = rawToken
+        ? PiiVaultService.encryptForRow('Donation', donationId, rawToken)
+        : null;
+      const paymentMethodTokenDigest = rawToken ? PiiVaultService.digest(rawToken) : null;
       donation = await tx.donation.create({
         data: {
           id: donationId,
@@ -213,7 +225,10 @@ export async function createConversion(
             input.type === 'donation_recurring' && input.donationDetails?.frequency
               ? input.donationDetails.frequency
               : null,
-          paymentMethodToken: input.paymentMethodToken ?? input.paymentExternalId ?? 'unknown',
+          paymentMethodTokenVault: paymentMethodTokenVault
+            ? (paymentMethodTokenVault as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+          paymentMethodTokenDigest: paymentMethodTokenDigest ?? undefined,
           status: 'active',
           deductibleGiftRecipientNo: input.donationDetails?.deductibleGiftRecipientNo ?? null,
           einOrEquivalent: input.donationDetails?.einOrEquivalent ?? null,
@@ -342,6 +357,7 @@ function toPublic(
     amountCents: bigint;
     currency: string;
     frequency: string | null;
+    paymentMethodTokenDigest: string | null;
     status: string;
     receiptNumber: string | null;
     deductibleGiftRecipientNo: string | null;
@@ -386,6 +402,7 @@ function toPublic(
           amountCents: donation.amountCents.toString(),
           currency: donation.currency,
           frequency: donation.frequency,
+          paymentMethodTokenDigest: donation.paymentMethodTokenDigest,
           status: donation.status,
           receiptNumber: donation.receiptNumber,
           deductibleGiftRecipientNo: donation.deductibleGiftRecipientNo,

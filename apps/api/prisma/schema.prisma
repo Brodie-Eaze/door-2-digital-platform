@@ -612,7 +612,14 @@ model Donation {
   amountCents               BigInt
   currency                  String
   frequency                 DonationFrequency? // null = one-off
-  paymentMethodToken        String // MiCamp token or Stripe pm_*
+  /// PII — envelope-encrypted via PiiVaultService (rowType='Donation').
+  /// Replaces the former plaintext paymentMethodToken column (SEC-009).
+  /// Nullable so existing rows survive the additive migration with null;
+  /// recurring-charge lookups use paymentMethodTokenDigest for indexing.
+  paymentMethodTokenVault   Json? /// PII
+  /// HMAC-SHA256 digest of the payment token for recurring-charge dedup
+  /// and lookup without decrypting the vault blob.
+  paymentMethodTokenDigest  String?
   externalSubscriptionId    String? // MiCamp recurring id or Stripe sub_*
   status                    String             @default("active")
   // Receipt fields (IRS for US, ACNC for AU, COC for SG)

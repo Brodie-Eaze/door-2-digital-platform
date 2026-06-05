@@ -15,8 +15,12 @@ export interface AccessTokenPayload {
   role: string;
   regionCode: string;
   brandCode: string;
-  /** Optional vanity claims used by the browser topbar — NOT used for authz. */
-  email?: string;
+  /**
+   * Optional vanity claim used by the browser topbar — NOT used for authz.
+   * SEC-005: email was removed from this type; it is PII and must not be
+   * embedded in tokens where it can appear in logs and reverse proxies.
+   * The topbar fetches user data from /api/session/me on mount.
+   */
   givenName?: string;
   iat: number;
   exp: number;
