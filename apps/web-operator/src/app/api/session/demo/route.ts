@@ -1,23 +1,30 @@
 /**
- * POST /api/session/demo — synthetic-demo session issuer.
+ * POST /api/session/demo — synthetic-demo session issuer (DEV/PREVIEW ONLY).
  *
  * Phase-0 demo accommodation: when `NEXT_PUBLIC_API_URL` is unset (typical
- * for the Railway prod web service that ships without the API), the /login
- * page falls back to issuing a SYNTHETIC d2d_at cookie via this route. The
- * cookie has the 3-part shape the middleware shape-check accepts:
+ * for a preview web service that ships without the API), the /login page
+ * falls back to issuing a synthetic d2d_at cookie via this route.
  *
- *   header (base64url JSON) . payload (base64url JSON) . signature ("demo")
+ * SECURITY (SEC / D5): this route mints a super_admin/org_admin session from
+ * credentials HARDCODED in source. It is therefore HARD-DISABLED in
+ * production: when NODE_ENV === 'production' it returns 404 (we 404, not 403,
+ * so the endpoint's existence is never advertised) BEFORE any work. It is
+ * additionally gated on DEMO_MODE_ENABLED, which defaults OFF — set it to
+ * 'true' explicitly in a dev/preview env to enable the demo chips.
  *
- * The signature segment is the literal string "demo" — it can NEVER pass
- * the API's HMAC verify (`verifyAccessToken` throws). So a synthetic
- * cookie ONLY unlocks the static UI; any /proxy/api/* call still 401s.
- *
- * SECURITY: this endpoint accepts a known short-list of demo emails. It
- * does NOT trust arbitrary input — if someone POSTs `email: foo@bar.com`
- * we 400. The demo passwords are checked against a hardcoded table.
+ * SECURITY (SEC / D1): the synthetic token is now signed with the platform's
+ * JWT_ACCESS_SECRET (the same HS256 secret real tokens use) via the shared
+ * `signAccessToken`, so it cryptographically verifies in getSession. Without
+ * a configured secret (or in prod) the route is dead and no cookie is minted.
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { createHmac } from 'node:crypto';
+import { isDemoLoginEnabled, sessionSigningSecret } from '@/lib/session-verify';
+
+// Prisma-free, but node:crypto is used → force Node runtime (not Edge).
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 interface DemoAccount {
   sub: string;
@@ -71,22 +78,25 @@ const DEMO_TABLE: DemoAccount[] = [
   },
 ];
 
-function b64url(input: string): string {
-  return Buffer.from(input)
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+function b64url(input: Buffer | string): string {
+  const buf = typeof input === 'string' ? Buffer.from(input) : input;
+  return buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 /**
- * Build a synthetic d2d_at token with a JWT-shaped 3-part structure. The
- * signature ("demo") cannot HMAC-verify, so the API still rejects it.
+ * Build a synthetic d2d_at token: a real HS256 JWT signed with the platform
+ * JWT_ACCESS_SECRET so getSession's HMAC verify accepts it in dev/preview.
+ * Returns null when no signing secret is configured (fail-closed — no cookie).
+ *
+ * Carries a `demo: true` claim so downstream surfaces can distinguish a
+ * synthetic session from a real API-issued one.
  */
-function buildSyntheticAt(acct: DemoAccount): string {
-  const header = b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+function buildSyntheticAt(acct: DemoAccount): string | null {
+  const secret = sessionSigningSecret();
+  if (!secret) return null;
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const now = Math.floor(Date.now() / 1000);
-  const payload = b64url(
+  const body = b64url(
     JSON.stringify({
       sub: acct.sub,
       orgId: acct.orgId,
@@ -95,16 +105,33 @@ function buildSyntheticAt(acct: DemoAccount): string {
       givenName: acct.givenName,
       regionCode: 'US',
       brandCode: 'd2d',
+      demo: true,
       iat: now,
-      // Long expiry — demo cookies persist 30 days. Middleware doesn't check
-      // exp; the synthetic flow is meant for offline-API demos.
-      exp: now + 30 * 24 * 60 * 60,
+      // 12-hour expiry — dev demo sessions are short-lived; getSession
+      // enforces exp, so a stale synthetic cookie cleanly expires.
+      exp: now + 12 * 60 * 60,
     }),
   );
-  return `${header}.${payload}.demo`;
+  const sig = b64url(createHmac('sha256', secret).update(`${header}.${body}`).digest());
+  return `${header}.${body}.${sig}`;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // D5: dead in production — refuse BEFORE any work, with 404 so we don't
+  // advertise the route exists. Also requires DEMO_MODE_ENABLED=true (default
+  // OFF). Decision is centralised in isDemoLoginEnabled (unit-tested).
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isDemoLoginEnabled()) {
+    return new NextResponse(
+      JSON.stringify({
+        type: 'https://docs.d2d.io/problems/not-found',
+        title: 'Not Found',
+        status: 404,
+      }),
+      { status: 404, headers: { 'Content-Type': 'application/problem+json' } },
+    );
+  }
+
   let body: { email?: unknown; password?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
@@ -135,8 +162,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const isProd = process.env.NODE_ENV === 'production';
   const token = buildSyntheticAt(acct);
+  if (!token) {
+    // No signing secret configured → cannot mint a verifiable cookie. Fail
+    // closed rather than emitting a token getSession would reject anyway.
+    return new NextResponse(
+      JSON.stringify({
+        type: 'https://docs.d2d.io/problems/internal-error',
+        title: 'Demo login unavailable',
+        status: 503,
+        detail: 'Demo session signing is not configured.',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/problem+json' } },
+    );
+  }
   const res = NextResponse.json({
     user: {
       id: acct.sub,
@@ -149,10 +188,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
   res.cookies.set('d2d_at', token, {
     httpOnly: true,
+    // Not reachable in prod (404 above), but keep the secure flag honest.
     secure: isProd,
     sameSite: 'lax',
     path: '/',
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 12 * 60 * 60,
   });
   return res;
 }
