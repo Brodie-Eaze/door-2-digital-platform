@@ -234,7 +234,7 @@ export default async function BillingPage(): Promise<JSX.Element> {
           ) : (
             <span
               className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold"
-              title={error}
+              title="Data temporarily unavailable"
             >
               <AlertTriangle size={10} /> Fixture fallback
             </span>

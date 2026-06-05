@@ -303,7 +303,7 @@ export default async function ConversionsPage({
             ) : (
               <span
                 className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold ml-4 shrink-0"
-                title={error}
+                title="Data temporarily unavailable"
               >
                 <AlertTriangle size={10} /> Fixture
               </span>

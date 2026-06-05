@@ -19,7 +19,7 @@
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isDemoLoginEnabled, sessionSigningSecret } from '@/lib/session-verify';
 
 // Prisma-free, but node:crypto is used → force Node runtime (not Edge).
@@ -35,6 +35,23 @@ interface DemoAccount {
   password: string;
 }
 
+/**
+ * SEC-004: demo passwords moved out of source into env vars.
+ * Set DEMO_PASSWORDS_JSON in your .env.local as a JSON object mapping email→password,
+ * e.g.: {"brodie@door2digital.com":"<your-dev-password>", ...}
+ * Defaults to an empty map — demo logins simply fail if the env var is unset.
+ * NEVER commit real password values to git.
+ */
+function loadDemoPasswords(): Record<string, string> {
+  try {
+    const raw = process.env.DEMO_PASSWORDS_JSON;
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 const DEMO_TABLE: DemoAccount[] = [
   {
     sub: 'usr_demo_brodie',
@@ -42,7 +59,7 @@ const DEMO_TABLE: DemoAccount[] = [
     orgId: 'org_demo_platform',
     role: 'super_admin',
     givenName: 'Brodie',
-    password: 'D2D-Demo-2026!',
+    password: loadDemoPasswords()['brodie@door2digital.com'] ?? '',
   },
   {
     sub: 'usr_demo_hf_manager',
@@ -50,7 +67,7 @@ const DEMO_TABLE: DemoAccount[] = [
     orgId: 'org_demo_hope_forward',
     role: 'org_admin',
     givenName: 'Hope',
-    password: 'Hope-Demo-2026!',
+    password: loadDemoPasswords()['manager@hope-forward.com'] ?? '',
   },
   {
     sub: 'usr_demo_wv_manager',
@@ -58,7 +75,7 @@ const DEMO_TABLE: DemoAccount[] = [
     orgId: 'org_demo_world_vision',
     role: 'org_admin',
     givenName: 'World',
-    password: 'WV-Demo-2026!',
+    password: loadDemoPasswords()['manager@world-vision.org.au'] ?? '',
   },
   {
     sub: 'usr_demo_pestmax_manager',
@@ -66,7 +83,7 @@ const DEMO_TABLE: DemoAccount[] = [
     orgId: 'org_demo_pestmax',
     role: 'org_admin',
     givenName: 'Pest',
-    password: 'Pest-Demo-2026!',
+    password: loadDemoPasswords()['manager@pestmax.com'] ?? '',
   },
   {
     sub: 'usr_demo_gch_manager',
@@ -74,7 +91,7 @@ const DEMO_TABLE: DemoAccount[] = [
     orgId: 'org_demo_gch',
     role: 'org_admin',
     givenName: 'Gold',
-    password: 'GCH-Demo-2026!',
+    password: loadDemoPasswords()['manager@goldcoasthospital.org.au'] ?? '',
   },
 ];
 
@@ -150,10 +167,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   const acct = DEMO_TABLE.find((a) => a.email === body.email);
-  // F-010: timing-safe password comparison. HMAC-SHA256 both sides with a
-  // per-request random nonce so the digests are always the same length (32
-  // bytes) regardless of the input strings, eliminating timing side-channels.
-  const nonce = createHmac('sha256', 'demo-compare-nonce').update(String(Date.now())).digest();
+  // F-010 + SEC-008: timing-safe password comparison. Use a cryptographically
+  // random 32-byte nonce (not a predictable Date.now()-derived value) to key
+  // per-request HMAC-SHA256 digests so the comparison is constant-time and
+  // the nonce is unguessable.
+  const nonce = randomBytes(32);
   const expected = createHmac('sha256', nonce)
     .update(acct ? acct.password : '')
     .digest();

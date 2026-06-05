@@ -204,7 +204,7 @@ export default async function CompliancePage(): Promise<JSX.Element> {
             ) : (
               <span
                 className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold ml-auto"
-                title={error}
+                title="Data temporarily unavailable"
               >
                 <AlertTriangle size={10} /> Fixture
               </span>

@@ -21,6 +21,7 @@ import { prisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { writeAudit } from '../../shared/audit/write';
 import { generateInviteToken, hashRefreshToken } from '../auth/tokens';
+import { revokeUserAccessTokens } from '../auth/token-revocation';
 import { hashPassword } from '../auth/password';
 import type { ListUsersQuery } from './schemas';
 
@@ -359,6 +360,10 @@ export async function changeUserRole(
     });
     return updated;
   });
+  // SEC-002: also stamp the access-token revocation epoch so any live access
+  // token (up to 5 min residual) is rejected immediately. Refresh tokens were
+  // already revoked inside the TX above; this closes the access-token window.
+  await revokeUserAccessTokens(userId);
   return toPublic(next);
 }
 
@@ -438,6 +443,9 @@ export async function archiveUser(userId: string, actor: ActorContext): Promise<
     });
     return u;
   });
+  // SEC-002: stamp the access-token revocation epoch so any live access token
+  // issued to this user (up to 5 min residual) is rejected immediately.
+  await revokeUserAccessTokens(userId);
   return toPublic(updated);
 }
 
