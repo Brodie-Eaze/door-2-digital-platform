@@ -1,5 +1,5 @@
 import { AnomalyCard, Banner, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 
 /**
  * Operator overview — Brodie's cross-tenant mission control.
@@ -9,7 +9,7 @@ import { OperatorShell } from '@/components/OperatorShell';
  */
 export default function OverviewPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Cross-org overview">
+    <PlatformShell pageTitle="Cross-org overview">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <span className="text-[13px]">
@@ -111,6 +111,6 @@ export default function OverviewPage(): JSX.Element {
           </div>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

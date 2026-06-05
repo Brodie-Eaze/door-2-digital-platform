@@ -1,6 +1,6 @@
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Banner, Section, StatusPill, KpiCard } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { STATE_CLEARANCE } from '@/lib/fixtures';
 
 export default function CompliancePage(): JSX.Element {
@@ -8,7 +8,7 @@ export default function CompliancePage(): JSX.Element {
   const pending = STATE_CLEARANCE.filter((s) => s.status !== 'approved').length;
 
   return (
-    <OperatorShell pageTitle="Compliance">
+    <PlatformShell pageTitle="Compliance">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
@@ -196,6 +196,6 @@ export default function CompliancePage(): JSX.Element {
           </Section>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

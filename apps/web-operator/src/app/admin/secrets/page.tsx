@@ -1,9 +1,9 @@
 import { Banner } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 
 export default function Page(): JSX.Element {
   return (
-    <OperatorShell pageTitle="admin/secrets">
+    <PlatformShell pageTitle="admin/secrets">
       <div className="max-w-[1400px]">
         <Banner tone="info">
           <span className="text-[13px]">
@@ -11,6 +11,6 @@ export default function Page(): JSX.Element {
           </span>
         </Banner>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

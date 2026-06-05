@@ -1,11 +1,11 @@
 import { Building2, Calendar, CreditCard, Globe, ShieldCheck } from 'lucide-react';
 import { KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { PILOT, STATE_CLEARANCE } from '@/lib/fixtures';
 
 export default function PilotCharliePage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Hope Forward International">
+    <PlatformShell pageTitle="Hope Forward International">
       <div className="space-y-6 max-w-[1280px]">
         {/* Header card */}
         <div className="card card-pad">
@@ -176,6 +176,6 @@ export default function PilotCharliePage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }
