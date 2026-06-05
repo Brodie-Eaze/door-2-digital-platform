@@ -1,3 +1,8 @@
+// TODO(M5): needs a Shift / ShiftSchedule model — no backing table yet.
+// KnockSession tracks field sessions but not advance scheduling. Roster
+// drag-and-drop scheduling requires a new Shift model (userId, day, start,
+// end, territory, status). Remaining on buildRoster() seed until that
+// migration lands.
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
