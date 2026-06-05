@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   createUserRequestSchema,
   updateUserRequestSchema,
+  changeUserRoleRequestSchema,
   inviteUserRequestSchema,
   cursorPageQuerySchema,
   platformRoleSchema,
@@ -14,6 +15,7 @@ import {
 export {
   createUserRequestSchema,
   updateUserRequestSchema,
+  changeUserRoleRequestSchema,
   inviteUserRequestSchema,
   cursorPageQuerySchema,
 };

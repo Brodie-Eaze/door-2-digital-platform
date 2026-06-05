@@ -101,8 +101,31 @@ export const createUserRequestSchema = z.object({
 });
 export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
 
-export const updateUserRequestSchema = createUserRequestSchema.partial();
+/**
+ * Self-service / admin PATCH on a user. SECURITY: this is NOT allowed to carry
+ * any privilege- or access-gating field. `role` is omitted so a user can never
+ * escalate themselves via PATCH (role changes flow through POST /:id/role,
+ * which is guarded). `.strict()` rejects unknown keys, so an attacker cannot
+ * mass-assign `orgId` (cross-tenant move) or `status` (re-activate / un-archive)
+ * by smuggling them in the body — Zod throws on any extra field.
+ */
+export const updateUserRequestSchema = createUserRequestSchema
+  .omit({ role: true })
+  .partial()
+  .strict();
 export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
+
+/**
+ * Body for the guarded role-change path (POST /v1/users/:id/role). Only the
+ * target role travels in the body; WHO may set WHICH role on WHOM is enforced
+ * server-side (same-org, no self-escalation, super_admin only by super_admin).
+ */
+export const changeUserRoleRequestSchema = z
+  .object({
+    role: platformRoleSchema,
+  })
+  .strict();
+export type ChangeUserRoleRequest = z.infer<typeof changeUserRoleRequestSchema>;
 
 export const inviteUserRequestSchema = z.object({
   expiresInDays: z.number().int().min(1).max(30).default(7),
