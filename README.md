@@ -6,8 +6,9 @@
 
 ## Status
 
-**Phase 0 — Scaffold COMPLETE** (2026-05-24).
-Next: Phase 1.1 — Foundations + Auth + Org (Week 2–4).
+**Phase 1 — US enterprise pilot, in build** (updated 2026-06-05).
+Backend + security floor hardened across 10 stacked PRs (not yet merged); AWS IaC `validate`-clean (not yet applied). See `CLAUDE.md` for current state, `docs/PRD.md` for requirements, `docs/intelligence/INTELLIGENCE-LAYER-STRATEGY.md` for the moat.
+Next human-gated unlocks: merge PRs → AWS account + `terraform apply` → MiCamp creds → domain → 50k load test.
 
 ## Quick start
 
@@ -120,11 +121,11 @@ iOS: `apps/knocker-ios/Packages/D2DKit/` (SwiftUI equivalents — `D2DCard`, `D2
 
 ## Per-environment deploys
 
-| Env | Region(s) | Target |
-|---|---|---|
-| dev | us-east-1 | Railway (auto-deploy on `main`) |
+| Env     | Region(s)                                      | Target                               |
+| ------- | ---------------------------------------------- | ------------------------------------ |
+| dev     | us-east-1                                      | Railway (auto-deploy on `main`)      |
 | staging | us-east-1 (+ ap-southeast-2/-1 mini Phase 2/3) | Railway (manual via `staging-*` tag) |
-| prod | us-east-1 Phase 1 → ECS Fargate Phase 4 | Railway → AWS migration Phase 4 |
+| prod    | us-east-1 Phase 1 → ECS Fargate Phase 4        | Railway → AWS migration Phase 4      |
 
 ## Pilot
 
