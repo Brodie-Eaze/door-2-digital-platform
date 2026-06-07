@@ -1,4 +1,4 @@
-import { KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
+import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
 import { CONVERSIONS } from '@/lib/fixtures';
 

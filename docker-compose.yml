@@ -23,11 +23,11 @@ services:
       POSTGRES_PASSWORD: d2d
       POSTGRES_DB: d2d_dev
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - d2d-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U d2d -d d2d_dev"]
+      test: ['CMD-SHELL', 'pg_isready -U d2d -d d2d_dev']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -37,11 +37,11 @@ services:
     container_name: d2d-redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - '6380:6379'
     volumes:
       - d2d-redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -55,12 +55,12 @@ services:
       MINIO_ROOT_USER: d2d
       MINIO_ROOT_PASSWORD: d2d-minio-dev
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - d2d-minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,18 +70,18 @@ services:
     container_name: d2d-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025" # SMTP
-      - "8025:8025" # web UI
+      - '1025:1025' # SMTP
+      - '8025:8025' # web UI
 
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: d2d-jaeger
     restart: unless-stopped
     ports:
-      - "16686:16686" # UI
-      - "4318:4318"   # OTLP HTTP
+      - '16686:16686' # UI
+      - '4318:4318' # OTLP HTTP
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+      COLLECTOR_OTLP_ENABLED: 'true'
 
 volumes:
   d2d-postgres-data:

@@ -62,12 +62,20 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Prisma generate must run before typecheck so schema-specific types
+      # (InputJsonValue, DbNull, Decimal, etc.) are present in the generated
+      # client. Turbo's output glob misses pnpm's virtual-store path, so
+      # we run it explicitly here rather than relying on Turbo's dep graph.
+      - run: pnpm --filter api db:generate
       - run: pnpm typecheck
 
   # ── Gate 4: Secrets scan ────────────────────────────────────────────────
   gitleaks:
     name: Gitleaks (secrets)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # required for gitleaks-action to list PR commits
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,7 +134,7 @@ jobs:
           POSTGRES_USER: d2d
           POSTGRES_PASSWORD: d2d
           POSTGRES_DB: d2d_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U d2d"
           --health-interval=5s
@@ -134,7 +142,7 @@ jobs:
           --health-retries=10
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s
@@ -143,6 +151,27 @@ jobs:
     env:
       DATABASE_URL: postgresql://d2d:d2d@localhost:5432/d2d_test
       REDIS_URL: redis://localhost:6379
+      # CI-safe test secrets — satisfy the Zod env schema without touching real keys.
+      # These are deterministic test values; they never leave the CI environment.
+      JWT_ACCESS_SECRET: 'ci-jwt-access-secret-min32chars-padding'
+      JWT_REFRESH_SECRET: 'ci-jwt-refresh-secret-min32chars-padding'
+      JWT_WS_TICKET_SECRET: 'ci-jwt-ws-ticket-secret-min32chars-pad' # gitleaks:allow
+      CSRF_SIGNING_SECRET: 'ci-csrf-signing-secret-min32chars-padd' # gitleaks:allow
+      OAUTH_STATE_SECRET: 'ci-oauth-state-secret-min32chars-paddin'
+      MFA_STEP_UP_SECRET: 'ci-mfa-step-up-secret-min32chars-paddin'
+      API_TOKEN_HASH_SECRET: 'ci-api-token-hash-secret-min32chars-pa'
+      # PII vault keys — 64-char hex for AES-256 (SIV + encryption)
+      PII_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
+      PII_HASH_SECRET: 'ci-pii-hash-secret-min32chars-padding'
+      PII_SEARCH_KEY: 'ci-pii-search-key-min32chars-paddingx'
+      AUDIT_CHAIN_SECRET: 'ci-audit-chain-secret-min32chars-paddi'
+      # KMS-style keys — base64-encoded 32 zero-bytes (32-byte AES-256 key for CI only)
+      PII_KMS_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' # gitleaks:allow
+      PII_SIV_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' # gitleaks:allow
+      # S3 bucket names — unused in CI (no real AWS), just satisfy Zod env validation
+      S3_BUCKET_AUDIT: 'ci-d2d-audit'
+      S3_BUCKET_ASSETS: 'ci-d2d-assets'
+      S3_BUCKET_EXPORTS: 'ci-d2d-exports'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

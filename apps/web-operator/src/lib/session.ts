@@ -1,23 +1,25 @@
 /**
- * Server-side session helper for App Router server components.
+ * Server-side session helper for App Router server components + BFF route
+ * handlers.
  *
- * Reads the `d2d_at` cookie and decodes the JWT payload WITHOUT verifying
- * its signature — the actual cryptographic check happens server-side in
- * the API (`verifyAccessToken`) on every authenticated request.
+ * SECURITY (SEC / D1): `getSession` now cryptographically verifies the
+ * `d2d_at` cookie (HMAC-SHA256, constant-time) BEFORE trusting any claim — a
+ * prior version trusted the decoded `role`/`orgId` with no signature check, so
+ * any client could forge a super_admin cookie and read every tenant's PII via
+ * the BFF. The pure verifier lives in ./session-verify (no next/headers import
+ * so it is unit-testable); this module only binds it to the request cookie.
  *
- * Why no verify here?
- *   - The Next.js middleware already redirects on missing cookie.
- *   - The API rejects forged tokens — `getSession` can't be used to
- *     authorize anything sensitive; it only feeds the topbar avatar /
- *     greeting. Even if a hostile user crafted a cookie, the API would
- *     500 their first real request.
- *
- * The session also supports the Phase-0 SYNTHETIC demo cookie issued by
- * the /api/session/demo route when NEXT_PUBLIC_API_URL is unset. Those
- * tokens have signature "demo" and a base64url-decoded payload — same
- * shape decoder works for both.
+ * This module is Node-runtime only (uses node:crypto via session-verify).
+ * Every route/handler that imports it runs with `export const runtime =
+ * 'nodejs'`.
  */
 import { cookies } from 'next/headers';
+import { verifySessionToken, sessionSigningSecret, type AccessClaims } from '@/lib/session-verify';
+
+// Re-export the pure verifier surface so existing importers
+// (`@/lib/session`) keep working unchanged.
+export { verifySessionToken, sessionSigningSecret } from '@/lib/session-verify';
+export type { AccessClaims } from '@/lib/session-verify';
 
 export interface Session {
   userId: string;
@@ -26,17 +28,8 @@ export interface Session {
   role: string;
   initials: string;
   givenName: string;
-  /** True when the session came from the synthetic demo bypass (NEXT_PUBLIC_API_URL unset). */
+  /** True when the session is a dev/preview synthetic-demo token. */
   demo: boolean;
-}
-
-/**
- * Base64url decode, handles the URL-safe alphabet + padding.
- */
-function b64urlDecode(s: string): string {
-  const pad = '='.repeat((4 - (s.length % 4)) % 4);
-  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(b64, 'base64').toString('utf-8');
 }
 
 function initialsFor(email: string, givenName?: string): string {
@@ -49,31 +42,30 @@ function initialsFor(email: string, givenName?: string): string {
   return (local.slice(0, 2) || '??').toUpperCase();
 }
 
+/**
+ * Map verified claims onto the Session view-model used by the topbar + BFF.
+ */
+function sessionFromClaims(claims: AccessClaims): Session {
+  const email = typeof claims.email === 'string' ? claims.email : '';
+  const givenName = typeof claims.givenName === 'string' ? claims.givenName : '';
+  return {
+    userId: claims.sub,
+    orgId: typeof claims.orgId === 'string' && claims.orgId.length > 0 ? claims.orgId : null,
+    email,
+    role: claims.role,
+    givenName: givenName || email.split('@')[0] || 'User',
+    initials: initialsFor(email, givenName),
+    demo: claims.demo === true,
+  };
+}
+
+/**
+ * Resolve the current request's session from the `d2d_at` cookie. Returns the
+ * Session ONLY when the cookie cryptographically verifies; otherwise null.
+ */
 export async function getSession(): Promise<Session | null> {
   const token = cookies().get('d2d_at')?.value;
-  if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  try {
-    const payload = JSON.parse(b64urlDecode(parts[1]!)) as {
-      sub?: string;
-      orgId?: string;
-      email?: string;
-      role?: string;
-      givenName?: string;
-    };
-    const email = payload.email ?? '';
-    const givenName = payload.givenName ?? '';
-    return {
-      userId: payload.sub ?? '',
-      orgId: payload.orgId ?? null,
-      email,
-      role: payload.role ?? 'viewer',
-      givenName: givenName || email.split('@')[0] || 'User',
-      initials: initialsFor(email, givenName),
-      demo: parts[2] === 'demo',
-    };
-  } catch {
-    return null;
-  }
+  const claims = verifySessionToken(token, sessionSigningSecret());
+  if (!claims) return null;
+  return sessionFromClaims(claims);
 }

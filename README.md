@@ -120,11 +120,11 @@ iOS: `apps/knocker-ios/Packages/D2DKit/` (SwiftUI equivalents — `D2DCard`, `D2
 
 ## Per-environment deploys
 
-| Env | Region(s) | Target |
-|---|---|---|
-| dev | us-east-1 | Railway (auto-deploy on `main`) |
+| Env     | Region(s)                                      | Target                               |
+| ------- | ---------------------------------------------- | ------------------------------------ |
+| dev     | us-east-1                                      | Railway (auto-deploy on `main`)      |
 | staging | us-east-1 (+ ap-southeast-2/-1 mini Phase 2/3) | Railway (manual via `staging-*` tag) |
-| prod | us-east-1 Phase 1 → ECS Fargate Phase 4 | Railway → AWS migration Phase 4 |
+| prod    | us-east-1 Phase 1 → ECS Fargate Phase 4        | Railway → AWS migration Phase 4      |
 
 ## Pilot
 

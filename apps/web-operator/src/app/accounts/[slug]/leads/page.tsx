@@ -18,6 +18,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { LeadsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData } from '@/lib/account-fixtures';
 import { getSession } from '@/lib/session';
+import { isCrossTenantOperator } from '@/lib/api-helpers';
 import { maskEmail, maskPhone } from '@/lib/db-helpers';
 import { firstRunSnapshot } from '@/lib/first-run';
 
@@ -70,7 +71,7 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
       select: { id: true, slug: true, tradingName: true, regionCode: true },
     });
     if (!org) return 'not-found';
-    if (session.role !== 'super_admin' && session.orgId !== org.id) return 'forbidden';
+    if (!isCrossTenantOperator(session) && session.orgId !== org.id) return 'forbidden';
 
     const leads = await db.lead.findMany({
       where: { orgId: org.id, status: { not: 'do_not_contact' } },

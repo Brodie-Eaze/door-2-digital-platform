@@ -63,10 +63,29 @@ export function signAccessToken(
  * Errors are intentionally generic ('Invalid token' / 'Token expired') so
  * we don't leak whether the secret or signature is wrong vs the body shape.
  */
+/** The ONLY algorithm we sign or accept. Pinned to defeat alg-confusion /
+ * `alg:none` forgeries (SEC-009 / CC8-009). */
+const ALLOWED_JWT_ALG = 'HS256' as const;
+const EXPECTED_JWT_TYP = 'JWT' as const;
+
 export function verifyAccessToken(token: string, secret: string): AccessTokenPayload {
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Invalid token format');
   const [headerB64, bodyB64, sigB64] = parts as [string, string, string];
+
+  // SEC-009: pin the algorithm BEFORE trusting the token. We hand-roll HMAC so
+  // we never delegate `alg` to a library (no library-side alg-confusion), but
+  // we still reject any token whose header advertises something other than the
+  // exact `{ alg: HS256, typ: JWT }` we sign — defence-in-depth and an explicit,
+  // auditable claim assertion rather than an implicit one.
+  let header: { alg?: unknown; typ?: unknown };
+  try {
+    header = JSON.parse(base64urlDecode(headerB64).toString('utf-8')) as typeof header;
+  } catch {
+    throw new Error('Invalid token header');
+  }
+  if (header.alg !== ALLOWED_JWT_ALG) throw new Error('Invalid token algorithm');
+  if (header.typ !== EXPECTED_JWT_TYP) throw new Error('Invalid token type');
 
   // Verify signature.
   const expectedSig = createHmac('sha256', secret).update(`${headerB64}.${bodyB64}`).digest();
@@ -85,7 +104,8 @@ export function verifyAccessToken(token: string, secret: string): AccessTokenPay
     typeof payload.sub !== 'string' ||
     typeof payload.orgId !== 'string' ||
     typeof payload.role !== 'string' ||
-    typeof payload.exp !== 'number'
+    typeof payload.exp !== 'number' ||
+    typeof payload.iat !== 'number'
   ) {
     throw new Error('Invalid token payload');
   }

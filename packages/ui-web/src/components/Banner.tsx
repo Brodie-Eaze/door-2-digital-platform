@@ -18,12 +18,7 @@ const TONE_CLASS: Record<Tone, string> = {
   muted: 'bg-line2 border-line text-ink2',
 };
 
-export function Banner({
-  tone = 'info',
-  children,
-  action,
-  className,
-}: BannerProps): JSX.Element {
+export function Banner({ tone = 'info', children, action, className }: BannerProps): JSX.Element {
   return (
     <div
       className={cn(

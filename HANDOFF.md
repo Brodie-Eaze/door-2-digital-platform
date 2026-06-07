@@ -142,23 +142,23 @@ See plan §14. AWS cutover (Railway → ECS Fargate + Aurora + Vercel + EAS + Cl
 
 ## Where to find things
 
-| Need to… | Look here |
-|---|---|
-| Understand the architecture | `docs/architecture.md` |
-| Understand a specific decision | `docs/adr/NNNN-*.md` |
-| Add a new domain | `apps/api/src/domains/*` (copy `auth/` or `org/`) |
-| Add a new shared type | `packages/shared-types/src/{ids,enums,schemas}.ts` |
-| Add a new helper | `packages/shared-utils/src/*.ts` |
-| Add a new UI component | `packages/ui-web/src/components/*.tsx` (export from `index.ts`) |
-| Add a new web page | `apps/web-operator/src/app/<route>/page.tsx` |
-| Add a new env var | `.env.example` + `apps/api/src/config/env.ts` + `turbo.json` `globalPassThroughEnv` |
-| Add a new migration | `pnpm --filter api db:migrate:dev --name <description>` |
-| Add a new ADR | `cp docs/adr/template.md docs/adr/NNNN-<slug>.md` |
-| Add a CI gate | `.github/workflows/ci.yml` |
-| Add a Dockerfile / Railway service | root `Dockerfile.<app>` + `infra/railway/railway.<app>.toml` |
-| Check pen-test readiness | `docs/PEN_TEST_READINESS.md` (Phase 1.4) |
-| Find a runbook | `docs/runbooks/*.md` |
-| Compliance template | `docs/compliance/*.md` |
+| Need to…                           | Look here                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| Understand the architecture        | `docs/architecture.md`                                                              |
+| Understand a specific decision     | `docs/adr/NNNN-*.md`                                                                |
+| Add a new domain                   | `apps/api/src/domains/*` (copy `auth/` or `org/`)                                   |
+| Add a new shared type              | `packages/shared-types/src/{ids,enums,schemas}.ts`                                  |
+| Add a new helper                   | `packages/shared-utils/src/*.ts`                                                    |
+| Add a new UI component             | `packages/ui-web/src/components/*.tsx` (export from `index.ts`)                     |
+| Add a new web page                 | `apps/web-operator/src/app/<route>/page.tsx`                                        |
+| Add a new env var                  | `.env.example` + `apps/api/src/config/env.ts` + `turbo.json` `globalPassThroughEnv` |
+| Add a new migration                | `pnpm --filter api db:migrate:dev --name <description>`                             |
+| Add a new ADR                      | `cp docs/adr/template.md docs/adr/NNNN-<slug>.md`                                   |
+| Add a CI gate                      | `.github/workflows/ci.yml`                                                          |
+| Add a Dockerfile / Railway service | root `Dockerfile.<app>` + `infra/railway/railway.<app>.toml`                        |
+| Check pen-test readiness           | `docs/PEN_TEST_READINESS.md` (Phase 1.4)                                            |
+| Find a runbook                     | `docs/runbooks/*.md`                                                                |
+| Compliance template                | `docs/compliance/*.md`                                                              |
 
 ---
 

@@ -7,11 +7,20 @@ import type { FastifyInstance } from 'fastify';
 import {
   createUserRequestSchema,
   updateUserRequestSchema,
+  changeUserRoleRequestSchema,
   inviteUserRequestSchema,
   acceptInviteRequestSchema,
   listUsersQuerySchema,
 } from './schemas';
-import { inviteUser, acceptInvite, listUsers, getUser, updateUser, archiveUser } from './service';
+import {
+  inviteUser,
+  acceptInvite,
+  listUsers,
+  getUser,
+  updateUser,
+  changeUserRole,
+  archiveUser,
+} from './service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
@@ -37,6 +46,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
           userId: ctx.userId,
           orgId: ctx.orgId,
           regionCode: ctx.regionCode as never,
+          role: ctx.role,
         });
         return { status: 201, body: result };
       },
@@ -81,6 +91,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
     return reply.code(200).send({ user });
   });
@@ -100,6 +111,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
             userId: ctx.userId,
             orgId: ctx.orgId,
             regionCode: ctx.regionCode as never,
+            role: ctx.role,
           });
           return { status: 200, body: { user } };
         },
@@ -120,17 +132,31 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
       }),
   );
 
-  // POST /v1/users/:id/role — 501 (step-up required, Phase 1.2)
+  // POST /v1/users/:id/role — guarded role change. requireAuth + org_admin/
+  // super_admin (enforced in service) + same-org + no self-escalation +
+  // super_admin only assignable by super_admin. This is the ONLY path that
+  // writes `role`; the self-service PATCH can never set it.
   app.post<{ Params: UserIdParams }>(
     '/:id/role',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'Role change with step-up auth lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = changeUserRoleRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await changeUserRole(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
   );
 
   // POST /v1/users/:id/reset-mfa — 501 (Phase 1.2)

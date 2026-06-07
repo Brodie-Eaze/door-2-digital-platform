@@ -21,7 +21,6 @@ import type {
   BuildAudienceInput,
   DeliverCampaignInput,
   ProviderAdapter,
-  ProviderConfig,
   ProviderWebhookEvent,
   Result,
 } from '../types';

@@ -127,9 +127,15 @@ async function defaultValidate(
 }
 
 /**
- * Create or update the per-org SsoConfiguration. Authz: super_admin (D2D ops)
- * OR an admin of THIS org. The IdP cert is encrypted at rest; a 'revoked'
- * status is never silently flipped back on by an upsert.
+ * Create or update the per-org SsoConfiguration. Authz: an admin of THIS org
+ * ONLY — the target org MUST equal the actor's org. There is deliberately NO
+ * `super_admin` cross-tenant bypass here: installing an attacker-controlled IdP
+ * cert for a victim slug is full account takeover (SP-login as that org), so a
+ * forgeable/over-broad super_admin must not be able to reach another tenant's
+ * SSO config inline. A genuine platform-operator cross-tenant capability, if
+ * ever needed, belongs in a distinct, audited, operator-only path — not a
+ * role check spliced into this tenant-facing upsert. The IdP cert is encrypted
+ * at rest; a 'revoked' status is never silently flipped back on by an upsert.
  */
 export async function upsertSsoConfigurationBySlug(
   slug: string,
@@ -143,8 +149,8 @@ export async function upsertSsoConfigurationBySlug(
   if (!org) {
     throw new ProblemError(Problems.notFound('Org', slug));
   }
-  const isSuper = actor.role === 'super_admin';
-  if (!isSuper && actor.orgId !== org.id) {
+  // Tenant binding: the SSO config's target org MUST be the actor's own org.
+  if (actor.orgId !== org.id) {
     throw new ProblemError(Problems.forbidden('Cannot configure SSO for another organization'));
   }
 

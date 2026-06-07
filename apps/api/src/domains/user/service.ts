@@ -11,8 +11,13 @@
  */
 import type { PlatformRole, RegionCode, Prisma } from '@prisma/client';
 import { emailDigest, newId, Problems, ProblemError } from '@d2d/shared-utils';
-import type { CreateUserRequest, UpdateUserRequest, InviteUserRequest } from '@d2d/shared-types';
-import { prisma } from '../../config/db';
+import type {
+  CreateUserRequest,
+  UpdateUserRequest,
+  ChangeUserRoleRequest,
+  InviteUserRequest,
+} from '@d2d/shared-types';
+import { prisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { writeAudit } from '../../shared/audit/write';
 import { generateInviteToken, hashRefreshToken } from '../auth/tokens';
@@ -23,6 +28,31 @@ interface ActorContext {
   userId: string;
   orgId: string;
   regionCode: RegionCode;
+  /** The actor's own role — required for privileged mutations (role/archive). */
+  role?: string;
+}
+
+/**
+ * Roles permitted to mutate other users (change role, archive). Anything below
+ * `manager` is a default-deny. `super_admin` is platform-internal.
+ */
+const USER_ADMIN_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin', 'manager']);
+
+/**
+ * Roles permitted to CHANGE another user's role. Tighter than archive — only
+ * org_admin and the platform super_admin. A `manager` can archive but not
+ * re-grade.
+ */
+const ROLE_GRANT_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin']);
+
+/** `super_admin` is cross-tenant and may only ever be granted/revoked by an existing super_admin. */
+const SUPER_ADMIN: PlatformRole = 'super_admin';
+
+function requireActorRole(actor: ActorContext, allowed: ReadonlySet<string>): string {
+  if (!actor.role || !allowed.has(actor.role)) {
+    throw new ProblemError(Problems.forbidden('Your role may not perform this action'));
+  }
+  return actor.role;
 }
 
 export interface UserPublic {
@@ -55,6 +85,14 @@ export async function inviteUser(
   input: CreateUserRequest & Partial<InviteUserRequest>,
   actor: ActorContext,
 ): Promise<InviteResult> {
+  // Authorization (P0): only manager+ may invite users, and only an existing
+  // super_admin may mint another super_admin. The role-change path was guarded
+  // but invite was not — any authenticated user could invite themselves an admin.
+  requireActorRole(actor, USER_ADMIN_ROLES);
+  if (input.role === SUPER_ADMIN && actor.role !== SUPER_ADMIN) {
+    throw new ProblemError(Problems.forbidden('Only a super_admin may invite a super_admin'));
+  }
+
   const e = env();
   const digest = emailDigest(input.email, e.PII_SEARCH_KEY);
 
@@ -202,6 +240,11 @@ export async function updateUser(
   input: UpdateUserRequest,
   actor: ActorContext,
 ): Promise<UserPublic> {
+  // Authorization (P1): editing your OWN profile is allowed; editing ANOTHER
+  // user (name/phone/managerId) requires manager+. Previously unguarded.
+  if (userId !== actor.userId) {
+    requireActorRole(actor, USER_ADMIN_ROLES);
+  }
   const existing = await prisma().user.findUnique({ where: { id: userId } });
   if (!existing) throw new ProblemError(Problems.notFound('User', userId));
   if (existing.orgId !== actor.orgId) {
@@ -217,14 +260,16 @@ export async function updateUser(
     }
   }
 
-  const next = await prisma().$transaction(async (tx) => {
+  const next = await tenantTx(actor.orgId, async (tx) => {
     const updated = await tx.user.update({
       where: { id: userId },
+      // NOTE: `role` is deliberately NOT writable here. Role changes go through
+      // changeUserRole() (guarded). `UpdateUserRequest` omits `role` so this
+      // path can never escalate, even if a body smuggled the field. (D3)
       data: {
         ...(input.givenName !== undefined && { givenName: input.givenName }),
         ...(input.familyName !== undefined && { familyName: input.familyName }),
         ...(input.phone !== undefined && { phone: input.phone }),
-        ...(input.role !== undefined && { role: input.role }),
         ...(input.managerId !== undefined && { managerId: input.managerId }),
       },
     });
@@ -243,15 +288,88 @@ export async function updateUser(
   return toPublic(next);
 }
 
+/**
+ * Change a user's role — the ONLY path that may write `role`. Guard rails:
+ *   - actor must hold a role-grant role (org_admin or super_admin);
+ *   - target must be in the actor's org (no cross-tenant re-grade);
+ *   - an actor may NOT change their OWN role (no self-escalation);
+ *   - `super_admin` may only be GRANTED or REVOKED by an existing super_admin —
+ *     an org_admin can neither mint one nor act on an existing one.
+ * Writes an AuditEvent in the same TX as the update.
+ */
+export async function changeUserRole(
+  userId: string,
+  input: ChangeUserRoleRequest,
+  actor: ActorContext,
+): Promise<UserPublic> {
+  const actorRole = requireActorRole(actor, ROLE_GRANT_ROLES);
+
+  // Self-escalation guard: you can never change your own role.
+  if (userId === actor.userId) {
+    throw new ProblemError(Problems.forbidden('You cannot change your own role'));
+  }
+
+  const existing = await prisma().user.findUnique({ where: { id: userId } });
+  if (!existing) throw new ProblemError(Problems.notFound('User', userId));
+  // Same-org only. 404-style not-found above already hides existence; a real
+  // cross-tenant target is a tenant mismatch (audited).
+  if (existing.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
+  }
+
+  // super_admin is platform-internal: only an existing super_admin may grant it,
+  // revoke it, or otherwise re-grade an account that currently holds it.
+  const touchesSuperAdmin = input.role === SUPER_ADMIN || existing.role === SUPER_ADMIN;
+  if (touchesSuperAdmin && actorRole !== SUPER_ADMIN) {
+    throw new ProblemError(
+      Problems.forbidden('Only a super_admin may assign or change super_admin'),
+    );
+  }
+
+  if (existing.role === input.role) return toPublic(existing);
+
+  const next = await tenantTx(actor.orgId, async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: { role: input.role },
+    });
+    // A role change is a security-relevant event — re-grading an account into a
+    // lower-trust role should not leave stale sessions live. Revoke this user's
+    // refresh tokens so the new role takes effect on next refresh.
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.role_changed',
+      resourceType: 'User',
+      resourceId: userId,
+      beforeJson: { role: existing.role },
+      afterJson: { role: updated.role },
+      metadata: { changedBy: actor.userId, actorRole },
+    });
+    return updated;
+  });
+  return toPublic(next);
+}
+
 export async function archiveUser(userId: string, actor: ActorContext): Promise<UserPublic> {
+  requireActorRole(actor, USER_ADMIN_ROLES);
   const existing = await prisma().user.findUnique({ where: { id: userId } });
   if (!existing) throw new ProblemError(Problems.notFound('User', userId));
   if (existing.orgId !== actor.orgId) {
     throw new ProblemError(Problems.tenantMismatch(existing.orgId));
   }
+  // A lower/equal-trust actor must not archive a super_admin out of existence.
+  if (existing.role === SUPER_ADMIN && actor.role !== SUPER_ADMIN) {
+    throw new ProblemError(Problems.forbidden('Only a super_admin may archive a super_admin'));
+  }
   if (existing.status === 'archived') return toPublic(existing);
 
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const u = await tx.user.update({
       where: { id: userId },
       data: { status: 'archived' },

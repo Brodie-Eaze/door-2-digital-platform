@@ -5,11 +5,13 @@ Shared React component library for every D2D web app. Built on Tailwind + lucide
 ## Components
 
 ### Layout
+
 - **AppShell** — viewport-pinned `flex h-screen` shell. Slots: sidebar, topBar, children. Resets `<main>` scroll on route change.
 - **Sidebar** — 256px navy-rail navigation. Accepts grouped nav items with role filtering.
 - **TopBar** — 14px sticky header. Title + env badge + optional command-palette trigger + right slot.
 
 ### Display
+
 - **Card** / **Section** — surface containers with subtle 1px stroke shadow.
 - **KpiCard** — uppercase label + large numeric value + optional delta + sparkline.
 - **StatusPill** — pill badge with tone variant (success | warn | danger | info | muted). Exports `STATUS_TONE` mapping for D2D enums + `humaniseStatus()` helper.
@@ -19,10 +21,12 @@ Shared React component library for every D2D web app. Built on Tailwind + lucide
 - **Banner** — tonal banner with optional action.
 
 ### Form
+
 - **Button** — `primary` / `secondary` / `ghost` / `danger` × `sm` / `md` / `lg`.
 - **Input** — label + hint + error + adornments.
 
 ### D2D-specific
+
 - **AnomalyCard** — used on "Today" mission-control page; severity icon + title + description + action.
 - **LeadCard** — name + status + address + phone + email + assignee.
 - **KnockCard** — address + disposition + knocker + photo thumb + captured-at.

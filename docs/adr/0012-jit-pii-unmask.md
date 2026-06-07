@@ -12,7 +12,7 @@ Operators occasionally need to see plaintext PII (debugging a lead complaint, re
 
 - PII columns are **masked by default** in every UI and audit query.
 - Unmask flow:
-  1. Operator clicks "Reveal PII for lead lead_…" → reason text required.
+  1. Operator clicks "Reveal PII for lead lead\_…" → reason text required.
   2. Second admin (different user, `org_admin+`) WebAuthn-approves within 5 min.
   3. Grant valid for **30 minutes** and **only for that specific resource ID**.
   4. Every read during the grant writes a separate `AuditEvent { action: 'pii.unmasked', resourceId, actorUserId, reason, approvedByUserId }`.

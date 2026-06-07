@@ -8,7 +8,7 @@ import {
   Sparkles,
   Activity,
 } from 'lucide-react';
-import { Banner, EmptyState, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Banner, EmptyState, KpiCard, Money, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';

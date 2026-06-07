@@ -71,6 +71,6 @@ export class SignatureFailError extends ProviderError {
 }
 
 /** Helper — most adapters return this when no real creds are available. */
-export function stubResult<T>(kind: string): { ok: false; error: ProviderError } {
+export function stubResult(kind: string): { ok: false; error: ProviderError } {
   return { ok: false, error: new StubModeError(kind) };
 }

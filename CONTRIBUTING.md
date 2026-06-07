@@ -56,6 +56,7 @@ apps/api/src/domains/<name>/
 ```
 
 Then:
+
 - Add Zod schema(s) to `packages/shared-types/src/schemas.ts`
 - Add migration: `pnpm --filter api db:migrate:dev --name <name>`
 - Register routes in `apps/api/src/index.ts`

@@ -1,4 +1,4 @@
-import { Money, StatusPill } from '@d2d/ui-web';
+import { Money } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
 import { LEADS, PIPELINE_STAGES } from '@/lib/fixtures';
 

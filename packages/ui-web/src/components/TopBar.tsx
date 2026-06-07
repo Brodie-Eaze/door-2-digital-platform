@@ -35,16 +35,13 @@ export function TopBar({
   env = 'local',
 }: TopBarProps): JSX.Element {
   const envClass = ENV_COLOR[env] ?? ENV_COLOR['local'];
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
   return (
     <header className="h-14 border-b border-line2 px-6 flex items-center justify-between gap-4 bg-surface/95 backdrop-blur sticky top-0 z-10">
       <div className="flex items-center gap-3 min-w-0">
         {title && (
-          <span className="text-sm font-semibold text-ink tracking-tight truncate">
-            {title}
-          </span>
+          <span className="text-sm font-semibold text-ink tracking-tight truncate">{title}</span>
         )}
         <span
           className={`inline-flex items-center text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full border ${envClass}`}

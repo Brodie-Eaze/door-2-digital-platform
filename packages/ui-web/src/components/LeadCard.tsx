@@ -50,9 +50,7 @@ export function LeadCard({
           </div>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
             <StatusPill tone={tone}>{humaniseStatus(status)}</StatusPill>
-            {attributionSource && (
-              <span className="tag">{humaniseStatus(attributionSource)}</span>
-            )}
+            {attributionSource && <span className="tag">{humaniseStatus(attributionSource)}</span>}
           </div>
         </div>
         {assignee && <span className="mono shrink-0">{assignee.slice(0, 2).toUpperCase()}</span>}

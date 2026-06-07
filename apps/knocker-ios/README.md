@@ -24,6 +24,7 @@ Xcode projects can't be reliably created from CLI. The mobile engineer initialis
 ```
 
 Then drop the seed files from this directory into the new project:
+
 - `D2DKnocker/D2DKnockerApp.swift` — App entry
 - `D2DKnocker/Info.plist` — capabilities + Mapbox + ATS
 - `D2DKnocker/Package.swift` (Swift Package Manager dependencies)
@@ -103,6 +104,7 @@ Every knock written locally first (SwiftData / GRDB), then queued for upload via
 ## White-label
 
 Builds vary by `BrandKit`. CI matrix (Phase 4+) produces:
+
 - `io.d2d.knocker` (default D2D-branded)
 - `<pilot-bundleId>` per signed pilot's BrandKit.appBundleId
 
