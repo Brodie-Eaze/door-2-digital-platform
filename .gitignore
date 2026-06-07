@@ -73,3 +73,6 @@ apps/knocker-ios/**/fastlane/screenshots
 # Local-only
 HANDOFF-local.md
 NOTES-local.md
+
+# Claude Code worktrees (temp agent scratch branches — never commit)
+.claude/worktrees/
