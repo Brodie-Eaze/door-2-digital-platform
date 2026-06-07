@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import {
   Image as ImageIcon,
-  Filter,
   Plus,
   FileCheck2,
   Check,
@@ -25,7 +24,6 @@ import {
   FilterChip,
   FilterChipStrip,
   KpiCard,
-  Money,
   Section,
   StatusPill,
 } from '@d2d/ui-web';

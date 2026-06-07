@@ -1,18 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Megaphone,
-  TrendingUp,
-  Eye,
-  Play,
-  Pause,
-  ExternalLink,
-  Filter,
-  Plus,
-  X,
-  Activity,
-} from 'lucide-react';
+import { Megaphone, Eye, Play, Pause, ExternalLink, Filter, Plus, X, Activity } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';

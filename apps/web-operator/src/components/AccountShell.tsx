@@ -35,7 +35,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell, Sidebar, TopBar, Reveal, type NavGroup } from '@d2d/ui-web';
+import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
 import { OperationalIndicator } from './OperationalIndicator';
 import { TrustFooter } from './TrustFooter';

@@ -39,8 +39,6 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
   const total = ledgerByAttr.door! + ledgerByAttr.inside_sales! + ledgerByAttr.retargeting!;
   const doorShare = ledgerByAttr.door! / total;
   const insideShare = ledgerByAttr.inside_sales! / total;
-  const retargShare = ledgerByAttr.retargeting! / total;
-
   const doorConv = Math.round(rollup.conversionsMTD * doorShare);
   const insideConv = Math.round(rollup.conversionsMTD * insideShare);
   const retargConv = rollup.conversionsMTD - doorConv - insideConv;
