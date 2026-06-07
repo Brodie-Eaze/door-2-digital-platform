@@ -26,7 +26,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type {
   IntegrationRegistry,
-  ProviderAdapter,
   ProviderConfig,
   ProviderKind,
   ProviderCapability,
