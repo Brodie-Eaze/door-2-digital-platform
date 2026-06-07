@@ -168,6 +168,10 @@ jobs:
       # KMS-style keys — min 40 chars (these are test stubs only)
       PII_KMS_KEY: 'ci-pii-kms-key-for-testing-only-min40chars-x'
       PII_SIV_KEY: 'ci-pii-siv-key-for-testing-only-min40chars-x'
+      # S3 bucket names — unused in CI (no real AWS), just satisfy Zod env validation
+      S3_BUCKET_AUDIT: 'ci-d2d-audit'
+      S3_BUCKET_ASSETS: 'ci-d2d-assets'
+      S3_BUCKET_EXPORTS: 'ci-d2d-exports'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

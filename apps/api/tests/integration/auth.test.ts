@@ -11,7 +11,7 @@ import {
   isAccessTokenRevoked,
   revokeUserAccessTokens,
 } from '../../src/domains/auth/token-revocation';
-import { emailDigest, newId } from '@d2d/shared-utils';
+import { emailDigest } from '@d2d/shared-utils';
 
 let app: FastifyInstance;
 const orgId = 'org_TEST_AUTH';

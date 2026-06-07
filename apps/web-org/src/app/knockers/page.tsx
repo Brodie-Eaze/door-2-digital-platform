@@ -6,7 +6,6 @@ export default function KnockersPage(): JSX.Element {
   const active = KNOCKERS.filter((k) => k.status === 'active');
   const idle = KNOCKERS.filter((k) => k.status === 'idle');
   const totalKnocks = active.reduce((sum, k) => sum + k.knocks, 0);
-  const totalConv = active.reduce((sum, k) => sum + k.conversions, 0);
   const totalRev = active.reduce((sum, k) => sum + k.revenueCents, 0n);
 
   return (

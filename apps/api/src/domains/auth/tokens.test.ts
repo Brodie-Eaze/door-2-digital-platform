@@ -5,6 +5,7 @@
  * assert the `typ` header, so an `alg:none` / alg-confusion forgery is rejected
  * at the header before (and independently of) the signature check.
  */
+import { createHmac } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { signAccessToken, verifyAccessToken } from './tokens';
 
@@ -76,7 +77,6 @@ describe('verifyAccessToken — claim assertions', () => {
     const now = Math.floor(Date.now() / 1000);
     const body = b64url({ ...basePayload(), iat: 'soon', exp: now + 300 });
     // Sign it correctly so we get past the signature check and reach payload validation.
-    const { createHmac } = require('node:crypto') as typeof import('node:crypto');
     const sig = createHmac('sha256', SECRET)
       .update(`${header}.${body}`)
       .digest()

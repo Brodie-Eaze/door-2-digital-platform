@@ -127,31 +127,6 @@ export interface ProviderWebhookEventPublic {
   receivedAt: string;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Capability → adapter method dispatch
-// ───────────────────────────────────────────────────────────────────────────
-
-function adapterMethodForCapability(capability: ProviderCapability): keyof ProviderAdapter | null {
-  switch (capability) {
-    case 'creative.generate.text':
-      return 'generateText';
-    case 'creative.generate.image':
-      return 'generateImage';
-    case 'creative.generate.video':
-      return 'generateVideo';
-    case 'creative.generate.avatar':
-      return 'generateAvatar';
-    case 'audience.build':
-      return 'buildAudience';
-    case 'audience.push':
-      return 'buildAudience';
-    case 'campaign.deliver':
-      return 'deliverCampaign';
-    default:
-      return null;
-  }
-}
-
 /** Async providers — generateVideo / generateAvatar return a jobId. */
 function isAsyncCapability(capability: ProviderCapability): boolean {
   return capability === 'creative.generate.video' || capability === 'creative.generate.avatar';

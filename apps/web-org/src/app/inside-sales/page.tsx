@@ -1,5 +1,5 @@
-import { Phone, PhoneCall, Mic, MicOff, PhoneOff, Clock, FileText, Bookmark } from 'lucide-react';
-import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { PhoneCall, Mic, PhoneOff, Clock, FileText, Bookmark } from 'lucide-react';
+import { Button, KpiCard, StatusPill } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
 
 const QUEUE = [
@@ -101,9 +101,9 @@ export default function InsideSalesPage(): JSX.Element {
                 <div className="h-section">Pitch script — Hope Forward Q3 2026</div>
                 <div className="card !shadow-none border border-line2 card-pad text-[13px] leading-relaxed space-y-3">
                   <p className="text-ink">
-                    "Hi Maria, this is Sarah from Hope Forward. Our knocker Jada visited your home
-                    yesterday and you mentioned you were interested in our clean-water programme. Do
-                    you have a moment to talk?"
+                    &ldquo;Hi Maria, this is Sarah from Hope Forward. Our knocker Jada visited your
+                    home yesterday and you mentioned you were interested in our clean-water
+                    programme. Do you have a moment to talk?&rdquo;
                   </p>
                   <div className="text-[11px] text-muted">
                     → If <span className="font-semibold">yes</span>: confirm donation amount, offer
