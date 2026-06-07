@@ -1,10 +1,10 @@
-# CLAUDE.md — Door 2 Digital (D2D)
+# CLAUDE.md — Door 2 Digital Platform
 
 > Project context for Claude Code. Read this first. Last updated 2026-06-05.
 
 ## What this is
 
-**Door 2 Digital (D2D)** — the operating system for door-to-door sales, both **charity fundraising** and **commercial D2D** (solar, pest, energy, telecom). It closes the loop from the knock to the converted customer:
+**Door 2 Digital Platform (D2D)** — the operating system for door-to-door sales, both **charity fundraising** and **commercial D2D** (solar, pest, energy, telecom). It closes the loop from the knock to the converted customer:
 
 **Market the area → Knock → Capture at the door → Call-centre follow-up → AI retargeting → Convert → Commission → Payout** — with audit-grade engineering, multi-region data residency, and a compliance spine.
 

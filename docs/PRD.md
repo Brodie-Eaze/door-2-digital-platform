@@ -1,8 +1,8 @@
-# Door 2 Digital — Product Requirements Document (PRD)
+# Door 2 Digital Platform — Product Requirements Document (PRD)
 
 |                  |                                                                                                                                |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Product**      | Door 2 Digital (D2D) — the intelligence operating system for door-to-door sales                                                |
+| **Product**      | Door 2 Digital Platform — the intelligence operating system for door-to-door sales                                             |
 | **Owner**        | Brodie                                                                                                                         |
 | **Version**      | v1.0                                                                                                                           |
 | **Status**       | Living · Phase 1 (US enterprise pilot) in build                                                                                |

@@ -1,4 +1,4 @@
-# Door 2 Digital — The Intelligence Layer ("Gotham for Doors")
+# Door 2 Digital Platform — The Intelligence Layer ("Gotham for Doors")
 
 > Strategy doc · 2026-06-05 · Grounded in an adversarially-verified deep-research pass (108 agents, 26 sources, 99 claims extracted, 25 verified, 9 confirmed / 16 killed). Claims marked **[VERIFIED]**, **[BETA]**, **[HORIZON]**, or **[UNVERIFIED — validate]**.
 >

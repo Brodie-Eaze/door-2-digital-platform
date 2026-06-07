@@ -1,4 +1,4 @@
-# Door 2 Digital — Platform Monorepo
+# Door 2 Digital Platform
 
 > The operating system for door-to-door sales (charity + commercial).
 > Field capture → CRM → AI marketing retargeting → conversion → commission → payout.
