@@ -7,6 +7,7 @@
 ## Context
 
 The knocker mobile app is the at-the-door experience for 200+ field reps. Requirements:
+
 - Reliable offline capture (no network at many doors)
 - Background GPS during shift
 - Native camera + signature pad performance

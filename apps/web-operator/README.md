@@ -12,6 +12,7 @@ pnpm --filter web-operator dev
 ```
 
 Requires:
+
 - `NEXT_PUBLIC_API_URL=http://localhost:3010` (api running)
 - `NEXT_PUBLIC_ENV=local`
 

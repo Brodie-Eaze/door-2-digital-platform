@@ -12,6 +12,7 @@ Door 2 Digital handles donor PII, charity registration data, and payment instrum
 - Your contact for follow-up
 
 We acknowledge within 24 hours and aim for a fix or mitigation within:
+
 - **Critical:** 24 hours
 - **High:** 72 hours
 - **Medium:** 7 days
@@ -110,6 +111,7 @@ Coordinated disclosure preferred. We'll credit you in the fix announcement unles
 ## Incident response
 
 Runbooks under `docs/runbooks/`:
+
 - `incident-response.md` — SEV1/2/3 ladder + on-call procedure
 - `data-breach-72h.md` — OAIC (AU) / PDPC (SG) / state AG (US) notification
 - `payment-incident.md` — Stripe/MiCamp processor incident

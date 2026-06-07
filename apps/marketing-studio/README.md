@@ -7,6 +7,7 @@ Phase 0 placeholder. Lands in Phase 3 (Week 25–32). See plan §10.
 Backend service: `apps/api/src/domains/content-studio/` + `apps/api/src/domains/marketing/`. Worker: `worker:content-generate` + `worker:ad-deliver`.
 
 Brand-safety stack required before publish:
+
 1. Anthropic moderation API on every copy string
 2. Custom rule engine per vertical/jurisdiction
 3. Legal-hold flag → block + route to `legal.review`

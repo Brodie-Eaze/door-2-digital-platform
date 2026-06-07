@@ -39,11 +39,7 @@ export function AnomalyCard({
 }: AnomalyCardProps): JSX.Element {
   const { icon: Icon } = SEVERITY_STYLE[severity];
   const iconColor =
-    severity === 'critical'
-      ? 'text-danger'
-      : severity === 'warning'
-        ? 'text-warn'
-        : 'text-accent';
+    severity === 'critical' ? 'text-danger' : severity === 'warning' ? 'text-warn' : 'text-accent';
 
   return (
     <div className={cn('card card-pad flex items-start gap-3', className)}>

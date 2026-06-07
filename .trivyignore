@@ -1,0 +1,53 @@
+# .trivyignore — deferred CVEs with tracking notes.
+# Each entry here has an explicit reason and a tracking ticket/PR.
+# Review quarterly; remove entries when the root upgrade lands.
+
+# ── @opentelemetry/auto-instrumentations-node + @opentelemetry/sdk-node ───────
+# CVE: CVE-2026-44902 (HIGH) — Prometheus exporter crash via malformed HTTP request
+# Fix: upgrade @opentelemetry/auto-instrumentations-node 0.51.0→0.75.0,
+#       @opentelemetry/sdk-node 0.53.0→0.217.0
+# Reason: 0.51→0.75 is a 24-minor-version jump in the OTel ecosystem; requires
+#         thorough compatibility testing with the rest of the instrumentation stack.
+# Track:  open a "chore: update otel deps" PR against main.
+CVE-2026-44902
+
+# ── fast-uri (transitive via fastify) ─────────────────────────────────────────
+# CVE: CVE-2026-6321 (HIGH) — Path traversal via URI parsing
+# CVE: CVE-2026-6322 (HIGH) — percent-encoded authority delimiter bypass
+# Fix: fast-uri 3.1.2+ — but fast-uri 3.x is only pulled in by fastify 5.x.
+# Reason: fast-uri is a transitive dep of fastify 4.x; the fix requires
+#         upgrading fastify to 5.x which is a breaking major-version change.
+#         Deferred to the fastify-5 upgrade PR.
+# Track:  see CVE-2026-25223 below.
+CVE-2026-6321
+CVE-2026-6322
+
+# ── fastify ───────────────────────────────────────────────────────────────────
+# CVE: CVE-2026-25223 (HIGH) — Validation bypass via malformed Content-Type header
+# Fix: fastify 5.7.2+ (MAJOR version, currently on 4.29.1)
+# Reason: fastify 4→5 is a breaking major version change. The migration requires
+#         adapting plugin APIs, lifecycle hooks, and the type system. Not safe
+#         to take on the soc2-security-floor branch. Requires a dedicated PR
+#         with full smoke-test + integration-test pass.
+# Track:  open "chore: upgrade fastify 4→5" PR against main.
+CVE-2026-25223
+
+# ── next.js ───────────────────────────────────────────────────────────────────
+# next@14.2.35 has several CVEs all fixed in 15.x/16.x.
+# The Next.js upgrade is tracked in PR #10 (feat/next-15-upgrade).
+# These are deferred until PR #10 is merged; at that point remove all entries.
+
+# CVE-2026-44573 — Information disclosure via middleware bypass (Pages Router)
+CVE-2026-44573
+
+# CVE-2026-44578 — SSRF via crafted WebSocket upgrade requests
+CVE-2026-44578
+
+# GHSA-8h8q-6873-q5fj — DoS with Server Components
+GHSA-8h8q-6873-q5fj
+
+# GHSA-h25m-26qc-wcjf — HTTP request deserialization DoS with insecure React headers
+GHSA-h25m-26qc-wcjf
+
+# GHSA-q4gf-8mx6-v5v3 — DoS with Server Components (variant)
+GHSA-q4gf-8mx6-v5v3

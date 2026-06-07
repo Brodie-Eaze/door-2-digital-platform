@@ -7,6 +7,7 @@
 ## Context
 
 Every regulated mutation (knock, lead, conversion, donation, sale, commission, payout, consent, PII unmask, ad publish) must produce an audit row that:
+
 1. Cannot be lost (no fire-and-forget logging)
 2. Cannot be edited after the fact
 3. Cannot have rows inserted out of band

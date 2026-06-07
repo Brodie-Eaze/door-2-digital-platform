@@ -48,7 +48,12 @@ describe('verifySessionToken — happy path', () => {
   });
 
   it('accepts a correctly-signed super_admin token (real operator)', () => {
-    const token = mint({ sub: 'usr_op', orgId: 'org_platform', role: 'super_admin', exp: future() });
+    const token = mint({
+      sub: 'usr_op',
+      orgId: 'org_platform',
+      role: 'super_admin',
+      exp: future(),
+    });
     expect(verifySessionToken(token, SECRET)?.role).toBe('super_admin');
   });
 });
@@ -66,7 +71,9 @@ describe('verifySessionToken — D1 attack vectors are rejected', () => {
 
   it('rejects the legacy synthetic signature literal "demo"', () => {
     const header = b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
-    const body = b64url(JSON.stringify({ sub: 'x', orgId: 'y', role: 'super_admin', exp: future() }));
+    const body = b64url(
+      JSON.stringify({ sub: 'x', orgId: 'y', role: 'super_admin', exp: future() }),
+    );
     const legacyDemo = `${header}.${body}.demo`;
     expect(verifySessionToken(legacyDemo, SECRET)).toBeNull();
   });
@@ -80,7 +87,9 @@ describe('verifySessionToken — D1 attack vectors are rejected', () => {
     const good = mint({ sub: 'a', orgId: 'org_mine', role: 'org_admin', exp: future() });
     const [h, , s] = good.split('.');
     // Attacker escalates role + swaps org without re-signing.
-    const evilBody = b64url(JSON.stringify({ sub: 'a', orgId: 'org_other', role: 'super_admin', exp: future() }));
+    const evilBody = b64url(
+      JSON.stringify({ sub: 'a', orgId: 'org_other', role: 'super_admin', exp: future() }),
+    );
     expect(verifySessionToken(`${h}.${evilBody}.${s}`, SECRET)).toBeNull();
   });
 

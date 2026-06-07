@@ -14,11 +14,7 @@
  * 'nodejs'`.
  */
 import { cookies } from 'next/headers';
-import {
-  verifySessionToken,
-  sessionSigningSecret,
-  type AccessClaims,
-} from '@/lib/session-verify';
+import { verifySessionToken, sessionSigningSecret, type AccessClaims } from '@/lib/session-verify';
 
 // Re-export the pure verifier surface so existing importers
 // (`@/lib/session`) keep working unchanged.

@@ -12,7 +12,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { InvalidConfigError, ProviderError, SignatureFailError, StubModeError } from '../errors';
+import { InvalidConfigError, ProviderError, SignatureFailError } from '../errors';
 import type {
   GenerateVideoInput,
   JobStatus,

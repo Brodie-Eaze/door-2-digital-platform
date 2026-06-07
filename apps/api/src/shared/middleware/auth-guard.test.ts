@@ -37,7 +37,10 @@ vi.mock('../../domains/auth/token-revocation', () => ({
   TokenRevocationUnavailableError,
 }));
 
-import { requireAuth as requireAuthHandler, optionalAuth as optionalAuthHandler } from './auth-guard';
+import {
+  requireAuth as requireAuthHandler,
+  optionalAuth as optionalAuthHandler,
+} from './auth-guard';
 import { signAccessToken } from '../../domains/auth/tokens';
 
 // The exported handlers are typed as Fastify preHandler hooks (which declare a
