@@ -22,6 +22,7 @@ export default defineConfig({
     globals: false,
     environment: 'node',
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    exclude: ['tests/integration/**'],
     setupFiles: ['./tests/setup.ts'],
     pool: 'forks', // each file gets a fresh process — avoids module-level singletons
     poolOptions: {
