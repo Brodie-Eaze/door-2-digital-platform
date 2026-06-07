@@ -46,7 +46,7 @@ pnpm --filter web-operator dev
 ## Repo layout
 
 ```
-d2d-platform/
+door-2-digital-platform/
 ├── apps/
 │   ├── api/                  Fastify + Prisma backend (port 3010)
 │   ├── web-operator/         Operator Console — Brodie's cross-tenant view (3011)

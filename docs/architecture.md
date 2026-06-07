@@ -12,7 +12,7 @@
 - **Stack simplified** from Nx + NestJS to **Turbo + Fastify + Prisma** matching the newer Eaze Intelligence convention. ADRs 0001 and 0002 updated.
 - **Mobile pivoted** from Expo/React Native to **native iOS via Xcode** (Swift 5.10, SwiftUI, Swift Concurrency, SwiftData/GRDB). Android via Kotlin/Compose deferred to Phase 2. ADR-0003 updated.
 - **MiCamp Gateway API** locked as US payment processor (Brodie's ISO). Stripe falls to AU + SG only. ADR-0028 added.
-- **Plan-execution status:** Phase 0 scaffold COMPLETE in `/Users/Brodie/D2D/d2d-platform/`. See repo `HANDOFF.md` for what's built and queued for Phase 1.1.
+- **Plan-execution status:** Phase 0 scaffold COMPLETE in `/Users/Brodie/D2D/door-2-digital-platform/`. See repo `HANDOFF.md` for what's built and queued for Phase 1.1.
 
 ---
 
@@ -32,6 +32,7 @@ A second discovery round surfaced **major scope-shifting context** that flips Ph
 10. **Engineers already exist** — plan assumes 4–6 full-time engineers; sequencing fans services out in parallel from Phase 0 Week 2.
 
 **Scope assumption to confirm before Phase 0 starts:**
+
 - Engineering headcount actually available (plan defaults to 4–6)
 - MiCamp Gateway API integration model finalized with MiCamp account team (recurring billing + tokenized cards + ACH)
 - Pilot's contract terms (the % bucket rates I committed as defaults: $2,500/mo + 5% retargeting + 10% inside-sales + 15% door)
@@ -54,25 +55,25 @@ Door-to-door sales — both **charity fundraising** (World Vision, Red Cross, AC
 
 ## 1. Scope decisions (locked 2026-05-24, revised v0.2)
 
-| # | Decision | Choice | Implication |
-|---|---|---|---|
-| 1 | Operating model | **Operator-first, SaaS later** | D2D's knocker team runs Pilot-Charlie's campaigns. Multi-tenant data model Day 1 (D2D-as-operator + Pilot-Charlie + future pilots). Self-serve onboarding Phase 4 |
-| 2 | Markets — Phase 1 | **US only** (Pilot-Charlie's market) | US compliance + MiCamp + state-by-state cooling-off + TCPA Day 1. AU Phase 2, SG Phase 3 |
-| 3 | Markets — Phase 2+ | **AU then SG** | Multi-region residency primitives Day 1 (per-region clusters, region-pinned orgs) — but only US region provisioned in Phase 1 |
-| 4 | Verticals | **Charity + Commercial both Day 1** | Polymorphic `Conversion` (donation \| sale) Day 1 + per-vertical compliance gates |
-| 5 | Mobile strategy | **Native Expo Day 1** | iOS + Android; offline-first; biometric re-auth; encrypted SQLite; TestFlight + Play Internal distribution under D2D's developer accounts |
-| 6 | Payment processor (US) | **MiCamp Gateway API** (Brodie's ISO agreement) | Brodie earns ISO residuals on top of D2D take rate. `services/payment` has MiCampAdapter + StripeAdapter (for AU, SG) |
-| 7 | Conversion attribution | **3 buckets: door / inside-sales / retargeting** | Every `Conversion.attributionSource` enum; billing rake differs per source |
-| 8 | Take-rate (default) | **$2,500/mo platform + 5%/10%/15%** | Configurable per pilot; billing service computes per-bucket rake monthly |
-| 9 | Enterprise table-stakes | **SSO/SAML + SOC 2 Type I + white-label + dedicated DB** | All four required by Pilot-Charlie. Adds ~6 weeks to Phase 1. Pushes timeline to 14–16 weeks |
-| 10 | Paid-solicitor registration | **Counsel running parallel state filings; D2D ships table-driven state-clearance engine** | Campaigns only deliver to cleared states. Rolling launch as registrations land over Months 2–6 |
-| 11 | Knocker team origin | **D2D's own team (200+) runs Pilot-Charlie's campaigns** | Tenancy: knockers belong to `Org{type=operator, slug=d2d-ops}`, deployed to campaigns owned by `Org{type=client, slug=pilot-charlie}` |
-| 12 | Infrastructure | **New AWS Org for D2D** | Clean blast-radius; reuse EazePay's Terraform modules + CI workflows literally |
-| 13 | Brand identity | **AI-assisted in Phase 0** | Aurora-green palette I proposed as starting point; Mid-journey + Claude + Figma; ~1 week; Brodie signs off |
-| 14 | Phase 1 timeline | **14–16 weeks** (no scope compromise) | Both verticals + nationwide US (rolling per state-clearance) + native mobile + full enterprise stack |
-| 15 | Engineering team | **4–6 engineers, full-time, already exist** (assumption to confirm) | Fan-out across services possible from Phase 0 Week 2 |
+| #   | Decision                    | Choice                                                                                    | Implication                                                                                                                                                       |
+| --- | --------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Operating model             | **Operator-first, SaaS later**                                                            | D2D's knocker team runs Pilot-Charlie's campaigns. Multi-tenant data model Day 1 (D2D-as-operator + Pilot-Charlie + future pilots). Self-serve onboarding Phase 4 |
+| 2   | Markets — Phase 1           | **US only** (Pilot-Charlie's market)                                                      | US compliance + MiCamp + state-by-state cooling-off + TCPA Day 1. AU Phase 2, SG Phase 3                                                                          |
+| 3   | Markets — Phase 2+          | **AU then SG**                                                                            | Multi-region residency primitives Day 1 (per-region clusters, region-pinned orgs) — but only US region provisioned in Phase 1                                     |
+| 4   | Verticals                   | **Charity + Commercial both Day 1**                                                       | Polymorphic `Conversion` (donation \| sale) Day 1 + per-vertical compliance gates                                                                                 |
+| 5   | Mobile strategy             | **Native Expo Day 1**                                                                     | iOS + Android; offline-first; biometric re-auth; encrypted SQLite; TestFlight + Play Internal distribution under D2D's developer accounts                         |
+| 6   | Payment processor (US)      | **MiCamp Gateway API** (Brodie's ISO agreement)                                           | Brodie earns ISO residuals on top of D2D take rate. `services/payment` has MiCampAdapter + StripeAdapter (for AU, SG)                                             |
+| 7   | Conversion attribution      | **3 buckets: door / inside-sales / retargeting**                                          | Every `Conversion.attributionSource` enum; billing rake differs per source                                                                                        |
+| 8   | Take-rate (default)         | **$2,500/mo platform + 5%/10%/15%**                                                       | Configurable per pilot; billing service computes per-bucket rake monthly                                                                                          |
+| 9   | Enterprise table-stakes     | **SSO/SAML + SOC 2 Type I + white-label + dedicated DB**                                  | All four required by Pilot-Charlie. Adds ~6 weeks to Phase 1. Pushes timeline to 14–16 weeks                                                                      |
+| 10  | Paid-solicitor registration | **Counsel running parallel state filings; D2D ships table-driven state-clearance engine** | Campaigns only deliver to cleared states. Rolling launch as registrations land over Months 2–6                                                                    |
+| 11  | Knocker team origin         | **D2D's own team (200+) runs Pilot-Charlie's campaigns**                                  | Tenancy: knockers belong to `Org{type=operator, slug=d2d-ops}`, deployed to campaigns owned by `Org{type=client, slug=pilot-charlie}`                             |
+| 12  | Infrastructure              | **New AWS Org for D2D**                                                                   | Clean blast-radius; reuse EazePay's Terraform modules + CI workflows literally                                                                                    |
+| 13  | Brand identity              | **AI-assisted in Phase 0**                                                                | Aurora-green palette I proposed as starting point; Mid-journey + Claude + Figma; ~1 week; Brodie signs off                                                        |
+| 14  | Phase 1 timeline            | **14–16 weeks** (no scope compromise)                                                     | Both verticals + nationwide US (rolling per state-clearance) + native mobile + full enterprise stack                                                              |
+| 15  | Engineering team            | **4–6 engineers, full-time, already exist** (assumption to confirm)                       | Fan-out across services possible from Phase 0 Week 2                                                                                                              |
 
-**Cross-cutting principle:** *Build the platform for the whole ambition; stage the launches.* US enterprise pilot in Phase 1; AU expansion in Phase 2; SG + AI Marketing Studio in Phase 3; public SaaS opening in Phase 4.
+**Cross-cutting principle:** _Build the platform for the whole ambition; stage the launches._ US enterprise pilot in Phase 1; AU expansion in Phase 2; SG + AI Marketing Studio in Phase 3; public SaaS opening in Phase 4.
 
 ---
 
@@ -88,7 +89,7 @@ Door-to-door sales — both **charity fundraising** (World Vision, Red Cross, AC
 ### 2.2 Directory tree
 
 ```
-d2d-platform/
+door-2-digital-platform/
 ├── apps/                            # Deployable units. One Dockerfile per app at repo root.
 │   ├── api/                         # NestJS BFF — REST /v1/* + OpenAPI; owns Prisma schema
 │   ├── webhooks/                    # Isolated inbound webhook receiver (Stripe, Twilio, Meta, ABS)
@@ -187,19 +188,20 @@ d2d-platform/
 
 ### 2.3 Naming rules (enforced by `tools/generators/`)
 
-| Element | Pattern | Example |
-|---|---|---|
-| Service package | `@d2d/service-<domain>` | `@d2d/service-territory` |
-| Library package | `@d2d/<name>` | `@d2d/shared-utils` |
-| App folder | kebab-case noun | `apps/knocker-mobile` |
-| Controller file | `<resource>.controller.ts` | `knock.controller.ts` |
-| Module file | `<domain>.module.ts` | `territory.module.ts` |
-| State machine | `state-machine.ts` (one per service) | `services/lead/src/state-machine.ts` |
-| Nx project name | matches package name suffix | `service-territory` |
+| Element         | Pattern                              | Example                              |
+| --------------- | ------------------------------------ | ------------------------------------ |
+| Service package | `@d2d/service-<domain>`              | `@d2d/service-territory`             |
+| Library package | `@d2d/<name>`                        | `@d2d/shared-utils`                  |
+| App folder      | kebab-case noun                      | `apps/knocker-mobile`                |
+| Controller file | `<resource>.controller.ts`           | `knock.controller.ts`                |
+| Module file     | `<domain>.module.ts`                 | `territory.module.ts`                |
+| State machine   | `state-machine.ts` (one per service) | `services/lead/src/state-machine.ts` |
+| Nx project name | matches package name suffix          | `service-territory`                  |
 
 ### 2.4 Deployment topology
 
 **Day 1 — Railway** (mirror EazePay's `partner-portal` pattern):
+
 - One Railway service per app, configured via `railway.<app>.toml` at repo root.
 - Railway-managed Postgres + Redis for **dev/staging only**.
 - **Production uses real RDS from Day 1** even on Railway — no later migration drama.
@@ -207,21 +209,21 @@ d2d-platform/
 
 **Phase 4 — AWS**:
 
-| Component | Service |
-|---|---|
-| `apps/api`, `apps/webhooks`, `apps/workers` | ECS Fargate (3 services), ALB, autoscaling |
-| Next.js apps | Vercel Enterprise (one project per app) |
-| `apps/knocker-mobile` | EAS Build → App Store / Play Store |
-| Postgres | Aurora PostgreSQL Serverless v2, per-region cluster |
-| Cache + queue | ElastiCache Redis 7, per-region |
-| Object storage | S3 per region; audit bucket Object Lock COMPLIANCE 7y |
-| CDN + WAF | CloudFront + AWS WAF (managed + custom rules) |
-| Secrets | Secrets Manager + Parameter Store (IRSA, no env vars) |
-| DNS | Route 53 (latency-based routing for `api.d2d.io`) |
-| KMS | Customer-managed CMK per (region × datastore class) |
-| Observability | OTel collector → Datadog (APM + logs + RUM) |
-| Auth | Cognito user pools per region |
-| Email | Resend primary, SES per-region fallback |
+| Component                                   | Service                                               |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `apps/api`, `apps/webhooks`, `apps/workers` | ECS Fargate (3 services), ALB, autoscaling            |
+| Next.js apps                                | Vercel Enterprise (one project per app)               |
+| `apps/knocker-mobile`                       | EAS Build → App Store / Play Store                    |
+| Postgres                                    | Aurora PostgreSQL Serverless v2, per-region cluster   |
+| Cache + queue                               | ElastiCache Redis 7, per-region                       |
+| Object storage                              | S3 per region; audit bucket Object Lock COMPLIANCE 7y |
+| CDN + WAF                                   | CloudFront + AWS WAF (managed + custom rules)         |
+| Secrets                                     | Secrets Manager + Parameter Store (IRSA, no env vars) |
+| DNS                                         | Route 53 (latency-based routing for `api.d2d.io`)     |
+| KMS                                         | Customer-managed CMK per (region × datastore class)   |
+| Observability                               | OTel collector → Datadog (APM + logs + RUM)           |
+| Auth                                        | Cognito user pools per region                         |
+| Email                                       | Resend primary, SES per-region fallback               |
 
 ### 2.5 Branching, CI gates, environments
 
@@ -240,55 +242,55 @@ d2d-platform/
 - **Cross-tenant + cross-region isolation probe in CI** (synthetic test creates two tenants/regions and asserts 403 + audit row on attempted cross-access).
 - **Audit Merkle replay test weekly in CI.**
 
-| Env | Regions | DB | Notes |
-|---|---|---|---|
-| dev | us-east-1 only | shared Aurora Serverless v2 | reset weekly |
-| staging | us-east-1 + ap-southeast-2 + ap-southeast-1 (mini) | per-region Aurora t4g.medium | residency drill |
-| prod | us-east-1 + ap-southeast-2 + ap-southeast-1 | per-region Aurora Serverless v2 | full multi-region |
+| Env     | Regions                                            | DB                              | Notes             |
+| ------- | -------------------------------------------------- | ------------------------------- | ----------------- |
+| dev     | us-east-1 only                                     | shared Aurora Serverless v2     | reset weekly      |
+| staging | us-east-1 + ap-southeast-2 + ap-southeast-1 (mini) | per-region Aurora t4g.medium    | residency drill   |
+| prod    | us-east-1 + ap-southeast-2 + ap-southeast-1        | per-region Aurora Serverless v2 | full multi-region |
 
 ---
 
 ## 3. Tech stack (locked Day 1)
 
-| Layer | Choice | Region split |
-|---|---|---|
-| Language | TypeScript 5.5 ESM-only, `noUncheckedIndexedAccess` | — |
-| Runtime | Node 20 LTS | — |
-| Package mgr | pnpm 9.12.0 | — |
-| Monorepo | Nx 20 + Nx Cloud (paid CI cache) | — |
-| Backend | NestJS 10.4.22 + Fastify 4 (locked via `pnpm.overrides`) | — |
-| HTTP validation | Zod 3 + `nestjs-zod` (single source of truth for DTO + OpenAPI) | — |
-| ORM | Prisma 5.22 | — |
-| DB | Aurora PostgreSQL 16 + PostGIS 3.4 | One cluster per region |
-| Cache + queue | ElastiCache Redis 7 + BullMQ 5 | Per region |
-| Search | Postgres FTS Day 1; OpenSearch when >5M leads | — |
-| Object storage | S3 + Object Lock (audit) + versioning + KMS-SSE | Per region |
-| Mapping | Mapbox (geocoding + tiles); ABS 2021 / US ACS 5-yr / SingStat (nightly refresh) | Per region |
-| Maps client | mapbox-gl-js (web), `@rnmapbox/maps` (RN) | — |
-| Mobile | Expo SDK 51 + EAS Build + EAS Update | — |
-| Web | Next.js 14 App Router + React 18 + Tailwind | — |
-| Auth | AWS Cognito + first-party JWT (RS256), ≤5min lifetime | Per region Cognito |
-| MFA | TOTP (RFC 6238) + SMS fallback via Twilio Verify; **WebAuthn hardware key for admin** | — |
-| Realtime | Ably (managed channels, JWT-scoped) | — |
-| Payments — US **(Phase 1)** | **MiCamp Gateway API** (Brodie's ISO; cards + ACH + recurring + tokenized vault) | US |
-| Payments — AU **(Phase 2)** | Stripe AU (cards + recurring) + GoCardless (BPAY/PayTo) | AU |
-| Payments — SG **(Phase 3)** | Stripe SG (cards) + PayNow via Stripe | SG |
-| Payment abstraction | `services/payment` adapter pattern — `MiCampAdapter`, `StripeAdapter`; common `PaymentMethod`, `Charge`, `Subscription`, `Refund` interfaces; ISO residual tracking on MiCamp volume | — |
-| SMS | Twilio (US long codes, AU dedicated, SG alphanumeric `D2D`) | Per region Messaging Service |
-| Email | Resend primary + SES fallback (SPF/DKIM/DMARC per brand subdomain) | — |
-| Push | Expo Push (Day 1) → APNs/FCM direct (Phase 4) | — |
-| AI text | Claude Opus 4.7 primary + GPT-4.1 fallback | — |
-| AI image | FLUX 1.1 Pro via Replicate; Ideogram for text-in-image | — |
-| AI video | Runway Gen-3 (b-roll) + HeyGen (AI avatar UGC) | — |
-| Ad APIs | Meta Marketing v20, Google Ads v17, TikTok Marketing v1.3 | — |
-| Observability | Pino + OpenTelemetry → Jaeger (local) / Datadog (prod) | — |
-| Audit sink | S3 Object Lock COMPLIANCE 7y; hash-chained | Per region |
-| Secrets | AWS Secrets Manager (prod) / Doppler (dev) | — |
-| Feature flags | OpenFeature + LaunchDarkly | — |
-| IaC | Terraform 1.9 + Terragrunt | — |
-| CI | GitHub Actions (gitleaks, semgrep, trivy, nx affected, prettier, eslint) | — |
-| CD Day 1 | Railway (per-app `railway.<app>.toml`) | — |
-| CD Phase 4 | ECS Fargate + Vercel + EAS Build + CloudFront/WAF | — |
+| Layer                       | Choice                                                                                                                                                                               | Region split                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Language                    | TypeScript 5.5 ESM-only, `noUncheckedIndexedAccess`                                                                                                                                  | —                            |
+| Runtime                     | Node 20 LTS                                                                                                                                                                          | —                            |
+| Package mgr                 | pnpm 9.12.0                                                                                                                                                                          | —                            |
+| Monorepo                    | Nx 20 + Nx Cloud (paid CI cache)                                                                                                                                                     | —                            |
+| Backend                     | NestJS 10.4.22 + Fastify 4 (locked via `pnpm.overrides`)                                                                                                                             | —                            |
+| HTTP validation             | Zod 3 + `nestjs-zod` (single source of truth for DTO + OpenAPI)                                                                                                                      | —                            |
+| ORM                         | Prisma 5.22                                                                                                                                                                          | —                            |
+| DB                          | Aurora PostgreSQL 16 + PostGIS 3.4                                                                                                                                                   | One cluster per region       |
+| Cache + queue               | ElastiCache Redis 7 + BullMQ 5                                                                                                                                                       | Per region                   |
+| Search                      | Postgres FTS Day 1; OpenSearch when >5M leads                                                                                                                                        | —                            |
+| Object storage              | S3 + Object Lock (audit) + versioning + KMS-SSE                                                                                                                                      | Per region                   |
+| Mapping                     | Mapbox (geocoding + tiles); ABS 2021 / US ACS 5-yr / SingStat (nightly refresh)                                                                                                      | Per region                   |
+| Maps client                 | mapbox-gl-js (web), `@rnmapbox/maps` (RN)                                                                                                                                            | —                            |
+| Mobile                      | Expo SDK 51 + EAS Build + EAS Update                                                                                                                                                 | —                            |
+| Web                         | Next.js 14 App Router + React 18 + Tailwind                                                                                                                                          | —                            |
+| Auth                        | AWS Cognito + first-party JWT (RS256), ≤5min lifetime                                                                                                                                | Per region Cognito           |
+| MFA                         | TOTP (RFC 6238) + SMS fallback via Twilio Verify; **WebAuthn hardware key for admin**                                                                                                | —                            |
+| Realtime                    | Ably (managed channels, JWT-scoped)                                                                                                                                                  | —                            |
+| Payments — US **(Phase 1)** | **MiCamp Gateway API** (Brodie's ISO; cards + ACH + recurring + tokenized vault)                                                                                                     | US                           |
+| Payments — AU **(Phase 2)** | Stripe AU (cards + recurring) + GoCardless (BPAY/PayTo)                                                                                                                              | AU                           |
+| Payments — SG **(Phase 3)** | Stripe SG (cards) + PayNow via Stripe                                                                                                                                                | SG                           |
+| Payment abstraction         | `services/payment` adapter pattern — `MiCampAdapter`, `StripeAdapter`; common `PaymentMethod`, `Charge`, `Subscription`, `Refund` interfaces; ISO residual tracking on MiCamp volume | —                            |
+| SMS                         | Twilio (US long codes, AU dedicated, SG alphanumeric `D2D`)                                                                                                                          | Per region Messaging Service |
+| Email                       | Resend primary + SES fallback (SPF/DKIM/DMARC per brand subdomain)                                                                                                                   | —                            |
+| Push                        | Expo Push (Day 1) → APNs/FCM direct (Phase 4)                                                                                                                                        | —                            |
+| AI text                     | Claude Opus 4.7 primary + GPT-4.1 fallback                                                                                                                                           | —                            |
+| AI image                    | FLUX 1.1 Pro via Replicate; Ideogram for text-in-image                                                                                                                               | —                            |
+| AI video                    | Runway Gen-3 (b-roll) + HeyGen (AI avatar UGC)                                                                                                                                       | —                            |
+| Ad APIs                     | Meta Marketing v20, Google Ads v17, TikTok Marketing v1.3                                                                                                                            | —                            |
+| Observability               | Pino + OpenTelemetry → Jaeger (local) / Datadog (prod)                                                                                                                               | —                            |
+| Audit sink                  | S3 Object Lock COMPLIANCE 7y; hash-chained                                                                                                                                           | Per region                   |
+| Secrets                     | AWS Secrets Manager (prod) / Doppler (dev)                                                                                                                                           | —                            |
+| Feature flags               | OpenFeature + LaunchDarkly                                                                                                                                                           | —                            |
+| IaC                         | Terraform 1.9 + Terragrunt                                                                                                                                                           | —                            |
+| CI                          | GitHub Actions (gitleaks, semgrep, trivy, nx affected, prettier, eslint)                                                                                                             | —                            |
+| CD Day 1                    | Railway (per-app `railway.<app>.toml`)                                                                                                                                               | —                            |
+| CD Phase 4                  | ECS Fargate + Vercel + EAS Build + CloudFront/WAF                                                                                                                                    | —                            |
 
 ---
 
@@ -366,6 +368,7 @@ enum SsoProvider { okta azuread auth0 google_workspace generic_saml }
 **Auth:** `Authorization: Bearer <jwt>` for user sessions; `X-Api-Key: d2d_live_<32>` + `X-Api-Key-Secret: <hmac>` for partner integrations. Scopes: `knock:read|write`, `lead:read|write|unmask`, `conversion:read|write`, `payout:instruct`, `marketing:publish`, `audit:read`.
 
 **Standards:**
+
 - **Errors:** RFC 7807 — `{ type, title, status, detail, instance, traceId }`. Subtypes namespaced at `https://docs.d2d.io/problems/<slug>`.
 - **Idempotency:** `Idempotency-Key` header REQUIRED on every `POST`. Stored in `IdempotencyRecord` 24h; replay returns identical response.
 - **Pagination:** cursor-only — `?cursor=&limit=` → `{ data, nextCursor }`.
@@ -373,6 +376,7 @@ enum SsoProvider { okta azuread auth0 google_workspace generic_saml }
 - **OpenAPI:** auto-generated from `nestjs-zod` schemas; published at `https://docs.d2d.io`; typed client `@d2d/api-client`.
 
 **Namespaces:**
+
 ```
 /v1/auth/*                          login, refresh, mfa, sessions
 /v1/orgs                            POST creates org; regionCode locked at creation
@@ -410,15 +414,17 @@ enum SsoProvider { okta azuread auth0 google_workspace generic_saml }
 
 **Decision:** **Postgres-per-region**, NOT Aurora Global with tablespace pinning.
 
-**Why:** Aurora Global replicates everything to every secondary — defeats residency for AU/SG donors. Logical-replication carve-outs are operationally fragile and auditors won't accept them. Per-region clusters give a clean compliance story: *"Australian donor PII never leaves ap-southeast-2."*
+**Why:** Aurora Global replicates everything to every secondary — defeats residency for AU/SG donors. Logical-replication carve-outs are operationally fragile and auditors won't accept them. Per-region clusters give a clean compliance story: _"Australian donor PII never leaves ap-southeast-2."_
 
 **Topology:**
+
 - `d2d-au-syd` (Aurora, ap-southeast-2) + S3 + KMS for AU tenants
 - `d2d-us-iad` (Aurora, us-east-1) + S3 + KMS for US tenants
 - `d2d-sg-sin` (Aurora, ap-southeast-1) + S3 + KMS for SG tenants
 - **Small global control-plane Aurora in us-east-1**, holds only: `Org` (with `regionCode`), `User.emailDigest → home-region` pointer, `ApiKey.prefix → home-region` pointer, billing/Stripe org records (no donor PII).
 
 **Region pinning enforcement:**
+
 - `POST /v1/orgs { regionCode }` → row written to control plane AND data-plane cluster for that region.
 - `Org.regionCode` IMMUTABLE — DB CHECK constraint + Postgres trigger raises on UPDATE.
 - Every regulated mutation passes through `RegionGuard` middleware that asserts `org.regionCode == process.env.AWS_REGION` → mismatch returns `403 PROBLEM_REGION_MISMATCH` + audit row.
@@ -436,14 +442,14 @@ enum SsoProvider { okta azuread auth0 google_workspace generic_saml }
 
 D2D forks EazePay's token file (`/Users/Brodie/EazePay App/libs/ui/src/styles/globals.css`) into `@d2d/ui-tokens/src/styles/globals.css`. Keep EazePay's RGB-triplet CSS variable convention, spacing scale (8/16/24/32/48), radius scale (8/10/12/16), Inter + JetBrains Mono. **Replace navy accent with aurora-green. Add glass sub-system.**
 
-| Role | Token | Light hex | Dark hex | Use |
-|---|---|---|---|---|
-| **Primary / Aurora** | `--accent` | `#0EA66B` | `#22C786` | Primary buttons, active nav, knock-through CTAs, "won" states |
-| **Primary strong** | `--accent-strong` | `#075E3D` | `#34D399` | Pressed/hover-deep, large-area fills |
-| **Primary soft** | `--accent-soft` | `#E3F7EC` | `#0C2A1E` | Tinted backgrounds, badges |
-| **Secondary / Electric** | `--accent-2` | `#5B5BF7` | `#7C7CFF` | Marketing Studio chrome, AI/creative surfaces |
-| **Tertiary / Signal** | `--accent-3` | `#F59E0B` | `#FBBF24` | Heatmap warm pole, callbacks-overdue, "needs attention" |
-| **Ink (neutrals)** | `--bg`, `--fg`, `--border` | inherit from EazePay light grey/ink | inherit | All chrome, tables, body |
+| Role                     | Token                      | Light hex                           | Dark hex  | Use                                                           |
+| ------------------------ | -------------------------- | ----------------------------------- | --------- | ------------------------------------------------------------- |
+| **Primary / Aurora**     | `--accent`                 | `#0EA66B`                           | `#22C786` | Primary buttons, active nav, knock-through CTAs, "won" states |
+| **Primary strong**       | `--accent-strong`          | `#075E3D`                           | `#34D399` | Pressed/hover-deep, large-area fills                          |
+| **Primary soft**         | `--accent-soft`            | `#E3F7EC`                           | `#0C2A1E` | Tinted backgrounds, badges                                    |
+| **Secondary / Electric** | `--accent-2`               | `#5B5BF7`                           | `#7C7CFF` | Marketing Studio chrome, AI/creative surfaces                 |
+| **Tertiary / Signal**    | `--accent-3`               | `#F59E0B`                           | `#FBBF24` | Heatmap warm pole, callbacks-overdue, "needs attention"       |
+| **Ink (neutrals)**       | `--bg`, `--fg`, `--border` | inherit from EazePay light grey/ink | inherit   | All chrome, tables, body                                      |
 
 **Rationale:** Aurora-green = the literal "knocking through" doors metaphor, and green = conversion/won in every sales-ops mental model. Electric-indigo gives the AI surfaces a distinct register. Amber is reserved for operational signal so it retains meaning. Disposition colors stay distinct: SALE green, LEAD aurora, NOT_HOME amber, CALLBACK indigo, REFUSED muted-red, DNC hatched.
 
@@ -451,38 +457,38 @@ D2D forks EazePay's token file (`/Users/Brodie/EazePay App/libs/ui/src/styles/gl
 
 ```css
 /* Light mode */
---glass-tint-thin:    255 255 255 / 0.55;
+--glass-tint-thin: 255 255 255 / 0.55;
 --glass-tint-regular: 255 255 255 / 0.68;
---glass-tint-thick:   255 255 255 / 0.80;
---glass-tint-chrome:  244 245 248 / 0.72;
---glass-border:       255 255 255 / 0.45;
---glass-shadow:       0 8px 32px rgb(18 24 47 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.5);
+--glass-tint-thick: 255 255 255 / 0.8;
+--glass-tint-chrome: 244 245 248 / 0.72;
+--glass-border: 255 255 255 / 0.45;
+--glass-shadow: 0 8px 32px rgb(18 24 47 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.5);
 
 /* Dark mode */
---glass-tint-thin:    15 18 31 / 0.55;
+--glass-tint-thin: 15 18 31 / 0.55;
 --glass-tint-regular: 15 18 31 / 0.68;
---glass-tint-thick:   9 12 21 / 0.82;
---glass-tint-chrome:  9 12 21 / 0.72;
---glass-border:       255 255 255 / 0.08;
---glass-shadow:       0 8px 32px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.06);
+--glass-tint-thick: 9 12 21 / 0.82;
+--glass-tint-chrome: 9 12 21 / 0.72;
+--glass-border: 255 255 255 / 0.08;
+--glass-shadow: 0 8px 32px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.06);
 ```
 
 **Blur scale (Apple material taxonomy):**
 
-| Class | `backdrop-filter` | Used on |
-|---|---|---|
-| `.glass-sm` | `blur(8px) saturate(140%)` | Tooltips, small popovers |
-| `.glass-md` | `blur(16px) saturate(160%)` | Dropdowns, command palette, hover cards |
-| `.glass-lg` | `blur(24px) saturate(180%)` | Sidebars, mobile tab bar, side sheets |
+| Class       | `backdrop-filter`           | Used on                                        |
+| ----------- | --------------------------- | ---------------------------------------------- |
+| `.glass-sm` | `blur(8px) saturate(140%)`  | Tooltips, small popovers                       |
+| `.glass-md` | `blur(16px) saturate(160%)` | Dropdowns, command palette, hover cards        |
+| `.glass-lg` | `blur(24px) saturate(180%)` | Sidebars, mobile tab bar, side sheets          |
 | `.glass-xl` | `blur(40px) saturate(180%)` | Modal scrims, full-screen sheets, map overlays |
 
 **Hard rule — glass = chrome, solid = content:**
 
-| Surface | Treatment |
-|---|---|
-| Sidebar nav, top bar, command palette, mobile tab bar, map info-panels, knock-card sheet, modal scrim, push notifications | **Glass** |
-| Data tables, KPI tiles, forms, dashboards, kanban columns, audit log, dialer cockpit, settings panels | **Solid** (contrast + scroll FPS) |
-| Map canvas itself | **Opaque vector tiles** + glass-md panels overlaid |
+| Surface                                                                                                                   | Treatment                                          |
+| ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Sidebar nav, top bar, command palette, mobile tab bar, map info-panels, knock-card sheet, modal scrim, push notifications | **Glass**                                          |
+| Data tables, KPI tiles, forms, dashboards, kanban columns, audit log, dialer cockpit, settings panels                     | **Solid** (contrast + scroll FPS)                  |
+| Map canvas itself                                                                                                         | **Opaque vector tiles** + glass-md panels overlaid |
 
 **Tailwind utilities added to `@d2d/ui-tokens/tailwind-preset.cjs`:**
 
@@ -530,6 +536,7 @@ plugins: [
 ### 7.4 Information Architecture per surface
 
 **Operator Console (`console.door2digital.com`) — sidebar (glass-lg) + persistent org switcher topbar:**
+
 - **Overview** — cross-org KPIs (MRR, active orgs, knocks/wk, conversion, ARR by region), anomaly feed, signups funnel
 - **Orgs** — list + Detail (`/orgs/[id]`: plan, seats, usage, billing, owner, audit), Provisioning queue
 - **Billing** — Invoices, Subscriptions, Plans, Dunning, Rev rec
@@ -541,6 +548,7 @@ plugins: [
 Every page has `?` keyboard binding → `AuditDrawer` filtered to current entity. Cmd+K → CommandPalette.
 
 **Org Console (`app.door2digital.com/{orgSlug}`):**
+
 - **Today** — anomaly-first (DNC violations, missed callbacks, low-converting territories, idle knockers, leaderboard top-3, AI commentary)
 - **Territories** — Map / List / Heatmap / Detail / Drafts (MapCanvas + TerritoryLayer + HeatmapLayer + DNCOverlay; right-side GlassSheet for selected; TerritoryDrawTool)
 - **Campaigns** — list + Create wizard + Detail (territories, teams, materials, pitch script, schedule, performance)
@@ -557,12 +565,14 @@ Every page has `?` keyboard binding → `AuditDrawer` filtered to current entity
 - **Settings** — Org profile, regions enabled, users + roles, branding, billing, data + privacy
 
 **Knocker Mobile App (`D2D Knocker`) — Expo, 4 glass tabs:**
+
 - **Map** — assigned territory polygon (aurora-shaded), GPS pin, clustered knock pins by disposition, floating "Knock here" FAB pinned to nearest address, OfflineBanner + GPSAccuracyBadge
 - **Schedule** — today's callbacks (overdue amber at top), upcoming callbacks, pitch script of the day, shift clock-in/out
 - **Inbox** — manager messages, push history, route changes, training nudges
 - **Me** — stats (knocks today/week, conversion, $ commission preview), leaderboard rank, CommissionLadder, profile, training, settings
 
 **Knock flow (≤4 taps from map to recorded knock):**
+
 1. Tap address → KnockSheet peek (address, occupant guess)
 2. Tap "Knock" → DispositionWheel (SALE / LEAD / NOT_HOME / CALLBACK / REFUSED / DNC, one-thumb radial, haptic)
 3. If LEAD or SALE → LeadFormFast (3 fields: name, phone, best time; "Add more" expander)
@@ -573,16 +583,16 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 ### 7.5 Mapping UX
 
-| Concern | Decision |
-|---|---|
-| Library web | **Mapbox GL JS v3** (vector, GPU, draw plugin, native heatmap) |
-| Library mobile | **`@rnmapbox/maps`** (Expo dev-client required) |
-| Base style | Custom D2D fork of `mapbox/streets-v12`; desaturate 35%, lift contrast, mute label to `rgb(112 119 142)` so data overlays read first |
-| Territory polygons | GeoJSON; fill `accent` alpha 0.18; stroke `accent-strong` 1.5px; selected gets pulse animation |
-| Heatmap | Mapbox `heatmap` layer over H3 res-9 hex-bin aggregates from ACS/SEIFA/SingStat; green→amber→red ramp |
-| Knock pins | `circle` layer with `cluster: true` (radius 50, max-zoom 14); disposition-colored |
-| DNC overlay | `fill-pattern` diagonal-stripe SVG; danger tone; above territories, below pins |
-| Drawing | `@mapbox/mapbox-gl-draw` + snap-to-street via Mapbox Tilequery; live readouts: area, door count |
+| Concern            | Decision                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Library web        | **Mapbox GL JS v3** (vector, GPU, draw plugin, native heatmap)                                                                       |
+| Library mobile     | **`@rnmapbox/maps`** (Expo dev-client required)                                                                                      |
+| Base style         | Custom D2D fork of `mapbox/streets-v12`; desaturate 35%, lift contrast, mute label to `rgb(112 119 142)` so data overlays read first |
+| Territory polygons | GeoJSON; fill `accent` alpha 0.18; stroke `accent-strong` 1.5px; selected gets pulse animation                                       |
+| Heatmap            | Mapbox `heatmap` layer over H3 res-9 hex-bin aggregates from ACS/SEIFA/SingStat; green→amber→red ramp                                |
+| Knock pins         | `circle` layer with `cluster: true` (radius 50, max-zoom 14); disposition-colored                                                    |
+| DNC overlay        | `fill-pattern` diagonal-stripe SVG; danger tone; above territories, below pins                                                       |
+| Drawing            | `@mapbox/mapbox-gl-draw` + snap-to-street via Mapbox Tilequery; live readouts: area, door count                                      |
 
 ### 7.6 Density, accessibility, i18n
 
@@ -606,28 +616,28 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 ## 8. Multi-jurisdiction compliance matrix
 
-| Concern | **AU** | **US** | **SG** |
-|---|---|---|---|
-| **Charity registration** | ACNC + state regulators (NSW Dept Fair Trading, Consumer Affairs Vic, etc.) | State-by-state ~40 states (Unified Reg Statement helps; NY, CA, FL, IL strictest) | Commissioner of Charities under MCCY |
-| **Solicitor licensing** | State-level paid fundraiser registration (NSW/VIC/QLD/WA/SA/TAS); written charity authority letter on-person | State paid-solicitor registration + bonding (NY, NJ); 3-day cooling-off disclosure at pledge in many states | Commercial fundraiser written appointment + PLRD House-to-House Collection permit |
-| **Paid solicitor (D2D as operator)** | n/a Phase 1 | **D2D the entity must register as a paid solicitor in EACH STATE** it knocks on charity's behalf. 4–12 weeks/state + bond ($10–25K typical, $50K+ in NY). Counsel running parallel filings. Plan enforces via `PaidSolicitorRegistration` table + `CampaignStateClearance` join → campaigns only deliver to cleared states | n/a Phase 1 |
-| **Cooling-off** | ACL: **10 business days** (extends to 3/6 months if disclosure breach) | FTC: **3 days** for sales ≥$25 at home; CA/NY 3 days; state-by-state | **5-day** under Consumer Protection (Fair Trading) Act |
-| **Privacy law** | Privacy Act 1988 + 13 APPs; NDB scheme 72h | **CCPA/CPRA** + CO/VA/UT/MT/CT/TX/OR/DE state laws; GLBA if financial | **PDPA**; 72h breach notification if significant harm or ≥500 affected |
-| **Do-not-knock** | CHOICE DNK sticker (knocking past = misleading/deceptive under ACL) | No national; local ordinances vary; HOA rules | No formal; PLRD permit conditions |
-| **Do-not-call** | DNCR via ACMA (charity msgs partially exempt; courtesy compliance) | **National DNC** (FTC+FCC) + state DNCs; **TCPA prior express written consent** for SMS/calls | DNC Registry via PDPC (charity exempt only if sent BY charity, not 3rd-party) |
-| **Spam/email law** | Spam Act 2003 — consent + identify + unsubscribe | CAN-SPAM (email) + TCPA (SMS) + TSR (telemarketing) | Spam Control Act — opt-out for email/SMS |
-| **Payment regs** | PCI-DSS via tokenisation; AUSTRAC AML thresholds; PayTo/NPP | PCI-DSS; state money-transmitter exemption for charities varies; NACHA for ACH | PCI-DSS; MAS Payment Services Act if held funds (avoid via tokenised passthrough) |
-| **Data residency** | APP 8 cross-border with consent or comparable protection; norm = keep in AU | No federal mandate; CCPA cross-border allowed; some contracts US-only | PDPA s.26 overseas with comparable protection or consent; norm = keep in SG |
+| Concern                              | **AU**                                                                                                       | **US**                                                                                                                                                                                                                                                                                                                     | **SG**                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Charity registration**             | ACNC + state regulators (NSW Dept Fair Trading, Consumer Affairs Vic, etc.)                                  | State-by-state ~40 states (Unified Reg Statement helps; NY, CA, FL, IL strictest)                                                                                                                                                                                                                                          | Commissioner of Charities under MCCY                                              |
+| **Solicitor licensing**              | State-level paid fundraiser registration (NSW/VIC/QLD/WA/SA/TAS); written charity authority letter on-person | State paid-solicitor registration + bonding (NY, NJ); 3-day cooling-off disclosure at pledge in many states                                                                                                                                                                                                                | Commercial fundraiser written appointment + PLRD House-to-House Collection permit |
+| **Paid solicitor (D2D as operator)** | n/a Phase 1                                                                                                  | **D2D the entity must register as a paid solicitor in EACH STATE** it knocks on charity's behalf. 4–12 weeks/state + bond ($10–25K typical, $50K+ in NY). Counsel running parallel filings. Plan enforces via `PaidSolicitorRegistration` table + `CampaignStateClearance` join → campaigns only deliver to cleared states | n/a Phase 1                                                                       |
+| **Cooling-off**                      | ACL: **10 business days** (extends to 3/6 months if disclosure breach)                                       | FTC: **3 days** for sales ≥$25 at home; CA/NY 3 days; state-by-state                                                                                                                                                                                                                                                       | **5-day** under Consumer Protection (Fair Trading) Act                            |
+| **Privacy law**                      | Privacy Act 1988 + 13 APPs; NDB scheme 72h                                                                   | **CCPA/CPRA** + CO/VA/UT/MT/CT/TX/OR/DE state laws; GLBA if financial                                                                                                                                                                                                                                                      | **PDPA**; 72h breach notification if significant harm or ≥500 affected            |
+| **Do-not-knock**                     | CHOICE DNK sticker (knocking past = misleading/deceptive under ACL)                                          | No national; local ordinances vary; HOA rules                                                                                                                                                                                                                                                                              | No formal; PLRD permit conditions                                                 |
+| **Do-not-call**                      | DNCR via ACMA (charity msgs partially exempt; courtesy compliance)                                           | **National DNC** (FTC+FCC) + state DNCs; **TCPA prior express written consent** for SMS/calls                                                                                                                                                                                                                              | DNC Registry via PDPC (charity exempt only if sent BY charity, not 3rd-party)     |
+| **Spam/email law**                   | Spam Act 2003 — consent + identify + unsubscribe                                                             | CAN-SPAM (email) + TCPA (SMS) + TSR (telemarketing)                                                                                                                                                                                                                                                                        | Spam Control Act — opt-out for email/SMS                                          |
+| **Payment regs**                     | PCI-DSS via tokenisation; AUSTRAC AML thresholds; PayTo/NPP                                                  | PCI-DSS; state money-transmitter exemption for charities varies; NACHA for ACH                                                                                                                                                                                                                                             | PCI-DSS; MAS Payment Services Act if held funds (avoid via tokenised passthrough) |
+| **Data residency**                   | APP 8 cross-border with consent or comparable protection; norm = keep in AU                                  | No federal mandate; CCPA cross-border allowed; some contracts US-only                                                                                                                                                                                                                                                      | PDPA s.26 overseas with comparable protection or consent; norm = keep in SG       |
 
 ### Technical artifacts per jurisdiction (built into `services/compliance`)
 
-| Artifact | AU | US | SG |
-|---|---|---|---|
-| Auto cancellation notice (PDF + email + SMS within 24h) | ACL plain-English template | State-specific (NY/CA stricter, bilingual CA/TX) | English + Mandarin |
-| Consent capture record | Spam Act consent + timestamp + IP + signature, 5y retention | **Prior express written consent** with W3C-style signed token + full SMS transcript snapshot, 4y minimum | PDPA opt-in + charity-exemption flag at lead creation |
-| DNC/DNK scrubbing | DNCR API + CHOICE DNK address-match before revisit task | FTC + FCC + state DNC scrub; geocode-blocked HOA/no-solicit overlay | PDPC DNC scrub |
-| Solicitor proof on knocker | Auto-generated charity-signed authority letter PDF in mobile app | State-registered solicitor ID embedded in mobile badge screen | PLRD permit number + appointment letter in mobile badge |
-| Cooling-off enforcement | Block payout instruction until window closes OR explicit waiver where allowed | State-aware timer; block + FTC 3-day notice attached to signed agreement | 5-day timer; block + cancellation notice attached |
+| Artifact                                                | AU                                                                            | US                                                                                                       | SG                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Auto cancellation notice (PDF + email + SMS within 24h) | ACL plain-English template                                                    | State-specific (NY/CA stricter, bilingual CA/TX)                                                         | English + Mandarin                                      |
+| Consent capture record                                  | Spam Act consent + timestamp + IP + signature, 5y retention                   | **Prior express written consent** with W3C-style signed token + full SMS transcript snapshot, 4y minimum | PDPA opt-in + charity-exemption flag at lead creation   |
+| DNC/DNK scrubbing                                       | DNCR API + CHOICE DNK address-match before revisit task                       | FTC + FCC + state DNC scrub; geocode-blocked HOA/no-solicit overlay                                      | PDPC DNC scrub                                          |
+| Solicitor proof on knocker                              | Auto-generated charity-signed authority letter PDF in mobile app              | State-registered solicitor ID embedded in mobile badge screen                                            | PLRD permit number + appointment letter in mobile badge |
+| Cooling-off enforcement                                 | Block payout instruction until window closes OR explicit waiver where allowed | State-aware timer; block + FTC 3-day notice attached to signed agreement                                 | 5-day timer; block + cancellation notice attached       |
 
 ---
 
@@ -638,6 +648,7 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 8 roles (`super_admin, org_admin, manager, knocker, inside_sales, accountant, auditor, viewer`). Permission shape: `{ action, resource, orgScope, regionScope, requiresHardwareKey, requiresJustification, requiresSecondApprover }`. **WebAuthn hardware key REQUIRED** for: super_admin actions, org_admin payout instruction, lead.unmask_pii (with second approver), accountant payment-instrument read.
 
 **SSO/SAML for enterprise tenants (Pilot-Charlie Day 1):**
+
 - SAML 2.0 service provider in `services/auth/src/saml/` — supports Okta, Azure AD, Auth0, Google Workspace, and generic SAML IdPs
 - `SsoConfiguration` per org (entityId, ssoUrl, certificate in S3 KMS, attribute mapping JSON, JIT user provisioning)
 - Role mapping via SAML attribute → `PlatformRole`
@@ -645,6 +656,7 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 - SCIM 2.0 deferred to Phase 2 (manual provisioning Day 1)
 
 **SOC 2 Type I evidence collection (Phase 1.4 → Phase 3 Type II window):**
+
 - Control matrix in `docs/soc2/controls.md` — CC1 (Control Environment), CC2 (Comms), CC3 (Risk Assessment), CC4 (Monitoring), CC5 (Activities), CC6 (Logical Access), CC7 (System Ops), CC8 (Change Management), CC9 (Risk Mitigation)
 - Automated evidence: CI artifacts, audit chain merkle roots, access reviews quarterly, vendor assessments per-quarter, change-management via PR + approval log, encryption-at-rest config snapshots
 - Manual evidence: pen test report, security awareness training records, BCDR/DR game day reports
@@ -652,6 +664,7 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 - Type II observation window: 90 days minimum starting Phase 3
 
 **Enforcement layers (defence in depth):**
+
 1. BFF route guard (Nest `@UseGuards`) — coarse RBAC
 2. `TenantGuard` (Prisma `$extends` injecting `where: { orgId }`)
 3. Postgres RLS — refuses even if app layer bypassed
@@ -667,28 +680,28 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 ### 9.3 Threat model — Day-1 mitigations
 
-| Surface | Key controls |
-|---|---|
+| Surface            | Key controls                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Knocker mobile** | Biometric re-auth on resume (>60s background); device attestation (App Attest, Play Integrity) on every sync; cert pinning (SPKI hashes for API + auth + S3); jailbreak/root detection → refuse to run; encrypted SQLite (SQLCipher, key in Keychain/Keystore); photos/signatures per-blob DEK until sync; `FLAG_SECURE` + iOS overlay on PII screens |
-| **Web consoles** | WebAuthn for admin; Cognito MFA for users; CSRF via SameSite=Strict + double-submit; strict CSP; HttpOnly + `__Host-` cookies; bot detection |
-| **Public API** | mTLS for partner integrations; OAuth2 client-credentials for SaaS callers; HMAC-signed bodies for sensitive ops; per-key tiered rate limits (5/s burst, 30/10s, 120/min); scoped JWTs ≤5min |
-| **Webhooks in** | HMAC-SHA256 per source + 5min replay window; idempotency keys user-bound; Redis seen-set for replay |
-| **Webhooks out** | Raw secret signing (envelope-decrypted at send, never the hash); egress SSRF guard blocks 169.254.169.254 / RFC1918 / IPv6 ULA; retry queue with attempt audit |
+| **Web consoles**   | WebAuthn for admin; Cognito MFA for users; CSRF via SameSite=Strict + double-submit; strict CSP; HttpOnly + `__Host-` cookies; bot detection                                                                                                                                                                                                          |
+| **Public API**     | mTLS for partner integrations; OAuth2 client-credentials for SaaS callers; HMAC-signed bodies for sensitive ops; per-key tiered rate limits (5/s burst, 30/10s, 120/min); scoped JWTs ≤5min                                                                                                                                                           |
+| **Webhooks in**    | HMAC-SHA256 per source + 5min replay window; idempotency keys user-bound; Redis seen-set for replay                                                                                                                                                                                                                                                   |
+| **Webhooks out**   | Raw secret signing (envelope-decrypted at send, never the hash); egress SSRF guard blocks 169.254.169.254 / RFC1918 / IPv6 ULA; retry queue with attempt audit                                                                                                                                                                                        |
 
 ### 9.4 OWASP Top 10 mapping
 
-| OWASP 2021 | Mitigation |
-|---|---|
-| A01 Broken Access Control | RBAC + ABAC + TenantGuard + RLS + RegionGuard quad |
-| A02 Cryptographic Failures | TLS 1.3; KMS envelope; deterministic SIV searchable; no homebrew crypto |
-| A03 Injection | Prisma parameterised; Zod input validation at BFF edge; strict CSP for XSS |
-| A04 Insecure Design | Threat model living doc, quarterly review; ADR for every cross-cutting decision |
-| A05 Security Misconfig | IaC-only (Terraform); WAF managed + custom rules committed; Trivy IaC scan |
-| A06 Vulnerable Components | Renovate + Trivy + Snyk + Dependabot; signed images; SBOM per release (Syft) |
-| A07 Identity & Auth | Cognito + Okta workforce; WebAuthn hardware for admin; JWT ≤5min |
-| A08 Data Integrity | Hash-chained audit; cosign-signed container images; SLSA L3 target |
-| A09 Logging/Monitoring | Pino structured + redaction; OpenSearch per region; SIEM central; PagerDuty |
-| A10 SSRF | Egress allowlist + IPv4/IPv6 blocklist |
+| OWASP 2021                 | Mitigation                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| A01 Broken Access Control  | RBAC + ABAC + TenantGuard + RLS + RegionGuard quad                              |
+| A02 Cryptographic Failures | TLS 1.3; KMS envelope; deterministic SIV searchable; no homebrew crypto         |
+| A03 Injection              | Prisma parameterised; Zod input validation at BFF edge; strict CSP for XSS      |
+| A04 Insecure Design        | Threat model living doc, quarterly review; ADR for every cross-cutting decision |
+| A05 Security Misconfig     | IaC-only (Terraform); WAF managed + custom rules committed; Trivy IaC scan      |
+| A06 Vulnerable Components  | Renovate + Trivy + Snyk + Dependabot; signed images; SBOM per release (Syft)    |
+| A07 Identity & Auth        | Cognito + Okta workforce; WebAuthn hardware for admin; JWT ≤5min                |
+| A08 Data Integrity         | Hash-chained audit; cosign-signed container images; SLSA L3 target              |
+| A09 Logging/Monitoring     | Pino structured + redaction; OpenSearch per region; SIEM central; PagerDuty     |
+| A10 SSRF                   | Egress allowlist + IPv4/IPv6 blocklist                                          |
 
 ### 9.5 Pen-test readiness checklist (`docs/PEN_TEST_READINESS.md`)
 
@@ -754,16 +767,17 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 ### 10.2 Brand-safety per vertical
 
-| Vertical | Pre-publish checks |
-|---|---|
-| Charity (AU) | ACNC fundraising standards; no "guaranteed impact"; tax-deductibility disclosure if DGR claim |
-| Charity (US) | State-specific disclosure boilerplate (NY's "A copy of the latest annual report..."); ACFR standards |
-| Charity (SG) | COC fundraising code; PLRD permit number on collection appeals |
-| Pest control | Block health claims; ACL substantiation; APVMA chemical name disclosure |
-| Solar | Block "free solar"/"$0 down" without finance terms; Clean Energy Council code (AU); FTC Green Guides (US) |
-| Energy/telco | Block locked-comparison without DMO/VDO; AER retail code (AU); FCC marketing rules (US) |
+| Vertical     | Pre-publish checks                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| Charity (AU) | ACNC fundraising standards; no "guaranteed impact"; tax-deductibility disclosure if DGR claim             |
+| Charity (US) | State-specific disclosure boilerplate (NY's "A copy of the latest annual report..."); ACFR standards      |
+| Charity (SG) | COC fundraising code; PLRD permit number on collection appeals                                            |
+| Pest control | Block health claims; ACL substantiation; APVMA chemical name disclosure                                   |
+| Solar        | Block "free solar"/"$0 down" without finance terms; Clean Energy Council code (AU); FTC Green Guides (US) |
+| Energy/telco | Block locked-comparison without DMO/VDO; AER retail code (AU); FCC marketing rules (US)                   |
 
 **Safety stack:**
+
 1. Anthropic moderation API on every copy string before save
 2. Custom rule engine (`services/marketing-studio/src/safety/`) — regex + LLM-as-judge per vertical/jurisdiction
 3. Legal hold flag → route to `legal.review` queue, block publish
@@ -789,23 +803,23 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 ## 11. Observability & incident response
 
-| Layer | Tool |
-|---|---|
-| Logs | Pino structured + PII redact → OpenSearch per region → central SIEM in us-east-1 security account |
-| Traces | OpenTelemetry → X-Ray (prod), Jaeger (dev); `x-correlation-id` propagated |
-| Metrics | Prometheus → Grafana; CloudWatch for AWS-managed |
-| Frontend | Sentry per region; source maps uploaded but not public |
+| Layer    | Tool                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------- |
+| Logs     | Pino structured + PII redact → OpenSearch per region → central SIEM in us-east-1 security account |
+| Traces   | OpenTelemetry → X-Ray (prod), Jaeger (dev); `x-correlation-id` propagated                         |
+| Metrics  | Prometheus → Grafana; CloudWatch for AWS-managed                                                  |
+| Frontend | Sentry per region; source maps uploaded but not public                                            |
 
 **Core SLOs:**
 
-| SLO | Target | Error budget |
-|---|---|---|
-| Knocker mobile sync success | ≥99.5% / 30d | 0.5% |
-| Lead capture latency P95 | <2s | 5% over budget triggers freeze |
-| Payout instruction generation P95 | <60s | 5% |
-| AI generation job success | ≥95% / 7d | 5% |
-| Audit chain integrity | 100% verified weekly | 0 — pages immediately |
-| API availability | 99.9% per region | 43min/month |
+| SLO                               | Target               | Error budget                   |
+| --------------------------------- | -------------------- | ------------------------------ |
+| Knocker mobile sync success       | ≥99.5% / 30d         | 0.5%                           |
+| Lead capture latency P95          | <2s                  | 5% over budget triggers freeze |
+| Payout instruction generation P95 | <60s                 | 5%                             |
+| AI generation job success         | ≥95% / 7d            | 5%                             |
+| Audit chain integrity             | 100% verified weekly | 0 — pages immediately          |
+| API availability                  | 99.9% per region     | 43min/month                    |
 
 **Alerting:** PagerDuty SEV1/2/3. SEV1 = customer-impacting outage OR security incident. On-call: Brodie solo Day 1 → 2-person rotation by Phase 3. Runbooks under `docs/runbooks/`: incident-response, data-breach-72h, payment-incident, ai-brand-safety-failure, region-failover, audit-chain-mismatch.
 
@@ -813,13 +827,13 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 **Incident SLAs:**
 
-| Incident | Notification SLA |
-|---|---|
+| Incident                | Notification SLA                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------- |
 | Personal data breach AU | 72h to OAIC; affected individuals "as soon as practicable" if serious harm likely |
-| Personal data breach US | Per-state: CA 60d, NY 30d, others vary |
-| Personal data breach SG | 72h to PDPC if significant harm or ≥500 individuals |
-| Payment incident | Stripe/processor immediate; org within 4h; partner bank within 24h |
-| AI brand-safety failure | Pause campaign within 15min of detection; org within 1h; postmortem within 7d |
+| Personal data breach US | Per-state: CA 60d, NY 30d, others vary                                            |
+| Personal data breach SG | 72h to PDPC if significant harm or ≥500 individuals                               |
+| Payment incident        | Stripe/processor immediate; org within 4h; partner bank within 24h                |
+| AI brand-safety failure | Pause campaign within 15min of detection; org within 1h; postmortem within 7d     |
 
 ---
 
@@ -827,33 +841,33 @@ Offline-first via SQLite + FIFO queue. OfflineQueueBanner always visible when qu
 
 **BullMQ queues (`apps/workers`, one connection per region's Redis):**
 
-| Queue | Producer | Examples |
-|---|---|---|
-| `knock-sync` | mobile via `apps/api` | reconcile offline batch, dedupe by idempotency key |
-| `lead-routing` | `services/lead` | assign to inside-sales by territory + workload |
-| `lead-sequence` | `services/crm` | step a multi-touch SMS/email sequence |
-| `conversion-finalise` | `services/conversion` | charge Stripe, generate receipt PDF, fire webhook |
-| `donation-recurring` | cron (per region) | nightly Stripe sub reconciliation |
-| `commission-calc` | cron (daily 02:00 local) | recompute accruals for prior day |
-| `payout-prepare` | cron (fortnightly/monthly) | build instruction file |
-| `content-generate` | `services/content-studio` | Claude/FLUX/Runway long-running |
-| `ad-deliver` | `services/marketing` | push audience to Meta/Google/TikTok |
-| `webhook-deliver` | `services/webhook` | HMAC sign + POST with retries |
-| `audit-ship` | cron (every 60s) | flush AuditEvent rows to S3 Object Lock |
-| `dnk-sync` | cron (daily) | refresh DNK/DNC lists per region |
-| `geo-refresh` | cron (weekly) | re-ingest ABS/ACS/SingStat slices |
+| Queue                 | Producer                   | Examples                                           |
+| --------------------- | -------------------------- | -------------------------------------------------- |
+| `knock-sync`          | mobile via `apps/api`      | reconcile offline batch, dedupe by idempotency key |
+| `lead-routing`        | `services/lead`            | assign to inside-sales by territory + workload     |
+| `lead-sequence`       | `services/crm`             | step a multi-touch SMS/email sequence              |
+| `conversion-finalise` | `services/conversion`      | charge Stripe, generate receipt PDF, fire webhook  |
+| `donation-recurring`  | cron (per region)          | nightly Stripe sub reconciliation                  |
+| `commission-calc`     | cron (daily 02:00 local)   | recompute accruals for prior day                   |
+| `payout-prepare`      | cron (fortnightly/monthly) | build instruction file                             |
+| `content-generate`    | `services/content-studio`  | Claude/FLUX/Runway long-running                    |
+| `ad-deliver`          | `services/marketing`       | push audience to Meta/Google/TikTok                |
+| `webhook-deliver`     | `services/webhook`         | HMAC sign + POST with retries                      |
+| `audit-ship`          | cron (every 60s)           | flush AuditEvent rows to S3 Object Lock            |
+| `dnk-sync`            | cron (daily)               | refresh DNK/DNC lists per region                   |
+| `geo-refresh`         | cron (weekly)              | re-ingest ABS/ACS/SingStat slices                  |
 
 Idempotency: every queue handler keyed on `(queueName, idempotencyKey)` in Redis with 7-day TTL. Cron leader: `CRON_LEADER=true` on exactly one `apps/workers` replica per region.
 
 **Inbound integrations (`apps/webhooks`):**
 
-| Provider | Path |
-|---|---|
-| Stripe AU/US/SG | `/inbound/stripe/<region>` (webhook secret per region; `Stripe-Signature`) |
-| Twilio | `/inbound/twilio/<region>` (inbound SMS, call status) |
-| Resend | `/inbound/resend` (bounce, complaint) |
-| Meta | `/inbound/meta` (lead-ad sync → Leads) |
-| ABS / ACS / SingStat | scheduled pull (nightly `geo-refresh` job) |
+| Provider             | Path                                                                       |
+| -------------------- | -------------------------------------------------------------------------- |
+| Stripe AU/US/SG      | `/inbound/stripe/<region>` (webhook secret per region; `Stripe-Signature`) |
+| Twilio               | `/inbound/twilio/<region>` (inbound SMS, call status)                      |
+| Resend               | `/inbound/resend` (bounce, complaint)                                      |
+| Meta                 | `/inbound/meta` (lead-ad sync → Leads)                                     |
+| ABS / ACS / SingStat | scheduled pull (nightly `geo-refresh` job)                                 |
 
 ---
 
@@ -861,36 +875,36 @@ Idempotency: every queue handler keyed on `(queueName, idempotencyKey)` in Redis
 
 Inherited from EazePay (re-numbered in D2D's sequence) **plus** D2D-specific:
 
-| # | Title |
-|---|---|
-| 0001 | Monorepo: Nx + pnpm workspaces |
-| 0002 | Backend: NestJS 10 on Fastify, modular monolith |
-| 0003 | Mobile: Expo + EAS Build |
-| 0004 | Database: Aurora PostgreSQL + PostGIS |
-| 0005 | Auth: Cognito-backed + first-party JWT |
-| 0006 | IaC: Terraform with per-env composition |
-| 0007 | Money as BigInt cents |
-| 0008 | Audit row in same TX (transactional outbox) |
-| 0009 | RFC 7807 Problem Details for all error responses |
-| 0010 | Idempotency keys mandatory on all POST /v1 mutations |
-| 0011 | PII envelope encryption + KMS per-datastore |
-| 0012 | JIT PII unmask: dual-control, 30min grant, per-read audit |
-| 0013 | Soft delete only (`status='archived'`); immutable history |
-| 0014 | XState v5 for lifecycle objects |
-| 0015 | Modular monolith with extractable services (Nx graph boundary) |
-| 0016 | Multi-region: region-pinned at org creation, immutable |
-| 0017 | Webhooks isolated in `apps/webhooks` for blast-radius |
-| 0018 | Real-time via Ably (managed channels, JWT-scoped) |
-| 0019 | Commission/payout: instruct-only, never auto-debit |
-| 0020 | Territory geometry: PostGIS polygons + S2 cell index for heatmaps |
-| 0021 | Multi-vertical conversion polymorphism (Donation \| Sale) |
-| 0022 | Offline-first knocker mobile — last-write-wins with operator override |
-| 0023 | AI-generated content provenance + brand-safety scan before publish |
+| #    | Title                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------ |
+| 0001 | Monorepo: Nx + pnpm workspaces                                                                   |
+| 0002 | Backend: NestJS 10 on Fastify, modular monolith                                                  |
+| 0003 | Mobile: Expo + EAS Build                                                                         |
+| 0004 | Database: Aurora PostgreSQL + PostGIS                                                            |
+| 0005 | Auth: Cognito-backed + first-party JWT                                                           |
+| 0006 | IaC: Terraform with per-env composition                                                          |
+| 0007 | Money as BigInt cents                                                                            |
+| 0008 | Audit row in same TX (transactional outbox)                                                      |
+| 0009 | RFC 7807 Problem Details for all error responses                                                 |
+| 0010 | Idempotency keys mandatory on all POST /v1 mutations                                             |
+| 0011 | PII envelope encryption + KMS per-datastore                                                      |
+| 0012 | JIT PII unmask: dual-control, 30min grant, per-read audit                                        |
+| 0013 | Soft delete only (`status='archived'`); immutable history                                        |
+| 0014 | XState v5 for lifecycle objects                                                                  |
+| 0015 | Modular monolith with extractable services (Nx graph boundary)                                   |
+| 0016 | Multi-region: region-pinned at org creation, immutable                                           |
+| 0017 | Webhooks isolated in `apps/webhooks` for blast-radius                                            |
+| 0018 | Real-time via Ably (managed channels, JWT-scoped)                                                |
+| 0019 | Commission/payout: instruct-only, never auto-debit                                               |
+| 0020 | Territory geometry: PostGIS polygons + S2 cell index for heatmaps                                |
+| 0021 | Multi-vertical conversion polymorphism (Donation \| Sale)                                        |
+| 0022 | Offline-first knocker mobile — last-write-wins with operator override                            |
+| 0023 | AI-generated content provenance + brand-safety scan before publish                               |
 | 0024 | Charity vs commercial pricing & contract polymorphism (`Org.vertical` drives compliance routing) |
-| 0025 | Mobile attestation required (App Attest / Play Integrity) on every sync |
-| 0026 | WebAuthn hardware-key required for payout instruction |
-| 0027 | Single-monorepo until Phase 4+ (no premature splitting) |
-| 0028 | Glass surfaces are chrome, not content (perf + legibility hard rule) |
+| 0025 | Mobile attestation required (App Attest / Play Integrity) on every sync                          |
+| 0026 | WebAuthn hardware-key required for payout instruction                                            |
+| 0027 | Single-monorepo until Phase 4+ (no premature splitting)                                          |
+| 0028 | Glass surfaces are chrome, not content (perf + legibility hard rule)                             |
 
 ---
 
@@ -902,6 +916,7 @@ Inherited from EazePay (re-numbered in D2D's sequence) **plus** D2D-specific:
 ### Phase 0 — Scaffold + brand + AWS Org (Week 1–1.5)
 
 **Engineering deliverables:**
+
 - `door2digital/d2d-platform` repo initialised in new `door2digital` GitHub org
 - `.editorconfig`, `.nvmrc` (20), `.gitignore`, `.dockerignore`, ESLint/Prettier/Husky/lint-staged literally copied from EazePay
 - `pnpm-workspace.yaml` + `nx.json` + `tsconfig.base.json` with `@d2d/*` path aliases
@@ -917,6 +932,7 @@ Inherited from EazePay (re-numbered in D2D's sequence) **plus** D2D-specific:
 - **Storybook web + mobile** scaffolds
 
 **Brand + design deliverables (AI-assisted, ~5 days parallel to engineering):**
+
 - Logo (Mid-journey + Claude prompting + Figma cleanup), favicon, wordmark
 - Aurora-green palette refined with Brodie's sign-off
 - Typography decision (default: Inter + JetBrains Mono mirroring EazePay)
@@ -924,6 +940,7 @@ Inherited from EazePay (re-numbered in D2D's sequence) **plus** D2D-specific:
 - Knocker app icon (iOS + Android)
 
 **Infra + ops deliverables:**
+
 - **New AWS Org** for `door2digital` (separate from EazePay/AUREAN): root + sub-accounts (dev, staging, prod, audit, security, shared-services)
 - Route 53 zone for `d2d.io` + `door2digital.io`
 - IAM Identity Center (SSO for engineers + Brodie)
@@ -934,6 +951,7 @@ Inherited from EazePay (re-numbered in D2D's sequence) **plus** D2D-specific:
 - MiCamp account team kickoff call to confirm Gateway API integration model
 
 **Success criteria:**
+
 - `pnpm i && pnpm build && pnpm test` green locally
 - CI green on a noop PR (all 10 gates)
 - `curl https://api-dev.d2d.io/v1/healthz` returns 200
@@ -1057,14 +1075,14 @@ Single-tenant for Pilot-Charlie. Both verticals. White-label. SSO/SAML. SOC 2 Ty
 
 Plan assumes **4–6 full-time engineers** available from Phase 0 Week 2. Concrete responsibility allocation (adjust to actual headcount):
 
-| Role | Owns | Phase 0 task | Phase 1 ownership |
-|---|---|---|---|
-| **Backend lead** (full-stack TS) | `apps/api`, `apps/webhooks`, `services/auth/org/user/territory/audit/pii-vault` | Repo scaffold, Nest skeletons, Prisma schema, ADR drafts | Phase 1.1 foundation + 1.2 territory/lead |
-| **Mobile engineer** (Expo/RN) | `apps/knocker-mobile`, `libs/mobile-client`, `libs/ui-native` | Expo scaffold + EAS dev client + TestFlight pipeline | Phase 1.2 knocker app end-to-end (offline, biometric, attestation, white-label) |
-| **Frontend engineer #1** | `apps/operator-console`, `apps/org-console` | Next.js scaffolds + Storybook web + glass primitives | Phase 1.1 operator-console v0 + 1.3 org-console for Pilot-Charlie |
-| **Frontend engineer #2 / Design engineer** | `libs/ui-tokens`, `libs/ui-web`, `apps/storybook-web`, brand identity | AI-assisted brand + Figma library v0 + token contract + glass system | Phase 1 component library buildout + AppShell + AnomalyCard + DialerCockpit |
-| **Integrations + AI engineer** | `services/payment`, `services/notification`, `services/integrations`, `services/marketing` (Phase 3), `services/content-studio` (Phase 3) | MiCamp account kickoff + sandbox creds | Phase 1.3 MiCamp Gateway integration + Twilio + Resend |
-| **Platform/SRE** (full-time from Phase 1 OR fractional) | `infra/terraform`, CI gates, observability, region buildouts, AWS migration | New AWS Org + Terraform modules forked from EazePay + GitHub Actions | Phase 1 production hardening + WAF + pen-test prep |
+| Role                                                    | Owns                                                                                                                                      | Phase 0 task                                                         | Phase 1 ownership                                                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Backend lead** (full-stack TS)                        | `apps/api`, `apps/webhooks`, `services/auth/org/user/territory/audit/pii-vault`                                                           | Repo scaffold, Nest skeletons, Prisma schema, ADR drafts             | Phase 1.1 foundation + 1.2 territory/lead                                       |
+| **Mobile engineer** (Expo/RN)                           | `apps/knocker-mobile`, `libs/mobile-client`, `libs/ui-native`                                                                             | Expo scaffold + EAS dev client + TestFlight pipeline                 | Phase 1.2 knocker app end-to-end (offline, biometric, attestation, white-label) |
+| **Frontend engineer #1**                                | `apps/operator-console`, `apps/org-console`                                                                                               | Next.js scaffolds + Storybook web + glass primitives                 | Phase 1.1 operator-console v0 + 1.3 org-console for Pilot-Charlie               |
+| **Frontend engineer #2 / Design engineer**              | `libs/ui-tokens`, `libs/ui-web`, `apps/storybook-web`, brand identity                                                                     | AI-assisted brand + Figma library v0 + token contract + glass system | Phase 1 component library buildout + AppShell + AnomalyCard + DialerCockpit     |
+| **Integrations + AI engineer**                          | `services/payment`, `services/notification`, `services/integrations`, `services/marketing` (Phase 3), `services/content-studio` (Phase 3) | MiCamp account kickoff + sandbox creds                               | Phase 1.3 MiCamp Gateway integration + Twilio + Resend                          |
+| **Platform/SRE** (full-time from Phase 1 OR fractional) | `infra/terraform`, CI gates, observability, region buildouts, AWS migration                                                               | New AWS Org + Terraform modules forked from EazePay + GitHub Actions | Phase 1 production hardening + WAF + pen-test prep                              |
 
 **Compliance counsel** (existing US counsel) — reviews state paid-solicitor registrations, IRS receipt templates, TCPA scripts, ad copy held terms.
 
@@ -1072,14 +1090,14 @@ Plan assumes **4–6 full-time engineers** available from Phase 0 Week 2. Concre
 
 ### 15.2 Handoff artifacts (what each engineer reads first)
 
-| Engineer | Read order |
-|---|---|
-| **Any** | This doc → `docs/adr/0001–0028` → `docs/architecture.md` → `CONTRIBUTING.md` → service README they're touching |
+| Engineer    | Read order                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Any**     | This doc → `docs/adr/0001–0028` → `docs/architecture.md` → `CONTRIBUTING.md` → service README they're touching                                    |
 | **Backend** | `apps/api/prisma/schema.prisma` → `services/*/src/state-machine.ts` → `libs/shared-utils/src/money.ts` / `problem.ts` / `idempotent.decorator.ts` |
-| **Mobile** | `apps/knocker-mobile/README.md` → offline queue ADR-0022 → mobile attestation ADR-0025 → `libs/mobile-client` |
-| **Design** | `libs/ui-tokens/src/styles/globals.css` → glass system ADR-0028 → Figma library 01 Tokens + 02 Foundations → `apps/storybook-web` |
-| **SRE** | `infra/terraform/modules/*` → region pinning ADR-0016 → `docs/runbooks/region-failover.md` → audit chain ADR-0008 |
-| **AI** | Marketing Studio §10 → brand-safety per vertical → ADR-0023 |
+| **Mobile**  | `apps/knocker-mobile/README.md` → offline queue ADR-0022 → mobile attestation ADR-0025 → `libs/mobile-client`                                     |
+| **Design**  | `libs/ui-tokens/src/styles/globals.css` → glass system ADR-0028 → Figma library 01 Tokens + 02 Foundations → `apps/storybook-web`                 |
+| **SRE**     | `infra/terraform/modules/*` → region pinning ADR-0016 → `docs/runbooks/region-failover.md` → audit chain ADR-0008                                 |
+| **AI**      | Marketing Studio §10 → brand-safety per vertical → ADR-0023                                                                                       |
 
 ### 15.3 Code review etiquette
 
@@ -1121,6 +1139,7 @@ When implementing D2D, engineers should crib these EazePay files first:
 - `/Users/Brodie/AUREANOS_EAZEPAY_MASTER_ARCHITECTURE.md` — original master architecture doc (1797 lines)
 
 And `amala-ops` for governance/operator philosophy:
+
 - `/Users/Brodie/amala-ops/README.md` — "NASA mission control" north-star
 - `/Users/Brodie/amala-ops/data-context/` — pattern for tribal-knowledge ingestion
 
@@ -1131,6 +1150,7 @@ And `amala-ops` for governance/operator philosophy:
 ### 17.1 Per-phase verification
 
 **Phase 0 (Scaffold):**
+
 - `pnpm i && pnpm build && pnpm test` green locally
 - CI green on a noop PR (all 10 gates)
 - `curl https://api-dev.d2d.io/v1/healthz` returns 200
@@ -1140,6 +1160,7 @@ And `amala-ops` for governance/operator philosophy:
 - MiCamp Gateway API sandbox credentials in hand
 
 **Phase 1 (US enterprise pilot go-live):**
+
 - **Phase 1.1:** Pilot-Charlie IT admin logs in via SAML SSO → role mapped correctly → audit row written
 - **Phase 1.2:** 1 D2D knocker completes 50 knocks in 1 cleared state in real conditions; ≤2s P95 knock-batch sync at 100 knocks; zero PII in logs (Pino redaction smoke test); DNC scrub blocks expected addresses; offline → online sync deterministic with idempotency keys; mobile cert pinning + jailbreak detection + biometric re-auth verified on physical iOS + Android
 - **Phase 1.3:** First donation + first commercial sale end-to-end through MiCamp Gateway; processor residual computed correctly; commission accrued; payout instruction file generated; Pilot-Charlie's first monthly invoice ($2500 + bucketed rake) matches manual recalc to the cent; live leaderboard updates within 2s
@@ -1147,6 +1168,7 @@ And `amala-ops` for governance/operator philosophy:
 - **State-clearance:** every campaign delivery attempt asserts `CampaignStateClearance` exists for the target state; un-cleared state attempts → 403 + audit row
 
 **Phase 2 (AU expansion):**
+
 - First AU client live (charity or commercial)
 - Cross-region probe in CI: AU lead unreachable from US plane → 403
 - Stripe AU + GoCardless end-to-end
@@ -1154,6 +1176,7 @@ And `amala-ops` for governance/operator philosophy:
 - Audit chain Merkle replay green per region
 
 **Phase 3 (SG + AI Marketing Studio):**
+
 - First SG client live
 - Brief → generate → preview → approve → deliver loop <60s for static creative
 - Retargeting roundtrip: knock → hashed audience → Meta/Google/TikTok ad → click → returns as `Lead{attributionSource=retargeting}` → conversion → billing rake routes to 5% bucket
@@ -1162,6 +1185,7 @@ And `amala-ops` for governance/operator philosophy:
 - SOC 2 Type II observation window opened
 
 **Phase 4 (Public SaaS + AWS prod + public store):**
+
 - Self-serve US org provisioned end-to-end with no human intervention (timed test)
 - AWS cutover: audit hash-chain continuity verified across migration (chain doesn't break across Railway→ECS boundary)
 - SOC 2 Type II report issued
@@ -1180,24 +1204,24 @@ And `amala-ops` for governance/operator philosophy:
 
 ## 18. Open risks & decisions to revisit (revised v0.2)
 
-| Risk | Severity | Mitigation |
-|---|---|---|
-| **Paid-solicitor state registrations are the longest pole** — 4–12 weeks/state × 40+ states + bonds = potentially $400K–$1M in bond capital and 6 months calendar | **P0** | Counsel running parallel filings (confirmed); **state-clearance table-driven** in code (`CampaignStateClearance`); campaigns only deliver to cleared states; Pilot-Charlie accepts rolling launch as registrations land |
-| **Enterprise table-stakes compound** — SSO + SOC 2 + white-label + dedicated DB add ~6 weeks to Phase 1 | **P0** | Built into the 14–16 week Phase 1 timeline; SOC 2 Type I in Phase 1.4, Type II observation in Phase 3 |
-| **MiCamp Gateway API integration risk** — unknown sandbox quality, support response, recurring billing maturity vs Stripe | **P1** | Phase 0 kickoff call with MiCamp account team to confirm integration model; payment-adapter pattern means we can swap to Stripe US if MiCamp falls short |
-| **MiCamp ISO residual accuracy** — Brodie's processor residuals must be calculated correctly per conversion or revenue leaks | **P1** | `Conversion.processorResidualCents` computed at conversion-finalize time using rate card; daily reconciliation job vs MiCamp portal export; CI test on rate-card edge cases |
-| **Both verticals at launch doubles compliance surface in Phase 1** | **P1** | `Org.vertical` polymorphic routing — code path forks at compliance gate, not data model; vertical-specific gates in `services/compliance` |
-| **200+ knocker rollout could swamp launch** — change management for 200 field reps switching from existing process | **P1** | Phased rollout: 10 Week 14 → 50 Week 15 → 200+ Week 16; pilot training materials; dedicated SRE on-call during launch window |
-| **AI Marketing Studio could leak PII into prompts** (Phase 3) | **P1** | Lead data anonymised to tract/SA1/subzone level; opt-out flag per org; provenance audit per output |
-| **Mobile attestation breaks for power users** | P2 | Dev-build skips attestation; prod-build refuses; documented in mobile README |
-| **Multi-region Aurora cost** — three regions of serverless v2 ~$300+/mo from Day 1 | P2 | Acceptable for architecture; Phase 1 only US so Day 1 cost ~$150/mo |
-| **Mapbox cost at scale** — geocoding + tile loads can hit $1K+/mo | P2 | Cache geocoded addresses 30d; consider HERE for AU/SG if Mapbox costs blow up |
-| **On-call coverage for the pilot launch window** | **P1** | Brodie + backend lead + mobile engineer on PagerDuty SEV1 rotation Weeks 14–16; SRE owns SEV2/3 |
-| **Glass effect performance on Android** | P3 | Solid fallback per ADR-0028; only chrome surfaces; not on scrolling content |
-| **White-label App Store / Play Store submission per pilot when SaaS opens** (Phase 4) | P2 | Day 1 mobile is TestFlight + Play Internal only; per-tenant store submissions deferred until pilots demand |
-| **Engineering headcount assumption** — plan assumes 4–6 engineers, must confirm actual capacity before Phase 0 starts | **P0** | Confirm with Brodie before committing the 14–16 week timeline to Pilot-Charlie |
-| **Pilot-Charlie's contract structure** — assumed $2500/mo + 5/10/15% rakes; must confirm before billing service built | **P0** | Validate with pilot in Phase 0 kickoff; billing service designed to be config-driven so rates can change without redeploy |
-| **Open question:** Consolidated `apps/org-console` for both managers and inside-sales, or split? | P3 | Recommend consolidated with sidebar routing; pop-out dialer window for full-screen call work |
+| Risk                                                                                                                                                              | Severity | Mitigation                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Paid-solicitor state registrations are the longest pole** — 4–12 weeks/state × 40+ states + bonds = potentially $400K–$1M in bond capital and 6 months calendar | **P0**   | Counsel running parallel filings (confirmed); **state-clearance table-driven** in code (`CampaignStateClearance`); campaigns only deliver to cleared states; Pilot-Charlie accepts rolling launch as registrations land |
+| **Enterprise table-stakes compound** — SSO + SOC 2 + white-label + dedicated DB add ~6 weeks to Phase 1                                                           | **P0**   | Built into the 14–16 week Phase 1 timeline; SOC 2 Type I in Phase 1.4, Type II observation in Phase 3                                                                                                                   |
+| **MiCamp Gateway API integration risk** — unknown sandbox quality, support response, recurring billing maturity vs Stripe                                         | **P1**   | Phase 0 kickoff call with MiCamp account team to confirm integration model; payment-adapter pattern means we can swap to Stripe US if MiCamp falls short                                                                |
+| **MiCamp ISO residual accuracy** — Brodie's processor residuals must be calculated correctly per conversion or revenue leaks                                      | **P1**   | `Conversion.processorResidualCents` computed at conversion-finalize time using rate card; daily reconciliation job vs MiCamp portal export; CI test on rate-card edge cases                                             |
+| **Both verticals at launch doubles compliance surface in Phase 1**                                                                                                | **P1**   | `Org.vertical` polymorphic routing — code path forks at compliance gate, not data model; vertical-specific gates in `services/compliance`                                                                               |
+| **200+ knocker rollout could swamp launch** — change management for 200 field reps switching from existing process                                                | **P1**   | Phased rollout: 10 Week 14 → 50 Week 15 → 200+ Week 16; pilot training materials; dedicated SRE on-call during launch window                                                                                            |
+| **AI Marketing Studio could leak PII into prompts** (Phase 3)                                                                                                     | **P1**   | Lead data anonymised to tract/SA1/subzone level; opt-out flag per org; provenance audit per output                                                                                                                      |
+| **Mobile attestation breaks for power users**                                                                                                                     | P2       | Dev-build skips attestation; prod-build refuses; documented in mobile README                                                                                                                                            |
+| **Multi-region Aurora cost** — three regions of serverless v2 ~$300+/mo from Day 1                                                                                | P2       | Acceptable for architecture; Phase 1 only US so Day 1 cost ~$150/mo                                                                                                                                                     |
+| **Mapbox cost at scale** — geocoding + tile loads can hit $1K+/mo                                                                                                 | P2       | Cache geocoded addresses 30d; consider HERE for AU/SG if Mapbox costs blow up                                                                                                                                           |
+| **On-call coverage for the pilot launch window**                                                                                                                  | **P1**   | Brodie + backend lead + mobile engineer on PagerDuty SEV1 rotation Weeks 14–16; SRE owns SEV2/3                                                                                                                         |
+| **Glass effect performance on Android**                                                                                                                           | P3       | Solid fallback per ADR-0028; only chrome surfaces; not on scrolling content                                                                                                                                             |
+| **White-label App Store / Play Store submission per pilot when SaaS opens** (Phase 4)                                                                             | P2       | Day 1 mobile is TestFlight + Play Internal only; per-tenant store submissions deferred until pilots demand                                                                                                              |
+| **Engineering headcount assumption** — plan assumes 4–6 engineers, must confirm actual capacity before Phase 0 starts                                             | **P0**   | Confirm with Brodie before committing the 14–16 week timeline to Pilot-Charlie                                                                                                                                          |
+| **Pilot-Charlie's contract structure** — assumed $2500/mo + 5/10/15% rakes; must confirm before billing service built                                             | **P0**   | Validate with pilot in Phase 0 kickoff; billing service designed to be config-driven so rates can change without redeploy                                                                                               |
+| **Open question:** Consolidated `apps/org-console` for both managers and inside-sales, or split?                                                                  | P3       | Recommend consolidated with sidebar routing; pop-out dialer window for full-screen call work                                                                                                                            |
 
 ---
 

@@ -37,7 +37,7 @@ $2,500/mo platform fee + **door 15% · inside-sales 10% · retargeting 5%** rake
 
 ## Current status (2026-06-07)
 
-- 11 PRs open on `Brodie-Eaze/d2d-platform` — security floor + ~25 audit fixes + hardening + Next 16 + docs — **none merged**.
+- 11 PRs open on `Brodie-Eaze/door-2-digital-platform` — security floor + ~25 audit fixes + hardening + Next 16 + docs — **none merged**.
 - Backend ~20% wired end-to-end; AWS IaC `terraform validate`-clean but not applied.
 - Demo live: https://d2d-production-1fab.up.railway.app (pre-PR build).
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — Door 2 Digital Platform
 
-> Project context for Claude Code. Read this first. Last updated 2026-06-05.
+> Project context for Claude Code. Read this first. Last updated 2026-06-07.
 
 ## What this is
 
@@ -12,8 +12,8 @@ Operator-first (D2D's own knocker team runs campaigns for client orgs), SaaS-sel
 
 ## Where the code lives
 
-- **Repo: `/Users/Brodie/D2D/d2d-platform`** (this directory). Note: `~/HQ/INDEX.md` lists `~/code/d2d-platform` — that path is stale; the live repo is here.
-- GitHub: `Brodie-Eaze/d2d-platform`
+- **Repo: `/Users/Brodie/D2D/door-2-digital-platform`** (this directory). Local folder `~/D2D/d2d-platform` was the old name — now `door-2-digital-platform`.
+- GitHub: `Brodie-Eaze/door-2-digital-platform`
 
 ## Stack (locked)
 
@@ -40,9 +40,9 @@ Operator-first (D2D's own knocker team runs campaigns for client orgs), SaaS-sel
 - **Multi-tenant**: every regulated row carries `orgId`, `regionCode`, `brandCode`. Postgres RLS belt enforces tenant isolation.
 - Money / regulator / customer comms = **human-only**, queued, never autonomous.
 
-## Current state (2026-06-05)
+## Current state (2026-06-07)
 
-- **10 stacked PRs open (`Brodie-Eaze/d2d-platform/pulls`), NONE merged**: PR #9 (independent: menu fix + M2 IaC + M3 scale) → PR #1 (SOC2 floor) → #2…#8 (hardening) → #10 (final WARNs + SEC-010 + Next 16). Merge **#9 first**, then #1→#10 in order. One 2-line `apps/api/src/index.ts` conflict to hand-resolve at #10.
+- **11 PRs open (`Brodie-Eaze/door-2-digital-platform/pulls`), NONE merged**: PR #9 (independent: menu fix + M2 IaC + M3 scale) → PR #1 (SOC2 floor) → #2…#8 (hardening) → #10 (final WARNs + SEC-010 + Next 16) → #11 (docs: CLAUDE.md + PRD + intelligence strategy). Merge **#9 first**, then #1→#10 in order, #11 independently. One 2-line `apps/api/src/index.ts` conflict to hand-resolve at #10.
 - **Security**: ~25 audit findings closed + a final adversarial review caught + fixed 4 BLOCKERs. Floor = RLS + token-revocation epoch + invite/role guards + demo-token rejection + SAML replay defence + login lockout + rate limits.
 - **AWS**: IaC is `terraform validate`-clean but **not applied** (no AWS account yet). Deploy steps in `infra/terraform/README.md` + the 6 human-only clicks.
 - **Backend wiring**: ~20% end-to-end. Many web-operator screens still on mock/seed data; M5 wired ~10 to live Prisma. Real production needs: AWS account → apply → MiCamp creds → domain → load test.

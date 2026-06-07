@@ -21,7 +21,7 @@ Welcome to the codebase. Phase 0 (Scaffold) is complete. This document tells you
 ✅ **28 ADRs** — full prose for 0001/0002/0003/0007/0008/0009/0010/0011/0012/0013/0014/0016/0019/0022/0028 (the load-bearing decisions), stubs for the rest, README index + template
 ✅ **Docs** — README, CONTRIBUTING, SECURITY, full plan at `docs/architecture.md` (1222 lines)
 
-Repo at `/Users/Brodie/D2D/d2d-platform/`. Plan at `/Users/Brodie/D2D/00-MASTER-PLAN.md` and in-repo at `docs/architecture.md`. Local git initialised on `main`.
+Repo at `/Users/Brodie/D2D/door-2-digital-platform/`. Plan at `/Users/Brodie/D2D/00-MASTER-PLAN.md` and in-repo at `docs/architecture.md`. Local git initialised on `main`.
 
 ---
 
@@ -142,23 +142,23 @@ See plan §14. AWS cutover (Railway → ECS Fargate + Aurora + Vercel + EAS + Cl
 
 ## Where to find things
 
-| Need to… | Look here |
-|---|---|
-| Understand the architecture | `docs/architecture.md` |
-| Understand a specific decision | `docs/adr/NNNN-*.md` |
-| Add a new domain | `apps/api/src/domains/*` (copy `auth/` or `org/`) |
-| Add a new shared type | `packages/shared-types/src/{ids,enums,schemas}.ts` |
-| Add a new helper | `packages/shared-utils/src/*.ts` |
-| Add a new UI component | `packages/ui-web/src/components/*.tsx` (export from `index.ts`) |
-| Add a new web page | `apps/web-operator/src/app/<route>/page.tsx` |
-| Add a new env var | `.env.example` + `apps/api/src/config/env.ts` + `turbo.json` `globalPassThroughEnv` |
-| Add a new migration | `pnpm --filter api db:migrate:dev --name <description>` |
-| Add a new ADR | `cp docs/adr/template.md docs/adr/NNNN-<slug>.md` |
-| Add a CI gate | `.github/workflows/ci.yml` |
-| Add a Dockerfile / Railway service | root `Dockerfile.<app>` + `infra/railway/railway.<app>.toml` |
-| Check pen-test readiness | `docs/PEN_TEST_READINESS.md` (Phase 1.4) |
-| Find a runbook | `docs/runbooks/*.md` |
-| Compliance template | `docs/compliance/*.md` |
+| Need to…                           | Look here                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| Understand the architecture        | `docs/architecture.md`                                                              |
+| Understand a specific decision     | `docs/adr/NNNN-*.md`                                                                |
+| Add a new domain                   | `apps/api/src/domains/*` (copy `auth/` or `org/`)                                   |
+| Add a new shared type              | `packages/shared-types/src/{ids,enums,schemas}.ts`                                  |
+| Add a new helper                   | `packages/shared-utils/src/*.ts`                                                    |
+| Add a new UI component             | `packages/ui-web/src/components/*.tsx` (export from `index.ts`)                     |
+| Add a new web page                 | `apps/web-operator/src/app/<route>/page.tsx`                                        |
+| Add a new env var                  | `.env.example` + `apps/api/src/config/env.ts` + `turbo.json` `globalPassThroughEnv` |
+| Add a new migration                | `pnpm --filter api db:migrate:dev --name <description>`                             |
+| Add a new ADR                      | `cp docs/adr/template.md docs/adr/NNNN-<slug>.md`                                   |
+| Add a CI gate                      | `.github/workflows/ci.yml`                                                          |
+| Add a Dockerfile / Railway service | root `Dockerfile.<app>` + `infra/railway/railway.<app>.toml`                        |
+| Check pen-test readiness           | `docs/PEN_TEST_READINESS.md` (Phase 1.4)                                            |
+| Find a runbook                     | `docs/runbooks/*.md`                                                                |
+| Compliance template                | `docs/compliance/*.md`                                                              |
 
 ---
 
@@ -179,7 +179,7 @@ These need answers before Phase 1.1 starts (none block Phase 0):
 
 ## Verification — Phase 0 is "done" when:
 
-- [x] Repo scaffold at `/Users/Brodie/D2D/d2d-platform/`
+- [x] Repo scaffold at `/Users/Brodie/D2D/door-2-digital-platform/`
 - [x] 28 ADRs (15 full prose, 13 stubs ready to flesh out)
 - [x] Prisma schema covers all 28 entities from plan §4
 - [x] `@d2d/ui-tokens` + `@d2d/ui-web` mirror EazePay Intelligence design DNA exactly
@@ -200,7 +200,7 @@ These need answers before Phase 1.1 starts (none block Phase 0):
 ## How to push to GitHub once the org exists
 
 ```bash
-cd /Users/Brodie/D2D/d2d-platform
+cd /Users/Brodie/D2D/door-2-digital-platform
 gh repo create door2digital/d2d-platform --private --source=. --remote=origin
 git add -A
 git commit -m "Phase 0 scaffold
