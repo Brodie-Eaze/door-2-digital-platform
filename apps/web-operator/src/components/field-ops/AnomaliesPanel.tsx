@@ -8,6 +8,14 @@ import type { AnomalyItem } from './types';
 interface AnomaliesPanelProps {
   anomalies: AnomalyItem[];
   scopeLabel: string;
+  /**
+   * Fired when an anomaly's action button is clicked (Reassign / Nudge /
+   * Open 1:1). The page supplies the real handler — typically a toast that
+   * states the action was queued. Optional so the panel still renders if a
+   * consumer hasn't wired it yet (the button stays inert rather than dead-
+   * looking only when no handler AND no href is given).
+   */
+  onAction?: (anomaly: AnomalyItem) => void;
 }
 
 const ICON_FOR_SEVERITY = {
@@ -26,7 +34,11 @@ const TONE_FOR_SEVERITY = {
  * Anomalies · AI watch. Shows a stack of detected anomalies with a tone-coded
  * icon and an action link. Each card can be dismissed (kept client-side only).
  */
-export function AnomaliesPanel({ anomalies, scopeLabel }: AnomaliesPanelProps): JSX.Element {
+export function AnomaliesPanel({
+  anomalies,
+  scopeLabel,
+  onAction,
+}: AnomaliesPanelProps): JSX.Element {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const visible = anomalies.filter((a) => !dismissed.has(a.id));
@@ -68,6 +80,7 @@ export function AnomaliesPanel({ anomalies, scopeLabel }: AnomaliesPanelProps): 
                     ) : (
                       <button
                         type="button"
+                        onClick={() => onAction?.(a)}
                         className="text-[10px] text-accent font-medium hover:underline"
                       >
                         {a.actionLabel} &rarr;

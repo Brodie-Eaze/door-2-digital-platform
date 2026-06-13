@@ -64,7 +64,7 @@ function sessionFromClaims(claims: AccessClaims): Session {
  * Session ONLY when the cookie cryptographically verifies; otherwise null.
  */
 export async function getSession(): Promise<Session | null> {
-  const token = cookies().get('d2d_at')?.value;
+  const token = (await cookies()).get('d2d_at')?.value;
   const claims = verifySessionToken(token, sessionSigningSecret());
   if (!claims) return null;
   return sessionFromClaims(claims);

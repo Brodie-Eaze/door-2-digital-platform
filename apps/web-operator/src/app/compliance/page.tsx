@@ -1,11 +1,46 @@
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Banner, Section, StatusPill, KpiCard } from '@d2d/ui-web';
+import { db } from '@d2d/database';
 import { OperatorShell } from '@/components/OperatorShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { STATE_CLEARANCE } from '@/lib/fixtures';
 
-export default function CompliancePage(): JSX.Element {
-  const approved = STATE_CLEARANCE.filter((s) => s.status === 'approved').length;
-  const pending = STATE_CLEARANCE.filter((s) => s.status !== 'approved').length;
+// Server component reads the DB at request time — never statically built.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+interface ClearanceRow {
+  state: string;
+  status: string;
+}
+
+/**
+ * Live read of PaidSolicitorRegistration with graceful fixture fallback.
+ * Empty table or DB error → seed matrix, honestly badged DEMO DATA.
+ */
+async function loadClearances(): Promise<{ rows: ClearanceRow[]; source: 'live' | 'fixture' }> {
+  try {
+    const regs = await db.paidSolicitorRegistration.findMany({
+      where: { regionCode: 'US' },
+      select: { state: true, status: true },
+      orderBy: { state: 'asc' },
+    });
+    if (regs.length > 0) {
+      return { rows: regs, source: 'live' };
+    }
+  } catch (err) {
+    console.error('[compliance] PaidSolicitorRegistration read failed:', err);
+  }
+  return {
+    rows: STATE_CLEARANCE.map((s) => ({ state: s.state, status: s.status })),
+    source: 'fixture',
+  };
+}
+
+export default async function CompliancePage(): Promise<JSX.Element> {
+  const { rows: clearances, source } = await loadClearances();
+  const approved = clearances.filter((s) => s.status === 'approved').length;
+  const pending = clearances.filter((s) => s.status !== 'approved').length;
 
   return (
     <OperatorShell pageTitle="Compliance">
@@ -34,6 +69,7 @@ export default function CompliancePage(): JSX.Element {
         <Section
           title="US state-by-state matrix"
           subtitle="Paid-solicitor registration status"
+          action={<DataSourceBadge source={source} />}
           paddedBody={false}
         >
           <div className="p-5">
@@ -90,7 +126,7 @@ export default function CompliancePage(): JSX.Element {
                 'WI',
                 'WY',
               ].map((state) => {
-                const entry = STATE_CLEARANCE.find((s) => s.state === state);
+                const entry = clearances.find((s) => s.state === state);
                 const tone = !entry
                   ? 'muted'
                   : entry.status === 'approved'

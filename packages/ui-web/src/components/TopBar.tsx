@@ -59,7 +59,12 @@ export function TopBar({
           <span className="text-[12px] text-muted flex-1 text-left">
             Jump to · search lead · address · campaign…
           </span>
-          <kbd className="inline-flex items-center gap-0.5 text-[10px] text-soft border border-line2 rounded px-1.5 py-0.5 bg-surface font-mono">
+          {/* navigator.platform is unavailable during SSR — the value legitimately
+              differs client-side, so suppress the hydration warning here. */}
+          <kbd
+            suppressHydrationWarning
+            className="inline-flex items-center gap-0.5 text-[10px] text-soft border border-line2 rounded px-1.5 py-0.5 bg-surface font-mono"
+          >
             {isMac ? '⌘' : 'Ctrl'}K
           </kbd>
         </button>

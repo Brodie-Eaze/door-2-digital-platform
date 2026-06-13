@@ -7,13 +7,23 @@ import type { AiZoneSuggestion } from './types';
 interface AiNextZonesPanelProps {
   zones: AiZoneSuggestion[];
   scopeLabel: string;
+  /**
+   * Fired when an "Assign N reps" CTA is clicked. The page supplies the real
+   * handler (typically a toast confirming the assignment was queued for that
+   * zone). Optional so the panel still renders standalone.
+   */
+  onAssign?: (zone: AiZoneSuggestion) => void;
 }
 
 /**
  * AI: where to send reps next. Renders propensity zone cards with an
- * "Assign N reps" CTA. Pure presentational — data comes from page.
+ * "Assign N reps" CTA that dispatches to the page via onAssign.
  */
-export function AiNextZonesPanel({ zones, scopeLabel }: AiNextZonesPanelProps): JSX.Element {
+export function AiNextZonesPanel({
+  zones,
+  scopeLabel,
+  onAssign,
+}: AiNextZonesPanelProps): JSX.Element {
   return (
     <Section
       title="AI: where to send reps next"
@@ -48,7 +58,11 @@ export function AiNextZonesPanel({ zones, scopeLabel }: AiNextZonesPanelProps): 
                 </span>
               </div>
             </div>
-            <button className="mt-2 w-full text-[11px] py-1.5 rounded bg-ink text-surface font-semibold">
+            <button
+              type="button"
+              onClick={() => onAssign?.(zone)}
+              className="mt-2 w-full text-[11px] py-1.5 rounded bg-ink text-surface font-semibold hover:opacity-90 transition"
+            >
               Assign {zone.recommendedReps} rep{zone.recommendedReps === 1 ? '' : 's'} &rarr;
             </button>
           </div>

@@ -114,6 +114,17 @@ export function isCrossTenantOperator(session: Session): boolean {
   return CROSS_TENANT_ROLES.has(session.role);
 }
 
+/**
+ * Roles permitted to mutate the roster (create / edit / delete shifts).
+ * knocker / inside_sales / accountant / auditor / viewer are read-only on
+ * scheduling. Default-deny: unknown roles cannot write.
+ */
+const ROSTER_WRITE_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin', 'manager']);
+
+export function canWriteRoster(session: Session): boolean {
+  return ROSTER_WRITE_ROLES.has(session.role);
+}
+
 export function requireIdempotencyKey(req: NextRequest): string | NextResponse {
   const key = req.headers.get('idempotency-key');
   if (!key || key.length < 8) return idempotencyKeyMissing();

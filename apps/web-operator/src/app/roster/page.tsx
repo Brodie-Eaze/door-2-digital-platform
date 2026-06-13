@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { toast } from '@/components/Toaster';
 
 type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
@@ -54,8 +55,96 @@ const REPS: Rep[] = [
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Compliance thresholds — labor-hour limits for scheduling guardrails.
+// ─────────────────────────────────────────────────────────────────────────────
+const MAX_HOURS_PER_DAY = 10;
+const MAX_HOURS_PER_WEEK = 40;
+
+interface RosterUser {
+  id: string;
+  role: string;
+  initials: string;
+}
+
+/** Look up a rep within a known list, falling back to a synthesized record so a
+ * rep that exists only in live shift data (not in the roster directory) still
+ * renders rather than collapsing onto REPS[0]. */
+function repByInitialsIn(initials: string, reps: Rep[]): Rep {
+  return (
+    reps.find((r) => r.initials === initials) ??
+    REPS.find((r) => r.initials === initials) ?? { initials, name: initials, account: '—' }
+  );
+}
+
 function repByInitials(initials: string): Rep {
   return REPS.find((r) => r.initials === initials) ?? REPS[0]!;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conflict detection — the scheduling moat. Pure, side-effect free, testable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert 'HH:MM' to minutes-since-midnight. */
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number) as [number, number];
+  return h * 60 + m;
+}
+
+/** Do two [start,end) ranges (in minutes) overlap? Touching edges don't count. */
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+interface ConflictResult {
+  hasConflict: boolean;
+  /** Human-readable reasons, e.g. "JM already 09:00–17:00 Mon". */
+  reasons: string[];
+}
+
+/**
+ * Flags two classes of scheduling conflict for a candidate shift against the
+ * rest of the roster (excluding the candidate's own id):
+ *   (a) same rep + same day + overlapping start/end time
+ *   (b) same rep assigned two different territories on the same day
+ * Warn-don't-block: callers surface this but still allow the save.
+ */
+function detectConflict(candidate: Shift, allShifts: Shift[]): ConflictResult {
+  const reasons: string[] = [];
+  const sameRepDay = allShifts.filter(
+    (s) =>
+      s.id !== candidate.id && s.repInitials === candidate.repInitials && s.day === candidate.day,
+  );
+
+  const cStart = toMinutes(candidate.start);
+  const cEnd = toMinutes(candidate.end);
+  const dayLabel = DAY_LABELS[candidate.day] ?? `Day ${candidate.day}`;
+
+  for (const other of sameRepDay) {
+    // (a) Overlapping time window.
+    if (rangesOverlap(cStart, cEnd, toMinutes(other.start), toMinutes(other.end))) {
+      reasons.push(`${candidate.repName} already ${other.start}–${other.end} ${dayLabel}`);
+    }
+    // (b) Two different territories same day.
+    if (other.territory !== candidate.territory) {
+      reasons.push(
+        `${candidate.repName} double-booked ${candidate.territory} + ${other.territory} ${dayLabel}`,
+      );
+    }
+  }
+
+  // De-duplicate identical reason strings.
+  const unique = [...new Set(reasons)];
+  return { hasConflict: unique.length > 0, reasons: unique };
+}
+
+/** Set of shift ids that are currently in conflict, for badge rendering. */
+function conflictedShiftIds(allShifts: Shift[]): Set<string> {
+  const ids = new Set<string>();
+  for (const s of allShifts) {
+    if (detectConflict(s, allShifts).hasConflict) ids.add(s.id);
+  }
+  return ids;
 }
 
 function buildSeed(): Shift[] {
@@ -411,9 +500,22 @@ function hoursOf(shift: Shift): number {
   return Math.max(0, eh + em / 60 - (sh + sm / 60));
 }
 
+/** Monday of the current week, local time. weekOffset 0 = this week. */
+function currentMonday(): Date {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dow = (d.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
+  d.setDate(d.getDate() - dow);
+  return d;
+}
+
+/** Index of today within the Mon–Sun grid (0 = Mon). */
+function todayDayIndex(): number {
+  return (new Date().getDay() + 6) % 7;
+}
+
 function weekDates(offset: number): Date[] {
-  // Anchor on Mon May 19, 2026
-  const base = new Date(2026, 4, 19);
+  const base = currentMonday();
   base.setDate(base.getDate() + offset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base);
@@ -424,8 +526,23 @@ function weekDates(offset: number): Date[] {
 
 const TERRITORIES = ['Austin East', 'Austin North', 'Dallas Metro', 'Dallas North', 'Houston SE'];
 
+/** ISO date string (YYYY-MM-DD) for the Monday at the given weekOffset. */
+function weekStartISO(offset: number): string {
+  const base = currentMonday();
+  base.setDate(base.getDate() + offset * 7);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function RosterPage(): JSX.Element {
+  // Seeded from buildSeed() but overridden on mount from /api/shifts.
   const [shifts, setShifts] = useState<Shift[]>(() => buildSeed());
+  // Roster directory of knockers. Seeded from REPS, overridden on mount from
+  // /api/users?role=knocker. `repsLive` tells the UI which mode it's in.
+  const [reps, setReps] = useState<Rep[]>(REPS);
+  const [repsLive, setRepsLive] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [dayIndex, setDayIndex] = useState(0);
@@ -452,8 +569,9 @@ export default function RosterPage(): JSX.Element {
   }, [dates]);
   const dayLabels = useMemo(() => dates.map((d, i) => `${DAY_LABELS[i]} ${d.getDate()}`), [dates]);
 
-  // Live KPIs — "today" = weekOffset 0, day 0 (Mon)
-  const todayShifts = shifts.filter((s) => s.day === 0 && weekOffset === 0);
+  // Live KPIs — "today" = the real weekday within the current week.
+  const todayIdx = todayDayIndex();
+  const todayShifts = shifts.filter((s) => s.day === todayIdx && weekOffset === 0);
   const scheduledToday = todayShifts.length;
   const hoursToday = todayShifts.reduce((a, s) => a + hoursOf(s), 0);
   const onLunchNow = todayShifts.filter((s) => s.status === 'lunch').length;
@@ -474,48 +592,275 @@ export default function RosterPage(): JSX.Element {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // Fetch the knocker directory once on mount. The endpoint returns PII-safe
+  // { id, role, initials } rows (no plaintext names). We synthesize display
+  // names from initials since names live behind the PII vault. If the endpoint
+  // returns empty (no knockers seeded yet) we keep the seed REPS so the demo
+  // stays populated.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchUsers(): Promise<void> {
+      try {
+        const res = await fetch('/api/users?role=knocker');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { users?: RosterUser[] };
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          const mapped: Rep[] = data.users.map((u) => ({
+            initials: u.initials,
+            name: `Knocker ${u.id.slice(-4)}`,
+            account: '—',
+          }));
+          setReps(mapped);
+          setRepsLive(true);
+        }
+        // Empty → no knockers in DB yet; keep seed REPS for the demo.
+      } catch {
+        // Network failure — keep seed REPS.
+      }
+    }
+
+    void fetchUsers();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch shifts from /api/shifts whenever the week changes. Falls back to
+  // seed data if the API returns an empty array (no shifts in DB yet).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchShifts(): Promise<void> {
+      try {
+        const ws = weekStartISO(weekOffset);
+        const res = await fetch(`/api/shifts?weekStart=${ws}`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { shifts?: Shift[] };
+        if (Array.isArray(data.shifts) && data.shifts.length > 0) {
+          setShifts(data.shifts);
+        }
+        // Empty array → no shifts saved for this week yet; keep seed for demo.
+      } catch {
+        // Network failure — keep current state.
+      }
+    }
+
+    void fetchShifts();
+    return (): void => {
+      cancelled = true;
+    };
+  }, [weekOffset]);
+
   function moveShift(id: string, targetRepInitials: string, targetDay: number): void {
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const rep = repByInitials(targetRepInitials);
-        return {
-          ...s,
-          repInitials: rep.initials,
-          repName: rep.name,
-          account: rep.account,
-          day: targetDay,
-        };
-      }),
+    const prev = shifts.find((s) => s.id === id);
+    if (!prev || (prev.repInitials === targetRepInitials && prev.day === targetDay)) return;
+    const rep = repByInitialsIn(targetRepInitials, reps);
+    const before = {
+      repInitials: prev.repInitials,
+      repName: prev.repName,
+      account: prev.account,
+      day: prev.day,
+    };
+
+    // Warn-don't-block: surface conflict + hours-over-limit for the landing cell.
+    const candidate: Shift = {
+      ...prev,
+      repInitials: rep.initials,
+      repName: rep.name,
+      account: rep.account,
+      day: targetDay,
+    };
+    warnOnConflict(candidate);
+    warnOnHours(candidate);
+
+    // Optimistic update
+    setShifts((p) =>
+      p.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              repInitials: rep.initials,
+              repName: rep.name,
+              account: rep.account,
+              day: targetDay,
+            }
+          : s,
+      ),
     );
+
+    const rollback = (): void => {
+      setShifts((p) => p.map((s) => (s.id === id ? { ...s, ...before } : s)));
+    };
+
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repInitials: rep.initials,
+        repName: rep.name,
+        account: rep.account,
+        day: targetDay,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        toast.success(`Moved ${rep.name} → ${DAY_LABELS[targetDay]}. Tap to undo`, {
+          onClick: () => {
+            rollback();
+            void fetch(`/api/shifts/${id}`, {
+              method: 'PATCH',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(before),
+            }).catch(() => toast.error('Undo failed to save'));
+          },
+        });
+      })
+      .catch(() => {
+        rollback();
+        toast.error('Failed to move shift — change reverted');
+      });
   }
 
   function updateShift(id: string, patch: Partial<Shift>): void {
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    const prev = shifts.find((s) => s.id === id);
+    // Optimistic update
+    setShifts((p) => p.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+      })
+      .catch(() => {
+        if (prev) setShifts((p) => p.map((s) => (s.id === id ? prev : s)));
+        toast.error('Failed to save shift — change reverted');
+      });
+  }
+
+  /** Warn (toast.error) if the candidate shift conflicts. Never blocks. */
+  function warnOnConflict(candidate: Shift): void {
+    const result = detectConflict(candidate, shifts);
+    if (result.hasConflict) {
+      toast.error(`Conflict: ${result.reasons[0]}`);
+    }
+  }
+
+  /** Warn (toast.info) if the candidate pushes the rep over the daily or weekly
+   * hour limit. Never blocks. */
+  function warnOnHours(candidate: Shift): void {
+    const repShifts = shifts.filter(
+      (s) => s.repInitials === candidate.repInitials && s.id !== candidate.id,
+    );
+    const weekTotal = repShifts.reduce((a, s) => a + hoursOf(s), 0) + hoursOf(candidate);
+    const dayTotal =
+      repShifts.filter((s) => s.day === candidate.day).reduce((a, s) => a + hoursOf(s), 0) +
+      hoursOf(candidate);
+
+    if (dayTotal > MAX_HOURS_PER_DAY) {
+      toast.info(
+        `${candidate.repName} now ${dayTotal.toFixed(1)}h on ${DAY_LABELS[candidate.day]} — over ${MAX_HOURS_PER_DAY}h/day`,
+      );
+    } else if (weekTotal > MAX_HOURS_PER_WEEK) {
+      toast.info(
+        `${candidate.repName} now ${weekTotal.toFixed(1)}h this week — over ${MAX_HOURS_PER_WEEK}h/week`,
+      );
+    }
   }
 
   function addShift(s: Omit<Shift, 'id' | 'repName' | 'account'>): void {
-    const rep = repByInitials(s.repInitials);
+    const rep = repByInitialsIn(s.repInitials, reps);
+    const optimisticId = `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    // Warn-don't-block: check the new shift against the existing roster.
+    const candidate: Shift = { ...s, id: optimisticId, repName: rep.name, account: rep.account };
+    warnOnConflict(candidate);
+    warnOnHours(candidate);
+    // Optimistic update
     setShifts((prev) => [
       ...prev,
       {
         ...s,
-        id: `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: optimisticId,
         repName: rep.name,
         account: rep.account,
       },
     ]);
+    // Persist to API; replace optimistic ID with the real one when it lands.
+    // On failure, remove the ghost row — a shift with a temp ID can never be
+    // edited or deleted (every PATCH/DELETE on it would 404).
+    void fetch('/api/shifts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        weekStart: weekStartISO(weekOffset),
+        repInitials: s.repInitials,
+        repName: rep.name,
+        account: rep.account,
+        day: s.day,
+        start: s.start,
+        end: s.end,
+        territory: s.territory,
+        lunch: s.lunch ?? null,
+        status: s.status,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { shift?: { id: string } };
+        if (data.shift?.id) {
+          setShifts((prev) =>
+            prev.map((sh) => (sh.id === optimisticId ? { ...sh, id: data.shift!.id } : sh)),
+          );
+        }
+        toast.success(`Shift added — ${rep.name} · ${DAY_LABELS[s.day]} ${s.start}–${s.end}`);
+      })
+      .catch(() => {
+        setShifts((prev) => prev.filter((sh) => sh.id !== optimisticId));
+        toast.error('Failed to save shift — removed from grid. Try again.');
+      });
   }
 
   function deleteShift(id: string): void {
+    const removed = shifts.find((s) => s.id === id);
+    // Optimistic removal
     setShifts((prev) => prev.filter((s) => s.id !== id));
+    void fetch(`/api/shifts/${id}`, { method: 'DELETE' })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+      })
+      .catch(() => {
+        if (removed) setShifts((prev) => [...prev, removed]);
+        toast.error('Failed to delete shift — restored');
+      });
   }
 
   function clockOut(id: string): void {
     const now = new Date();
     const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setClockedOut((prev) => ({ ...prev, [id]: stamp }));
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, status: 'completed' } : s)));
+    const prev = shifts.find((s) => s.id === id);
+    setClockedOut((p) => ({ ...p, [id]: stamp }));
+    // Optimistic status update
+    setShifts((p) => p.map((s) => (s.id === id ? { ...s, status: 'completed' } : s)));
+    // Persist completed status + actual end time to API
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', end: stamp }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        toast.success(`Clocked out at ${stamp}`);
+      })
+      .catch(() => {
+        if (prev) setShifts((p) => p.map((s) => (s.id === id ? prev : s)));
+        setClockedOut((p) => {
+          const { [id]: _drop, ...rest } = p;
+          return rest;
+        });
+        toast.error('Clock-out failed to save — reverted');
+      });
   }
 
   // Drag handlers
@@ -555,6 +900,16 @@ export default function RosterPage(): JSX.Element {
   const editingShift = shifts.find((s) => s.id === editShiftId) ?? null;
   const summaryShifts = summaryRep ? shifts.filter((s) => s.repInitials === summaryRep) : [];
 
+  // Conflict set + weekly-hours map, recomputed when shifts change.
+  const conflictIds = useMemo(() => conflictedShiftIds(shifts), [shifts]);
+  const weeklyHoursByRep = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of shifts) {
+      map[s.repInitials] = (map[s.repInitials] ?? 0) + hoursOf(s);
+    }
+    return map;
+  }, [shifts]);
+
   return (
     <PlatformShell pageTitle="Roster & shifts">
       <div className="space-y-5 max-w-[1700px]">
@@ -570,7 +925,7 @@ export default function RosterPage(): JSX.Element {
           <KpiCard
             label="Scheduled today"
             value={scheduledToday}
-            hint={`of ${REPS.length} total`}
+            hint={`of ${reps.length} total`}
           />
           <KpiCard
             label="Hours today"
@@ -663,11 +1018,11 @@ export default function RosterPage(): JSX.Element {
                     {dayLabels.map((d, i) => (
                       <th
                         key={d}
-                        className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === 0 && weekOffset === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
+                        className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === todayIdx && weekOffset === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
                         style={{ minWidth: 130 }}
                       >
                         {d}{' '}
-                        {i === 0 && weekOffset === 0 && (
+                        {i === todayIdx && weekOffset === 0 && (
                           <span className="text-[9px] text-accent">· TODAY</span>
                         )}
                       </th>
@@ -701,7 +1056,7 @@ export default function RosterPage(): JSX.Element {
                           const cellKey = `${r.initials}:${di}`;
                           const cellShifts = repShifts.filter((s) => s.day === di);
                           const isHover = hoverCell === cellKey;
-                          const isToday = di === 0 && weekOffset === 0;
+                          const isToday = di === todayIdx && weekOffset === 0;
                           return (
                             <td
                               key={di}

@@ -21,6 +21,14 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createHmac } from 'node:crypto';
 import { isDemoLoginEnabled, sessionSigningSecret } from '@/lib/session-verify';
+import { rateLimit } from '@/lib/rate-limit';
+
+// Brute-force floor for the demo session issuer: 5 attempts / 15 min per
+// identity. Single-process (see rate-limit.ts) — sufficient for the dev/
+// preview surfaces this route is alive on; a multi-replica prod floor needs
+// Upstash/Cloudflare (humanGated). The route is already dead in prod (404).
+const DEMO_LOGIN_MAX_ATTEMPTS = 5;
+const DEMO_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 // Prisma-free, but node:crypto is used → force Node runtime (not Edge).
 export const runtime = 'nodejs';
@@ -149,6 +157,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 400, headers: { 'Content-Type': 'application/problem+json' } },
     );
   }
+
+  // Brute-force floor: 5 attempts per email per 15 min. Counted BEFORE the
+  // credential check so failed and successful attempts both consume budget.
+  // Keyed on the normalised email (namespaced) — per-identity, not per-IP.
+  const rateKey = `demo-login:${body.email.trim().toLowerCase()}`;
+  const rl = rateLimit(rateKey, DEMO_LOGIN_MAX_ATTEMPTS, DEMO_LOGIN_WINDOW_MS);
+  if (!rl.ok) {
+    const retryAfterSec = Math.max(1, Math.ceil(rl.retryAfterMs / 1000));
+    return new NextResponse(
+      JSON.stringify({
+        type: 'https://docs.d2d.io/problems/rate-limited',
+        title: 'Too many attempts',
+        status: 429,
+        detail: `Too many demo login attempts for this email. Retry in ${retryAfterSec}s.`,
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/problem+json',
+          'Retry-After': String(retryAfterSec),
+        },
+      },
+    );
+  }
+
   const acct = DEMO_TABLE.find((a) => a.email === body.email);
   if (!acct || acct.password !== body.password) {
     return NextResponse.json(

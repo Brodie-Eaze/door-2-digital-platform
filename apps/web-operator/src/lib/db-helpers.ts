@@ -57,6 +57,7 @@ export const newBrandKitId = (): string => `brk_${ulid()}`;
 export const newBillingId = (): string => `bil_${ulid()}`;
 export const newAuditId = (): string => `aud_${ulid()}`;
 export const newIdempotencyKey = (): string => `idem_${ulid()}`;
+export const newShiftId = (): string => `ksft_${ulid()}`;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Slug helpers

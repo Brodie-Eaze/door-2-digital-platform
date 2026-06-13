@@ -15,8 +15,8 @@
  */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, Input } from '@d2d/ui-web';
-import { Lock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Button, Input } from '@d2d/ui-web';
+import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 interface DemoUser {
   email: string;
@@ -82,8 +82,15 @@ function LoginPageInner(): JSX.Element {
   const router = useRouter();
   const search = useSearchParams();
   const next = search.get('next') ?? '/accounts';
-  // If next is itself /login (or starts with /login), redirect to /accounts after success.
-  const safeNext = useMemo(() => (next.startsWith('/login') ? '/accounts' : next), [next]);
+  // Only same-origin paths are honoured. Anything else (absolute URLs,
+  // protocol-relative //evil.com, backslash tricks, /login loops) falls back
+  // to /accounts — closes the open-redirect vector on ?next=.
+  const safeNext = useMemo(() => {
+    if (!next.startsWith('/')) return '/accounts';
+    if (next.startsWith('//') || next.startsWith('/\\')) return '/accounts';
+    if (next.startsWith('/login')) return '/accounts';
+    return next;
+  }, [next]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -193,180 +200,273 @@ function LoginPageInner(): JSX.Element {
 
   return (
     <div className="min-h-screen flex bg-paper text-ink">
-      {/* LEFT — brand panel */}
-      <aside className="hidden lg:flex w-[44%] xl:w-2/5 bg-ink text-surface p-12 flex-col justify-between relative overflow-hidden">
+      {/* ─── LEFT — brand panel ─── */}
+      <aside className="hidden lg:flex w-[46%] xl:w-[44%] bg-ink text-surface flex-col justify-center px-14 py-16 relative overflow-hidden">
+        {/* Depth gradient */}
         <div
           aria-hidden
-          className="absolute inset-0 pointer-events-none opacity-30"
+          className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(circle at 20% 30%, rgba(59,130,246,0.35) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(30,64,175,0.3) 0%, transparent 55%)',
+              'radial-gradient(ellipse at 20% 40%, rgba(59,130,246,0.22) 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, rgba(30,64,175,0.18) 0%, transparent 50%)',
           }}
         />
-        <div className="relative">
-          <div className="text-[26px] font-semibold tracking-tight">Door 2 Digital</div>
-          <div className="text-accent text-[10.5px] font-semibold tracking-[0.22em] mt-1.5">
-            OPERATOR · COMMAND CENTRE
+        {/* Dot-grid texture */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none opacity-[0.03]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,1) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
+
+        {/* Logo — absolute top-left, never affects vertical centering */}
+        <div className="absolute top-14 left-14 flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              background: 'rgba(59,130,246,0.18)',
+              border: '1px solid rgba(59,130,246,0.28)',
+            }}
+          >
+            <span className="text-accent text-[12px] font-bold tracking-tight">D2</span>
+          </div>
+          <div>
+            <span className="text-[17px] font-semibold tracking-tight leading-tight">
+              Door 2 Digital
+            </span>
+            <span className="ml-2 text-accent text-[9px] font-semibold tracking-[0.2em]">OS</span>
           </div>
         </div>
-        <div className="relative space-y-6">
-          <h1 className="text-[34px] leading-[1.1] font-semibold tracking-tight">
-            Sign in to your
+
+        {/* Hero + stats — centered in panel, slight downward bias */}
+        <div className="relative mt-10">
+          <h1 className="text-[42px] leading-[1.04] font-semibold tracking-tight mb-5">
+            The OS for
             <br />
-            command centre
+            door-to-door.
           </h1>
-          <p className="text-[13px] leading-[1.65] text-surface/70 max-w-md">
-            One operator surface across every sub-account — Hope Forward, World Vision, PestMax,
-            Gold Coast Hospital. Real-time field ops, conversions, compliance, and Marketing Studio.
+          <p className="text-[13.5px] leading-[1.75] text-surface/50 max-w-[340px] mb-12">
+            Field capture → CRM → conversion attribution → AI retargeting → compliance — one
+            operator surface, fully audited.
           </p>
-          <div className="grid grid-cols-3 gap-3 max-w-md pt-2">
+
+          {/* Stats */}
+          <div className="flex items-start gap-10">
             {[
-              { v: '4', l: 'Accounts' },
               { v: '420+', l: 'Knockers' },
               { v: '8.4K', l: 'MTD conv.' },
-            ].map((m) => (
-              <div key={m.l}>
-                <div className="text-[20px] font-semibold">{m.v}</div>
-                <div className="text-[10px] uppercase tracking-wider text-surface/55 mt-0.5">
-                  {m.l}
+              { v: '4', l: 'Accounts' },
+            ].map((m, i) => (
+              <div key={m.l} className="flex items-start gap-10">
+                {i > 0 && <div className="w-px h-9 bg-surface/10 self-start mt-0.5 -ml-10" />}
+                <div>
+                  <div className="text-[28px] font-semibold tracking-tight leading-none">{m.v}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-surface/40 mt-2">
+                    {m.l}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="relative text-[11px] text-surface/50 flex items-center gap-2">
-          <ShieldCheck size={12} className="text-accent" />
-          httpOnly · sameSite=lax · 5-min access · 30-day refresh
-        </div>
       </aside>
 
-      {/* RIGHT — form + demo accounts */}
-      <main className="flex-1 flex items-center justify-center p-6 sm:p-10">
-        <div className="w-full max-w-[420px]">
+      {/* ─── RIGHT — form panel ─── */}
+      <main className="flex-1 flex items-center justify-center px-10 sm:px-16 py-12 relative">
+        {/* Subtle background wash */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(ellipse at 65% 5%, rgba(59,130,246,0.06) 0%, transparent 48%)',
+          }}
+        />
+
+        <div className="relative w-full max-w-[400px] pb-12">
           {/* Mobile brand strip */}
-          <div className="lg:hidden mb-8 text-center">
-            <div className="text-[22px] font-semibold text-ink tracking-tight">Door 2 Digital</div>
-            <div className="text-accent text-[10.5px] font-semibold tracking-[0.22em] mt-1">
-              OPERATOR
+          <div className="lg:hidden mb-10 flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: '#0F172A' }}
+            >
+              <span className="text-accent text-[10px] font-bold">D2</span>
             </div>
+            <div className="text-[18px] font-semibold text-ink tracking-tight">Door 2 Digital</div>
           </div>
 
-          <Card>
-            <div className="space-y-1 mb-5">
-              <div className="text-[18px] font-semibold tracking-tight">Sign in</div>
-              <div className="text-[12px] text-muted leading-tight">
-                Use your email and password, or pick a demo account below.
-              </div>
-            </div>
+          {/* Heading */}
+          <h2 className="text-[28px] font-semibold tracking-tight text-ink mb-1.5">Sign in</h2>
+          <p className="text-[13px] text-muted mb-8">Continue to the D2D Command Centre.</p>
 
-            <form
-              onSubmit={(ev) => {
-                ev.preventDefault();
-                void submit();
-              }}
-              className="space-y-3.5"
-            >
+          {/* Form */}
+          <form
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              void submit();
+            }}
+            className="space-y-4"
+          >
+            {/* Email */}
+            <div>
+              <label
+                htmlFor="email-field"
+                className="block text-[12.5px] font-medium text-ink mb-2"
+              >
+                Email
+              </label>
               <Input
-                label="Email"
+                id="email-field"
                 type="email"
                 name="email"
                 autoComplete="email"
                 value={email}
                 onChange={(ev) => setEmail(ev.target.value)}
-                leftSlot={<Mail size={14} />}
                 placeholder="brodie@door2digital.com"
+                className="h-11"
                 required
               />
-              <Input
-                label="Password"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(ev) => setPassword(ev.target.value)}
-                leftSlot={<Lock size={14} />}
-                required
-              />
-              {error && (
-                <div className="text-[12px] text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-3 py-2">
-                  {error}
-                </div>
-              )}
-              <Button
-                type="submit"
-                variant="primary"
-                size="md"
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? 'Signing in…' : 'Sign in'}
-              </Button>
-              <div className="flex items-center justify-between pt-1">
+            </div>
+
+            {/* Password — Forgot? inline with label */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password-field" className="text-[12.5px] font-medium text-ink">
+                  Password
+                </label>
                 <button
                   type="button"
                   onClick={() => {
                     setForgotToast(true);
                     setTimeout(() => setForgotToast(false), 2400);
                   }}
-                  className="text-[11px] text-muted hover:text-ink transition"
+                  className="text-[11.5px] text-muted hover:text-ink transition-colors"
                 >
-                  Forgot password?
+                  Forgot?
                 </button>
-                {demoMode && (
-                  <span className="text-[10px] uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-semibold">
-                    Demo mode
-                  </span>
-                )}
               </div>
-              {forgotToast && (
-                <div className="text-[11px] text-muted text-center pt-1">
-                  Password reset ships in Phase 1.2 — pick a demo account below.
-                </div>
-              )}
-            </form>
-          </Card>
-
-          {/* DEMO ACCOUNTS */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-2.5 px-0.5">
-              <div className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-muted">
-                Demo accounts
-              </div>
-              <div className="text-[10.5px] text-soft">Click to sign in</div>
+              <Input
+                id="password-field"
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(ev) => setPassword(ev.target.value)}
+                className="h-11"
+                required
+              />
             </div>
+
+            {forgotToast && (
+              <p className="text-[11.5px] text-muted">
+                Password reset ships in Phase 1.2 — use a demo account below.
+              </p>
+            )}
+
+            {error && (
+              <div
+                className="text-[12px] text-ink px-3.5 py-3 rounded-lg"
+                style={{
+                  background: 'rgba(15,23,42,0.04)',
+                  border: '1px solid rgba(15,23,42,0.1)',
+                  borderLeft: '2px solid #0F172A',
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="w-full h-11"
+              disabled={loading}
+            >
+              {loading ? (
+                'Signing in…'
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  Sign in <ArrowRight size={15} />
+                </span>
+              )}
+            </Button>
+          </form>
+
+          {/* ── Demo accounts — Quick switch ── */}
+          <div className="mt-8 pt-7" style={{ borderTop: '1px solid rgba(15,23,42,0.07)' }}>
+            <div className="flex items-center justify-between mb-3.5">
+              <span className="text-[10px] uppercase tracking-[0.18em] font-semibold text-soft/60">
+                Quick switch · demo
+              </span>
+              <span className="text-[10px] text-soft/40">password preserved</span>
+            </div>
+
             <div className="space-y-2">
-              {DEMO_USERS.map((u) => (
+              {/* First user (super_admin) — full-width dark tile */}
+              {DEMO_USERS.slice(0, 1).map((u) => (
                 <button
                   key={u.email}
                   type="button"
                   onClick={() => signInAs(u)}
                   disabled={loading}
-                  className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-line2 bg-surface hover:border-ink hover:shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                  className="w-full px-4 py-3.5 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  style={{ background: '#0F172A' }}
                 >
-                  <span
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-md text-surface text-[11px] font-semibold tracking-tight shrink-0"
-                    style={{ background: u.swatch }}
+                  <div className="text-[13.5px] font-semibold text-surface leading-tight">
+                    {u.label}
+                  </div>
+                  <div
+                    className="text-[11px] mt-0.5 leading-tight font-normal"
+                    style={{ color: 'rgba(248,250,252,0.45)' }}
                   >
-                    {u.initials}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] font-medium text-ink truncate">
-                      Sign in as {u.label}
-                    </span>
-                    <span className="block text-[11px] text-muted truncate">{u.sub}</span>
-                  </span>
-                  <ArrowRight
-                    size={14}
-                    className="text-soft group-hover:text-ink group-hover:translate-x-0.5 transition"
-                  />
+                    {u.sub}
+                  </div>
                 </button>
               ))}
+
+              {/* Remaining users — 2-column grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {DEMO_USERS.slice(1).map((u) => (
+                  <button
+                    key={u.email}
+                    type="button"
+                    onClick={() => signInAs(u)}
+                    disabled={loading}
+                    className="px-3.5 py-3 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid rgba(15,23,42,0.11)',
+                      boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        'rgba(15,23,42,0.22)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        'rgba(15,23,42,0.11)';
+                    }}
+                  >
+                    <div className="text-[12.5px] font-semibold text-ink truncate leading-tight">
+                      {u.label}
+                    </div>
+                    <div className="text-[10.5px] text-muted mt-0.5 leading-tight truncate font-normal">
+                      {u.sub}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <p className="text-[10.5px] text-soft text-center mt-6">
-            v0.5.0 · {process.env.NEXT_PUBLIC_ENV ?? 'local'} · auth by httpOnly cookie
-          </p>
+          {/* Footer */}
+          <div className="flex items-center gap-2 mt-6 text-[10.5px] text-soft">
+            <ShieldCheck size={11} className="text-soft/60" />
+            <span>httpOnly cookie · {process.env.NEXT_PUBLIC_ENV ?? 'local'}</span>
+          </div>
         </div>
       </main>
     </div>

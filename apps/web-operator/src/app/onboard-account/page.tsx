@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Building2,
   Palette,
@@ -17,6 +18,7 @@ import {
   Phone,
   Sparkles,
   Loader2,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Banner, Button, Section } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
@@ -135,6 +137,9 @@ export default function OnboardAccountPage(): JSX.Element {
   const [activating, setActivating] = useState(false);
   const [provisionLog, setProvisionLog] = useState<string[]>([]);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const [provisionDone, setProvisionDone] = useState(false);
+  const [newAccountSlug, setNewAccountSlug] = useState<string | null>(null);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [form, setForm] = useState<FormState>({
     legalName: '',
     shortName: '',
@@ -222,10 +227,40 @@ export default function OnboardAccountPage(): JSX.Element {
     return true;
   }, [step, form]);
 
+  // Once provisioning completes we land the operator inside the new account's
+  // workspace automatically — unless they start ticking off the day-one
+  // checklist, in which case we let them drive.
+  useEffect(() => {
+    if (!provisionDone || !newAccountSlug) return undefined;
+    redirectTimer.current = setTimeout(() => {
+      router.push(`/accounts/${newAccountSlug}/today`);
+      router.refresh();
+    }, 7000);
+    return () => {
+      if (redirectTimer.current) clearTimeout(redirectTimer.current);
+    };
+  }, [provisionDone, newAccountSlug, router]);
+
+  function cancelAutoRedirect(): void {
+    if (redirectTimer.current) {
+      clearTimeout(redirectTimer.current);
+      redirectTimer.current = null;
+    }
+  }
+
+  function openWorkspace(): void {
+    cancelAutoRedirect();
+    if (newAccountSlug) {
+      router.push(`/accounts/${newAccountSlug}/today`);
+      router.refresh();
+    }
+  }
+
   async function activate(): Promise<void> {
     setActivating(true);
     setActivateError(null);
-    setProvisionLog(['Posting to /api/orgs · creating Org + BrandKit + Billing in TX…']);
+    setProvisionDone(false);
+    setProvisionLog(['Setting up your workspace…']);
 
     // Idempotency key — survives wizard reloads if state were persisted; for
     // now we mint a fresh ULID per activation attempt so retry-after-failure
@@ -300,29 +335,19 @@ export default function OnboardAccountPage(): JSX.Element {
     const json = (await res.json()) as { orgId: string; slug: string | null };
     const newSlug = json.slug ?? slugify(form.shortName) ?? 'new-account';
 
-    // Show the same staged provisioning narrative for visual feedback,
-    // but the actual write is already committed.
-    //
-    // Where to land the user post-create:
-    //   - /accounts        → proves the new org appears in the portfolio
-    //                        list (the spec's "new org appears in the list").
-    //   - /accounts/[slug]/leads → fully wired to the DB; the new org will
-    //                        have zero leads but the page renders cleanly.
-    //   - /accounts/[slug]/today → fixture-only fallback; "Not found" for
-    //                        new orgs. Tracked as a separate workstream
-    //                        (out of this PR's scope).
-    //
-    // Pick /accounts so the demo proof is immediate; the wizard's narrative
-    // mentions /today as the future-state landing once the per-account
-    // dashboard is wired through the same DB pattern.
+    // Staged narrative for visual feedback — the actual write is already
+    // committed at this point. Lines speak operator language (outcomes), not
+    // database language. Post-create we land on /accounts/[slug]/today: it
+    // renders a first-run state (TodayFirstRun) for brand-new orgs, so the
+    // operator wakes up inside their new workspace, not back at the wizard.
     const lines = [
-      `Org row committed · slug=${newSlug} · id=${json.orgId}`,
-      `BrandKit + OrgBilling provisioned in same TX`,
-      `AuditEvent written (org.created) — hash chain extended`,
-      `Provisioned ${form.knockerCount} Knocker iOS seats · bundle ${form.bundleId}`,
-      `Queued paid-solicitor filings for ${form.states.length} ${form.region === 'US' ? 'states' : 'jurisdictions'}`,
-      `Wired ${processorForRegion(form.region)} billing · day ${form.billingDay} of month`,
-      `Workspace ready — redirecting to portfolio…`,
+      'Your workspace is live',
+      'Brand kit applied — your name and colours everywhere they need to be',
+      'Commission plan ready — payouts tracked automatically from day one',
+      `${form.knockerCount} field team seats reserved for your Knocker app`,
+      `Fundraising clearance underway in ${form.states.length} ${form.region === 'US' ? 'states' : 'jurisdictions'} — our legal team files for you`,
+      `Billing set up with ${processorForRegion(form.region)} — first invoice on day ${form.billingDay} of the month`,
+      'Setup verified and locked in',
     ];
     lines.forEach((l, i) => {
       setTimeout(
@@ -334,11 +359,10 @@ export default function OnboardAccountPage(): JSX.Element {
     });
     setTimeout(
       () => {
-        // Land on the portfolio list — proves the new org appears immediately.
-        router.push(`/accounts?just_onboarded=${encodeURIComponent(newSlug)}`);
-        router.refresh();
+        setNewAccountSlug(newSlug);
+        setProvisionDone(true);
       },
-      lines.length * 350 + 600,
+      lines.length * 350 + 400,
     );
   }
 
@@ -426,6 +450,10 @@ export default function OnboardAccountPage(): JSX.Element {
               void activate();
             }}
             error={activateError}
+            done={provisionDone}
+            newSlug={newAccountSlug}
+            onOpenWorkspace={openWorkspace}
+            onChecklistInteract={cancelAutoRedirect}
           />
         )}
 
@@ -1042,6 +1070,10 @@ function Step5Review({
   provisionLog,
   onActivate,
   error,
+  done,
+  newSlug,
+  onOpenWorkspace,
+  onChecklistInteract,
 }: {
   form: FormState;
   monogram: string;
@@ -1050,6 +1082,10 @@ function Step5Review({
   provisionLog: string[];
   onActivate: () => void;
   error: string | null;
+  done: boolean;
+  newSlug: string | null;
+  onOpenWorkspace: () => void;
+  onChecklistInteract: () => void;
 }): JSX.Element {
   return (
     <div className="space-y-5">
@@ -1159,20 +1195,48 @@ function Step5Review({
       </Section>
 
       {activating ? (
-        <Section title="Provisioning workspace…" subtitle="Live activity log">
-          <div className="space-y-2 font-mono text-[11px]">
-            {provisionLog.map((l, i) => (
-              <div key={i} className="flex items-start gap-2">
-                {i === provisionLog.length - 1 && provisionLog.length < 5 ? (
-                  <Loader2 size={12} className="text-accent animate-spin mt-0.5" />
-                ) : (
-                  <Check size={12} className="text-success mt-0.5" />
-                )}
-                <span className="text-ink">{l}</span>
+        <>
+          <Section
+            title={done ? 'Your workspace is ready' : 'Setting up your workspace…'}
+            subtitle={
+              done
+                ? 'Everything below is done — here is what happens next'
+                : 'This only takes a few seconds'
+            }
+          >
+            <div className="space-y-2 text-[12px]">
+              {provisionLog.map((l, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  {i === provisionLog.length - 1 && !done ? (
+                    <Loader2 size={12} className="text-accent animate-spin mt-0.5" />
+                  ) : (
+                    <Check size={12} className="text-success mt-0.5" />
+                  )}
+                  <span className="text-ink">{l}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+          {done && newSlug && (
+            <>
+              <DayOneChecklist slug={newSlug} onInteract={onChecklistInteract} />
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] text-muted">
+                  Taking you to your new workspace in a few seconds — tick off a day-one item to
+                  stay here.
+                </div>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  rightIcon={<ArrowUpRight size={14} />}
+                  onClick={onOpenWorkspace}
+                >
+                  Open workspace now
+                </Button>
               </div>
-            ))}
-          </div>
-        </Section>
+            </>
+          )}
+        </>
       ) : (
         <>
           {error && (
@@ -1267,6 +1331,161 @@ function TimelineRow({
       <div className="flex-1 min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-muted">{day}</div>
         <div className="text-[12px] text-ink font-medium">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day-one checklist — shown on the wizard's success state. Completion is
+// persisted per-org in localStorage so it survives a reload; the links point
+// at real, existing routes (roster, territory-intel, account settings/brand
+// kit, account compliance). Local to this page by design — not a shared
+// component.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DayOneItem {
+  id: string;
+  label: string;
+  sub: string;
+  href: (slug: string) => string;
+}
+
+const DAY_ONE_ITEMS: DayOneItem[] = [
+  {
+    id: 'first-knocker',
+    label: 'Add your first knocker',
+    sub: 'Invite a field rep so doors start getting knocked',
+    href: () => '/roster',
+  },
+  {
+    id: 'territory',
+    label: 'Set your territory',
+    sub: 'Pick the streets your team works first',
+    href: () => '/territory-intel',
+  },
+  {
+    id: 'brand-kit',
+    label: 'Review brand kit',
+    sub: 'Check your colours and name look right everywhere',
+    href: (slug) => `/accounts/${slug}/settings`,
+  },
+  {
+    id: 'compliance',
+    label: 'Run a compliance check',
+    sub: 'Confirm clearances before the first knock',
+    href: (slug) => `/accounts/${slug}/compliance`,
+  },
+];
+
+function dayOneStorageKey(slug: string): string {
+  return `d2d.day-one.${slug}`;
+}
+
+function DayOneChecklist({
+  slug,
+  onInteract,
+}: {
+  slug: string;
+  onInteract: () => void;
+}): JSX.Element {
+  const [completed, setCompleted] = useState<string[]>([]);
+
+  // Hydrate from localStorage after mount (avoids SSR/hydration mismatch).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(dayOneStorageKey(slug));
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          setCompleted(parsed.filter((x): x is string => typeof x === 'string'));
+        }
+      }
+    } catch {
+      // localStorage unavailable (private mode etc.) — checklist still works,
+      // it just won't persist.
+    }
+  }, [slug]);
+
+  function persist(next: string[]): void {
+    try {
+      window.localStorage.setItem(dayOneStorageKey(slug), JSON.stringify(next));
+    } catch {
+      // Non-fatal — see above.
+    }
+  }
+
+  function toggle(id: string): void {
+    onInteract();
+    setCompleted((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      persist(next);
+      return next;
+    });
+  }
+
+  function markDone(id: string): void {
+    onInteract();
+    setCompleted((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      persist(next);
+      return next;
+    });
+  }
+
+  return (
+    <div className="card card-pad">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[11px] uppercase tracking-wider text-muted font-semibold">
+          Day one — get your first knock sooner
+        </div>
+        <div className="text-[11px] text-muted numeric">
+          {completed.length} of {DAY_ONE_ITEMS.length} done
+        </div>
+      </div>
+      <div className="space-y-1">
+        {DAY_ONE_ITEMS.map((item) => {
+          const isDone = completed.includes(item.id);
+          return (
+            <div
+              key={item.id}
+              className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-paper transition"
+            >
+              <button
+                onClick={() => toggle(item.id)}
+                aria-label={isDone ? `Mark "${item.label}" not done` : `Mark "${item.label}" done`}
+                className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition ${
+                  isDone
+                    ? 'bg-success border-success text-surface'
+                    : 'bg-paper border-line2 hover:border-ink/40'
+                }`}
+              >
+                {isDone && <Check size={12} />}
+              </button>
+              <Link
+                href={item.href(slug)}
+                onClick={() => markDone(item.id)}
+                className="flex-1 min-w-0 group"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[13px] font-medium ${
+                      isDone ? 'text-muted line-through' : 'text-ink group-hover:underline'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                  <ArrowUpRight
+                    size={12}
+                    className="text-soft opacity-0 group-hover:opacity-100 transition"
+                  />
+                </div>
+                <div className="text-[11px] text-muted">{item.sub}</div>
+              </Link>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

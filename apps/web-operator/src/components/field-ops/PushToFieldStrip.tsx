@@ -1,11 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import { MapPin, Radio, Sparkles, TrendingUp } from 'lucide-react';
 import { Section } from '@d2d/ui-web';
+import { toast } from '@/components/Toaster';
+import type { BroadcastResult } from '@/app/api/broadcast/route';
 import type { PushToFieldAction } from './types';
 
 interface PushToFieldStripProps {
   scopeLabel: string;
+  /**
+   * Fired for the non-broadcast actions (update pitch script, reassign
+   * territories, end shift early) — the page decides what to do (open a
+   * wizard, toast an honest "queued" message). The `broadcast_message`
+   * action is handled inside this strip with a real POST /api/broadcast.
+   */
   onAction: (kind: PushToFieldAction) => void;
 }
 

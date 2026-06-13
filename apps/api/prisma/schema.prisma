@@ -149,6 +149,14 @@ enum SsoProvider {
   generic_saml
 }
 
+enum KnockerShiftStatus {
+  scheduled
+  active
+  lunch
+  missed
+  completed
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Org, BrandKit, Billing, SSO
 // ───────────────────────────────────────────────────────────────────────────
@@ -202,6 +210,7 @@ model Org {
   providerConnections     ProviderConnection[]
   contentGenerationJobs   ContentGenerationJob[]
   providerWebhookEvents   ProviderWebhookEvent[]
+  knockerShifts           KnockerShift[]
 
   @@index([regionCode, status])
   @@index([type, status])
@@ -1044,4 +1053,34 @@ model ProviderWebhookEvent {
 
   @@index([orgId, providerKind, receivedAt(sort: Desc)])
   @@unique([providerKind, externalId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Roster scheduling — KnockerShift
+//
+// Stores the weekly roster schedule for each knocker. Persisted via the
+// web-operator BFF (Next.js /api/shifts). The weekStart field is the ISO
+// date string of the Monday for that week (e.g. "2026-06-09"), which lets
+// the roster page fetch shifts for any week offset without date arithmetic
+// on the server side.
+// ───────────────────────────────────────────────────────────────────────────
+
+model KnockerShift {
+  id           String              @id // ksft_*
+  orgId        String
+  org          Org                 @relation(fields: [orgId], references: [id])
+  weekStart    String              // ISO date of the Monday, e.g. "2026-06-09"
+  repInitials  String              // e.g. "JM"
+  repName      String              // e.g. "Jordan Mosley"
+  account      String              // e.g. "Hope Forward"
+  day          Int                 // 0 = Mon … 6 = Sun
+  start        String              // "HH:MM"
+  end          String              // "HH:MM"
+  territory    String
+  lunch        String?             // "HH:MM-HH:MM" or null
+  status       KnockerShiftStatus  @default(scheduled)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([orgId, weekStart])
 }

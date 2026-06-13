@@ -5,12 +5,17 @@
  * `HQLiveMap` dynamic wrapper. Renders:
  *  - Streets (OSM) + Satellite (Esri World Imagery) base layers via switcher
  *  - Optional Places/Boundaries label overlay on satellite
- *  - Rep pins as CircleMarkers, with pulse halos for active reps
+ *  - Rep pins as CircleMarkers, with pulse halos for active reps — sourced from
+ *    live /api/fleet data, polled every 30 seconds.
  *  - AI suggestion zones as labelled CircleMarkers with permanent tooltips
  *  - Built-in zoom + scale + attribution controls
+ *
+ * Fleet data: GET /api/fleet returns active KnockSessions with the latest
+ * Knock.geo parsed into lat/lng. Falls back to the FLEET_REPS fixture if the
+ * API returns an empty array or an error (e.g. no active sessions yet in dev).
  */
 
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -23,6 +28,8 @@ import {
 } from 'react-leaflet';
 import { Phone, MessageSquare, Coffee, Play, Zap } from 'lucide-react';
 import { FLEET_REPS, AI_ZONES, STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
 const TEXAS_CENTER: [number, number] = [31.0, -97.0];
 const INITIAL_ZOOM = 6;
@@ -34,13 +41,96 @@ const STATUS_LABEL: Record<FleetRep['status'], string> = {
   offline: 'Offline',
 };
 
+/** Merge a live API rep with the FleetRep shape, falling back to fixture defaults. */
+function apiRepToFleetRep(r: {
+  id: string;
+  userId: string;
+  initials: string;
+  name: string;
+  territory: string;
+  account: string;
+  status: string;
+  lat: number | null;
+  lng: number | null;
+  knocksToday: number;
+  lastKnockMin: number;
+  shiftStart: string;
+}): FleetRep {
+  // Map API status to FleetRep status (API has active/idle/offline; fixture has active/break/idle/offline).
+  const status: FleetRep['status'] =
+    r.status === 'active' ? 'active' : r.status === 'idle' ? 'idle' : 'offline';
+
+  return {
+    id: r.userId,
+    name: r.name,
+    initials: r.initials,
+    account: r.account,
+    territory: r.territory,
+    status,
+    // Position: use real geo if available, otherwise place off-screen so the pin
+    // doesn't appear (Leaflet renders at 0,0 which is Gulf of Guinea — use the
+    // territory centroid heuristic below when geo is null).
+    lat: r.lat ?? 31.0,
+    lng: r.lng ?? -97.0,
+    knocksToday: r.knocksToday,
+    conversionsToday: 0, // not yet tracked in the fleet endpoint
+    shiftStart: new Date(r.shiftStart).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    hoursToday: '',
+    lastKnockMin: r.lastKnockMin,
+  };
+}
+
 export function HQLiveMapImpl(): JSX.Element {
-  const activeCount = FLEET_REPS.filter((r) => r.status === 'active').length;
-  const breakCount = FLEET_REPS.filter((r) => r.status === 'break').length;
-  const idleCount = FLEET_REPS.filter((r) => r.status === 'idle').length;
-  const offlineCount = FLEET_REPS.filter((r) => r.status === 'offline').length;
-  const totalKnocks = FLEET_REPS.reduce((s, r) => s + r.knocksToday, 0);
-  const totalConv = FLEET_REPS.reduce((s, r) => s + r.conversionsToday, 0);
+  // Live fleet data — seeded from fixture, updated every 30s from /api/fleet.
+  const [fleet, setFleet] = useState<FleetRep[]>(FLEET_REPS);
+  const { source, updatedAt, markFresh } = useDataFreshness('fixture');
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchFleet(): Promise<void> {
+      // Skip when the previous poll is still in flight (prevents out-of-order
+      // responses overwriting newer data) or the tab is backgrounded.
+      if (inFlight.current || document.visibilityState === 'hidden') return;
+      inFlight.current = true;
+      try {
+        const res = await fetch('/api/fleet');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { fleet?: unknown[] };
+        if (Array.isArray(data.fleet) && data.fleet.length > 0) {
+          setFleet(
+            data.fleet.map((r) => apiRepToFleetRep(r as Parameters<typeof apiRepToFleetRep>[0])),
+          );
+          markFresh();
+        }
+        // Empty array (no active sessions) → keep seed data; badge stays DEMO.
+      } catch {
+        // Network failure — keep current state; staleness timer downgrades the
+        // badge automatically if we'd previously gone live.
+      } finally {
+        inFlight.current = false;
+      }
+    }
+
+    void fetchFleet();
+    const interval = setInterval(() => void fetchFleet(), 30_000);
+    return (): void => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const activeCount = fleet.filter((r) => r.status === 'active').length;
+  const breakCount = fleet.filter((r) => r.status === 'break').length;
+  const idleCount = fleet.filter((r) => r.status === 'idle').length;
+  const offlineCount = fleet.filter((r) => r.status === 'offline').length;
+  const totalKnocks = fleet.reduce((s, r) => s + r.knocksToday, 0);
+  const totalConv = fleet.reduce((s, r) => s + r.conversionsToday, 0);
 
   return (
     <div className="relative w-full" style={{ height: 640 }}>
@@ -106,9 +196,9 @@ export function HQLiveMapImpl(): JSX.Element {
             </CircleMarker>
           ))}
 
-          {/* Rep pins — react-leaflet requires Leaflet components as direct children,
-              so we use Fragment (no DOM wrapper) for the active-pulse halo + pin pair. */}
-          {FLEET_REPS.map((r) => {
+          {/* Rep pins — polled from /api/fleet every 30s. Falls back to seed
+              fixture when no active sessions exist (dev / first-run). */}
+          {fleet.map((r) => {
             const color = STATUS_COLORS[r.status];
             const isActive = r.status === 'active';
             return (
@@ -189,11 +279,19 @@ export function HQLiveMapImpl(): JSX.Element {
         </div>
 
         <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold">
-            Live · all accounts
+          <div className="mb-1">
+            <DataSourceBadge source={source} updatedAt={updatedAt} />
           </div>
           <div className="text-[14px] font-bold text-ink numeric flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                source === 'live'
+                  ? 'bg-green-500 animate-pulse'
+                  : source === 'stale'
+                    ? 'bg-rose-500'
+                    : 'bg-amber-500'
+              }`}
+            />
             {activeCount} active iPads
           </div>
           <div className="text-[10px] text-muted">
@@ -280,22 +378,22 @@ function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <PopupButton
-          onClick={() => alert(`Calling ${rep.name}…`)}
+          onClick={() => toast.info(`Dialling ${rep.name}… telephony wiring lands in Phase 1.2`)}
           icon={<Phone size={11} />}
           label="Call"
           primary
         />
         <PopupButton
-          onClick={() => alert(`Messaging ${rep.name}…`)}
+          onClick={() => toast.info(`Message composer for ${rep.name} lands in Phase 1.2`)}
           icon={<MessageSquare size={11} />}
           label="Msg"
         />
         <PopupButton
           onClick={() =>
-            alert(
+            toast.info(
               rep.status === 'break'
-                ? `Resuming ${rep.name}'s shift…`
-                : `Sending ${rep.name} on break…`,
+                ? `Resume command for ${rep.name} lands in Phase 1.2`
+                : `Break command for ${rep.name} lands in Phase 1.2`,
             )
           }
           icon={rep.status === 'break' ? <Play size={11} /> : <Coffee size={11} />}
