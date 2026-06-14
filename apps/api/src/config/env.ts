@@ -61,6 +61,13 @@ const envSchema = z.object({
   // RelayState is signed with the existing OAUTH_STATE_SECRET (no new secret).
   SAML_SP_BASE_URL: z.string().url().default('http://localhost:3010'),
 
+  // Payment sandbox: when 'true', POST /v1/payments/tokenize is available for
+  // server-side card tokenisation (dev / CI only — never in production).
+  D2D_PAYMENT_SANDBOX: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
+
   // MiCamp (US)
   MICAMP_API_KEY: z.string().optional(),
   MICAMP_API_SECRET: z.string().optional(),

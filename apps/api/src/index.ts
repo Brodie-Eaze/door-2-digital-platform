@@ -40,6 +40,7 @@ import { registerPropensity } from './domains/propensity/routes';
 import { registerVoice } from './domains/voice/routes';
 import { registerAnalytics } from './domains/analytics/routes';
 import { registerDonation } from './domains/donation/routes';
+import { registerPayment } from './domains/payment/routes';
 import { registerSale } from './domains/sale/routes';
 import { registerCommission } from './domains/commission/routes';
 import { registerPayout } from './domains/payout/routes';
@@ -172,6 +173,7 @@ async function buildServer() {
   await app.register(registerVoice, { prefix: '/v1/voice' });
   await app.register(registerAnalytics, { prefix: '/v1/analytics' });
   await app.register(registerDonation, { prefix: '/v1/donations' });
+  await app.register(registerPayment, { prefix: '/v1/payments' });
   await app.register(registerSale, { prefix: '/v1/sales' });
   await app.register(registerCommission, { prefix: '/v1/commissions' });
   await app.register(registerPayout, { prefix: '/v1/payout-batches' });
