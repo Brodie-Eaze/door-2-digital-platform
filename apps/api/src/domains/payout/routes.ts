@@ -14,6 +14,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';
+import { requireWebAuthnStepUp } from '../../shared/middleware/webauthn-step-up';
 import { requireIdempotencyKey, withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import {
@@ -76,22 +77,28 @@ export async function registerPayout(app: FastifyInstance): Promise<void> {
   });
 
   // POST /v1/payout-batches/:id/lock  (draft → ready_to_pay)
-  app.post<{ Params: IdParams }>('/:id/lock', { preHandler: requireAuth }, async (req, reply) => {
-    requireIdempotencyKey(req);
-    const ctx = requireTenant(req);
-    const batch = await lockPayoutBatch(req.params.id, {
-      userId: ctx.userId,
-      orgId: ctx.orgId,
-      regionCode: ctx.regionCode as never,
-    });
-    return reply.code(200).send({ batch });
-  });
+  // ADR-0026: hardware-key step-up required before locking a batch for payout.
+  app.post<{ Params: IdParams }>(
+    '/:id/lock',
+    { preHandler: [requireAuth, requireWebAuthnStepUp] },
+    async (req, reply) => {
+      requireIdempotencyKey(req);
+      const ctx = requireTenant(req);
+      const batch = await lockPayoutBatch(req.params.id, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as never,
+      });
+      return reply.code(200).send({ batch });
+    },
+  );
 
   // GET /v1/payout-batches/:id/instruction-file
   // Returns a CSV download; marks batch 'instructed' on first download.
+  // ADR-0026: hardware-key step-up required to download the instruction file.
   app.get<{ Params: IdParams }>(
     '/:id/instruction-file',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, requireWebAuthnStepUp] },
     async (req, reply) => {
       const ctx = requireTenant(req);
       const { csv, filename } = await generateInstructionFile(req.params.id, {

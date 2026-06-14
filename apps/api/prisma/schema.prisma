@@ -309,6 +309,7 @@ model User {
   closerConversions    Conversion[]          @relation("CloserAttribution")
   territoryAssignments TerritoryAssignment[]
   credential           UserCredential?
+  webAuthnCredentials  WebAuthnCredential[]
   refreshTokens        RefreshToken[]
   knockerShifts        KnockerShift[]
   knockPhotos          KnockPhoto[]
@@ -996,6 +997,32 @@ model RefreshToken {
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// WebAuthn credentials — hardware-key registration per user (ADR-0026)
+// ───────────────────────────────────────────────────────────────────────────
+
+model WebAuthnCredential {
+  id           String    @id // wac_*
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  // Credential ID from the authenticator (base64url-encoded bytes)
+  credentialId String    @unique
+  // COSE public key bytes (base64url-encoded)
+  publicKey    String
+  // Signature counter — monotonic, used for replay-attack detection
+  counter      BigInt    @default(0)
+  // Human-readable label set by the user ("YubiKey 5C", "Touch ID", etc.)
+  deviceName   String?
+  // AAGUID from attestation — identifies the authenticator model family
+  aaguid       String?
+  // Transport hints from the authenticator (usb, nfc, ble, internal, hybrid)
+  transports   String[]
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

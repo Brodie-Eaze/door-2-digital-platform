@@ -23,6 +23,12 @@ import { Problems, ProblemError } from '@d2d/shared-utils';
 import { loginRequestSchema, refreshRequestSchema, logoutRequestSchema } from './schemas';
 import { login, refresh, logout, getCurrentUser } from './service';
 import { setupTotp, verifyTotp } from './mfa';
+import {
+  beginRegistration,
+  finishRegistration,
+  beginAssertion,
+  finishAssertion,
+} from './webauthn.service';
 import { optionalAuth, requireAuth } from '../../shared/middleware/auth-guard';
 import { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from './tokens';
 import { env } from '../../config/env';
@@ -293,21 +299,54 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/webauthn/begin', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'WebAuthn step-up lands in Phase 1.2',
-    }),
-  );
+  // ── WebAuthn registration (super_admin / org_admin enrol a hardware key) ──
 
-  app.post('/webauthn/finish', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'WebAuthn step-up lands in Phase 1.2',
-    }),
-  );
+  // POST /v1/auth/webauthn/register/begin
+  app.post('/webauthn/register/begin', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const user = await import('../../config/db').then(({ prisma }) =>
+      prisma().user.findUnique({
+        where: { id: principal.userId },
+        select: { email: true, givenName: true },
+      }),
+    );
+    if (!user) throw new ProblemError(Problems.notFound('User', principal.userId));
+    const options = await beginRegistration(principal.userId, user.email, user.givenName);
+    return reply.code(200).send(options);
+  });
+
+  // POST /v1/auth/webauthn/register/finish
+  app.post('/webauthn/register/finish', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const body = req.body as { response: unknown; deviceName?: string };
+    const result = await finishRegistration(
+      principal.userId,
+      principal.orgId,
+      principal.regionCode as never,
+      body.deviceName,
+      body.response as import('@simplewebauthn/server').RegistrationResponseJSON,
+    );
+    return reply.code(201).send(result);
+  });
+
+  // ── WebAuthn step-up assertion (obtain X-WebAuthn-Step-Up token) ──
+
+  // POST /v1/auth/webauthn/assert/begin
+  app.post('/webauthn/assert/begin', { preHandler: requireAuth }, async (req, reply) => {
+    const options = await beginAssertion(req.principal!.userId);
+    return reply.code(200).send(options);
+  });
+
+  // POST /v1/auth/webauthn/assert/finish
+  app.post('/webauthn/assert/finish', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const body = req.body as { response: unknown };
+    const result = await finishAssertion(
+      principal.userId,
+      principal.orgId,
+      principal.regionCode as never,
+      body.response as import('@simplewebauthn/server').AuthenticationResponseJSON,
+    );
+    return reply.code(200).send(result);
+  });
 }
