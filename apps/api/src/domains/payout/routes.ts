@@ -14,7 +14,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireIdempotencyKey, withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import {
   acknowledgePayoutBatch,
@@ -35,15 +35,21 @@ export async function registerPayout(app: FastifyInstance): Promise<void> {
 
   // POST /v1/payout-batches
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
-    requireIdempotencyKey(req);
     const ctx = requireTenant(req);
     const body = createPayoutBatchBodySchema.parse(req.body);
-    const batch = await generatePayoutBatch(body, {
-      userId: ctx.userId,
+    await withIdempotency({
+      req,
+      reply,
       orgId: ctx.orgId,
-      regionCode: ctx.regionCode as never,
+      handler: async () => {
+        const batch = await generatePayoutBatch(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { batch } };
+      },
     });
-    return reply.code(201).send({ batch });
   });
 
   // GET /v1/payout-batches
