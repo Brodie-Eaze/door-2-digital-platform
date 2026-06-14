@@ -516,7 +516,8 @@ model Knock {
   clientOffsetMs   Int? // fraud signal: device clock skew
   photoKey         String? // S3 KMS encrypted
   signatureKey     String?
-  notes            String? /// PII (optional free-text)
+  notes            String? /// PII — sentinel '[vaulted]' stored here when notesVault is present
+  notesVault       Json? // AES-256-GCM encrypted blob; AAD = 'Knock:{id}'
   leadId           String?
   lead             Lead?            @relation(fields: [leadId], references: [id])
   syncBatchId      String? // offline reconciliation

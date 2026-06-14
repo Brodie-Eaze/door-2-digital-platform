@@ -17,6 +17,7 @@ import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import { emitAnalyticsEvent } from '../analytics/service';
 import { accrueKnockCommission } from '../commission/service';
+import { PiiVaultService } from '../pii-vault/service';
 import type {
   StartSessionRequest,
   CreateKnockRequest,
@@ -264,6 +265,10 @@ export async function createKnock(
       throw new ProblemError(Problems.validation('Either addressId or rawAddress required'));
     }
 
+    const notesVault = input.notes
+      ? (PiiVaultService.encryptForRow('Knock', id, input.notes) as Prisma.JsonObject)
+      : null;
+
     const row = await tx.knock.create({
       data: {
         id,
@@ -279,7 +284,8 @@ export async function createKnock(
         clientOffsetMs,
         photoKey: input.photoKey ?? null,
         signatureKey: input.signatureKey ?? null,
-        notes: input.notes ?? null,
+        notes: input.notes ? '[vaulted]' : null,
+        notesVault,
         idempotencyKey: input.idempotencyKey,
       },
     });
@@ -604,6 +610,7 @@ export async function createKnockBatch(
         photoKey: string | null;
         signatureKey: string | null;
         notes: string | null;
+        notesVault: Prisma.JsonObject | null;
         idempotencyKey: string;
       }> = [];
       const allocatedKnockIds: string[] = [];
@@ -638,7 +645,10 @@ export async function createKnockBatch(
           clientOffsetMs: serverNow.getTime() - capturedAt.getTime(),
           photoKey: c.k.photoKey ?? null,
           signatureKey: c.k.signatureKey ?? null,
-          notes: c.k.notes ?? null,
+          notes: c.k.notes ? '[vaulted]' : null,
+          notesVault: c.k.notes
+            ? (PiiVaultService.encryptForRow('Knock', id, c.k.notes) as Prisma.JsonObject)
+            : null,
           idempotencyKey: c.k.idempotencyKey,
         });
       }
