@@ -72,6 +72,17 @@ Ordered by Priority for Pilot-Charlie launch readiness.
 | ~~**C23**~~ | Audit   | ~~not built~~ **CLOSED 2026-06-14** — `audit-shipper.worker.ts` S3 NDJSON drain built + import paths fixed; `dnk-sync.worker.ts` same; both wired to `index.ts` under `CRON_LEADER=true`; `tsc` clean                                                                                                                                                                                                         | L      |
 | ~~**C24**~~ | RLS     | ~~deferred; PropensityScore + KnockerShift tables not under RLS~~ **CLOSED 2026-06-14** — migration `20260614060000_rls_belt_new_tables`: RLS ENABLE + tenant_isolation on AnalyticsEvent, DsarRequest, Invoice, KnockPhoto, KnockerShift, ServiceOffering, VoiceRecording; PropensityScore split 4-policy (SELECT allows orgId IS NULL for global ML scores, INSERT/UPDATE/DELETE restricted to current org) | M      |
 | ~~**C25**~~ | SOC2    | ~~empty directory~~ **ALREADY DONE** — `docs/soc2/controls.md` is a complete 184-line matrix: CC1–CC9 + Availability + Confidentiality + Processing Integrity + Privacy, mapped to real code artifacts + evidence                                                                                                                                                                                             | L      |
+| ~~**C26**~~ | PII     | ~~plaintext PII at rest in DsarRequest, Knock, KnockPhoto, VoiceRecording, User~~ **CLOSED 2026-06-15** — `subjectEmailVault`/`subjectPhoneVault` on DsarRequest (c6c3ab8); `notesVault` on Knock + `WebAuthnCredential` RLS (a736fdd); `addressLineVault` on KnockPhoto, `transcriptVault` on VoiceRecording, `givenNameVault`/`familyNameVault`/`phoneVault` on User (c69fde8); 4 migrations                | L      |
+| ~~**C27**~~ | DSAR    | ~~DSAR deletion fulfilment set status=fulfilled without erasing PII at rest~~ **CLOSED 2026-06-15** — `executeRtbf()` anonymises Lead+Knock+KnockPhoto+VoiceRecording chain atomically in TX; audit event per run; gap register at `docs/compliance/rtbf-gaps.md` (5feb513)                                                                                                                                   | M      |
+
+### Known Deferred Gaps (documented, not launch-blocking)
+
+| ID     | Domain | Gap                                                                                                    | Target    |
+| ------ | ------ | ------------------------------------------------------------------------------------------------------ | --------- |
+| **D1** | PII    | `User.email` plaintext — invite email flow reads it; vault pending notification-service decrypt wiring | Phase 1.4 |
+| **D2** | PII    | `Address.street`/`postal` plaintext — shared across Leads; vault pending per-org address view          | Phase 1.4 |
+| **D3** | RTBF   | RTBF without `subjectLeadId` requires manual resolution (RTBF-001 in docs/compliance/rtbf-gaps.md)     | Phase 1.4 |
+| **D4** | ML     | `VoiceRecording.transcript` ML write path must use `transcriptVault` only when pipeline built          | Phase 3.2 |
 
 ---
 
