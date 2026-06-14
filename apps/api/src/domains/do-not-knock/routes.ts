@@ -20,9 +20,14 @@
 import type { FastifyInstance } from 'fastify';
 import { dnkCheckRequestSchema, dnkIngestRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerDoNotKnock(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'do-not-knock', status: 'scaffold', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'do-not-knock',
+    status: 'scaffold',
+    phase: '1.2',
+  }));
 
   app.post('/check', async (req, reply) => {
     const parsed = dnkCheckRequestSchema.parse(req.body);

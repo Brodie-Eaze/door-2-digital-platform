@@ -14,6 +14,7 @@ import {
   generateRefreshToken,
   hashRefreshToken,
   signAccessToken,
+  normalizeUserAgent,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './tokens';
@@ -262,6 +263,9 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
   const refreshId = newId('rft');
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
 
+  // SEC-012: coerce UA to browser-family/major only before persistence.
+  const normalizedUa = normalizeUserAgent(args.userAgent);
+
   await prisma().$transaction(async (tx) => {
     if (args.rotateFromId) {
       await tx.refreshToken.update({
@@ -276,7 +280,7 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
         orgId: user.orgId,
         tokenHash: refresh.hash,
         expiresAt,
-        userAgent: args.userAgent ?? null,
+        userAgent: normalizedUa,
         ip: args.ip ?? null,
       },
     });
@@ -288,7 +292,8 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
       action: args.audit,
       resourceType: 'User',
       resourceId: user.id,
-      metadata: { ip: args.ip, userAgent: args.userAgent },
+      // SEC-012: do not log raw IP or UA in audit events.
+      metadata: { userAgent: normalizedUa },
     });
   });
 

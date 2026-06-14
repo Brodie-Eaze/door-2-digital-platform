@@ -37,7 +37,10 @@ vi.mock('../../domains/auth/token-revocation', () => ({
   TokenRevocationUnavailableError,
 }));
 
-import { requireAuth as requireAuthHandler, optionalAuth as optionalAuthHandler } from './auth-guard';
+import {
+  requireAuth as requireAuthHandler,
+  optionalAuth as optionalAuthHandler,
+} from './auth-guard';
 import { signAccessToken } from '../../domains/auth/tokens';
 
 // The exported handlers are typed as Fastify preHandler hooks (which declare a
@@ -70,6 +73,20 @@ function validToken(): string {
   ).token;
 }
 
+function demoToken(): string {
+  return signAccessToken(
+    {
+      sub: 'usr_demo_1',
+      orgId: 'org_demo_1',
+      role: 'super_admin',
+      regionCode: 'US',
+      brandCode: 'd2d',
+      demo: true,
+    },
+    ACCESS_SECRET,
+  ).token;
+}
+
 beforeEach(() => {
   isRevokedMock.mockReset();
 });
@@ -88,6 +105,25 @@ describe('requireAuth — happy path', () => {
     await expect(requireAuth(req, reply)).rejects.toSatisfy(
       (e: unknown) => e instanceof ProblemError && e.problem.status === 401,
     );
+  });
+});
+
+describe('requireAuth — F-010 demo-token rejection', () => {
+  it('rejects a demo token (demo === true) with 401 even though signature is valid', async () => {
+    // The demo issuer signs with the same secret, so the token passes
+    // cryptographic verification — the claim check must fire after verify.
+    isRevokedMock.mockResolvedValue(false);
+    const { req } = makeReq(demoToken());
+    await expect(requireAuth(req, reply)).rejects.toSatisfy(
+      (e: unknown) => e instanceof ProblemError && e.problem.status === 401,
+    );
+  });
+
+  it('does NOT populate req.principal for a demo token', async () => {
+    isRevokedMock.mockResolvedValue(false);
+    const { req } = makeReq(demoToken());
+    await expect(requireAuth(req, reply)).rejects.toBeInstanceOf(ProblemError);
+    expect(req.principal).toBeUndefined();
   });
 });
 

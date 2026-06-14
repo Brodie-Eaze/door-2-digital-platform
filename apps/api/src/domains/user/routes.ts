@@ -30,7 +30,11 @@ interface UserIdParams {
 }
 
 export async function registerUser(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'user', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'user',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/users — invite a user; returns inviteToken
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {

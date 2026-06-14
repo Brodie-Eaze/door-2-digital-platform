@@ -18,9 +18,14 @@
 import type { FastifyInstance } from 'fastify';
 import { generateInvoiceRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerBilling(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'billing', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'billing',
+    status: 'scaffold',
+    phase: '1.3',
+  }));
 
   app.get('/invoices', async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({

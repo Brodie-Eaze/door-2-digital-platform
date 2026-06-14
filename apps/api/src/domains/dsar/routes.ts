@@ -19,9 +19,14 @@
 import type { FastifyInstance } from 'fastify';
 import { dsarRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerDsar(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'dsar', status: 'scaffold', phase: '1.4' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'dsar',
+    status: 'scaffold',
+    phase: '1.4',
+  }));
 
   app.post('/', async (req, reply) => {
     requireIdempotencyKey(req);

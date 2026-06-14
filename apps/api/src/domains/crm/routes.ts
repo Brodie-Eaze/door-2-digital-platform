@@ -19,9 +19,14 @@
 import type { FastifyInstance } from 'fastify';
 import { createSequenceRequestSchema, enrollSequenceRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerCrm(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'crm', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'crm',
+    status: 'scaffold',
+    phase: '1.3',
+  }));
 
   app.post('/sequences', async (req, reply) => {
     requireIdempotencyKey(req);

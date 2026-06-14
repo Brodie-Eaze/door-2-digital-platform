@@ -40,7 +40,11 @@ interface IdParams {
 }
 
 export async function registerKnockSessions(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'knock-session', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'knock-session',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // POST /v1/sessions — start a new KnockSession
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -81,7 +85,11 @@ export async function registerKnockSessions(app: FastifyInstance): Promise<void>
 }
 
 export async function registerKnock(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'knock', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'knock',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // Bump body limit for batch route. Fastify resolves the highest limit on
   // the route options if registered there; we use plugin-level so all
