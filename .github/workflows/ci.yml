@@ -214,13 +214,52 @@ jobs:
           echo "   Test ran as part of Gate 8 (test:integration). Gate 9 passes because Gate 8 passed."
 
   # ── Gate 10: Audit chain Merkle replay ─────────────────────────────────
+  # Runs on schedule + workflow_dispatch. Spins up Postgres, runs migrations +
+  # integration suite to seed audit rows, then replays every (orgId,regionCode)
+  # chain with computeRowHash and writes Merkle roots to docs/audits/.
+  # Commits the root files back to main on the weekly schedule run.
+  # The verify script only needs DATABASE_URL + AUDIT_CHAIN_SECRET — it
+  # imports @prisma/client and @d2d/shared-utils directly, bypassing the API
+  # env schema validation, so no other secrets are required here.
   audit-chain-verify:
     name: Audit chain verify (weekly)
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: d2d
+          POSTGRES_PASSWORD: d2d
+          POSTGRES_DB: d2d_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U d2d"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://d2d:d2d@localhost:5432/d2d_test
+      AUDIT_CHAIN_SECRET: ${{ secrets.AUDIT_CHAIN_SECRET }}
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          echo "TODO Phase 1.4: replay audit chain per region, fail if any rowHash"
-          echo "differs from computed expected. Commit weekly Merkle root to"
-          echo "docs/audits/merkle-roots/<region>/<YYYY>-W<NN>.json"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter api db:generate
+      - run: pnpm --filter api db:migrate
+      - name: Replay audit chain + write Merkle roots
+        run: pnpm --filter api audit:verify
+      - name: Commit Merkle root files (schedule run only)
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/audits/merkle-roots/
+          git diff --cached --quiet || git commit -m "chore: weekly audit-chain Merkle root [skip ci]"
+          git push

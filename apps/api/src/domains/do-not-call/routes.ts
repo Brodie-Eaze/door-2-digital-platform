@@ -17,11 +17,12 @@
 import type { FastifyInstance } from 'fastify';
 import { dncScrubRequestSchema, dncIngestRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerDoNotCall(app: FastifyInstance): Promise<void> {
   app.get('/_status', async () => ({ domain: 'do-not-call', status: 'scaffold', phase: '1.2' }));
 
-  app.post('/scrub', async (req, reply) => {
+  app.post('/scrub', { preHandler: requireAuth }, async (req, reply) => {
     const parsed = dncScrubRequestSchema.parse(req.body);
     void parsed;
     return reply.code(501).type('application/problem+json').send({
@@ -32,7 +33,7 @@ export async function registerDoNotCall(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post('/ingest', async (req, reply) => {
+  app.post('/ingest', { preHandler: requireAuth }, async (req, reply) => {
     requireIdempotencyKey(req);
     const parsed = dncIngestRequestSchema.parse(req.body);
     void parsed;

@@ -20,11 +20,12 @@
 import type { FastifyInstance } from 'fastify';
 import { dnkCheckRequestSchema, dnkIngestRequestSchema } from '@d2d/shared-types';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 
 export async function registerDoNotKnock(app: FastifyInstance): Promise<void> {
   app.get('/_status', async () => ({ domain: 'do-not-knock', status: 'scaffold', phase: '1.2' }));
 
-  app.post('/check', async (req, reply) => {
+  app.post('/check', { preHandler: requireAuth }, async (req, reply) => {
     const parsed = dnkCheckRequestSchema.parse(req.body);
     void parsed;
     return reply.code(501).type('application/problem+json').send({
@@ -35,7 +36,7 @@ export async function registerDoNotKnock(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post('/ingest', async (req, reply) => {
+  app.post('/ingest', { preHandler: requireAuth }, async (req, reply) => {
     requireIdempotencyKey(req);
     const parsed = dnkIngestRequestSchema.parse(req.body);
     void parsed;
@@ -47,7 +48,7 @@ export async function registerDoNotKnock(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.get('/', async (_req, reply) =>
+  app.get('/', { preHandler: requireAuth }, async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',

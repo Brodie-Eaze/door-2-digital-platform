@@ -18,12 +18,13 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { dsarRequestSchema } from '@d2d/shared-types';
+import { requireAuth } from '../../shared/middleware/auth-guard';
 import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
 
 export async function registerDsar(app: FastifyInstance): Promise<void> {
   app.get('/_status', async () => ({ domain: 'dsar', status: 'scaffold', phase: '1.4' }));
 
-  app.post('/', async (req, reply) => {
+  app.post('/', { preHandler: requireAuth }, async (req, reply) => {
     requireIdempotencyKey(req);
     const parsed = dsarRequestSchema.parse(req.body);
     void parsed;
@@ -35,7 +36,7 @@ export async function registerDsar(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.get('/:id', async (_req, reply) =>
+  app.get('/:id', { preHandler: requireAuth }, async (_req, reply) =>
     reply.code(501).type('application/problem+json').send({
       type: 'https://docs.d2d.io/problems/not-implemented',
       title: 'Not implemented',

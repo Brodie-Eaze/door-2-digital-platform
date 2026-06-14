@@ -714,6 +714,15 @@ export async function createKnockBatch(
         });
       }
 
+      // Accrue per-knock commission for every newly-inserted knock.
+      // Must run inside the transaction so a rollback undoes commission rows too.
+      for (const k of out) {
+        await accrueKnockCommission(
+          { orgId: actor.orgId, userId: actor.userId, knockId: k.id },
+          tx,
+        );
+      }
+
       return { insertedCount, out };
     },
     { timeout: 30_000 },
