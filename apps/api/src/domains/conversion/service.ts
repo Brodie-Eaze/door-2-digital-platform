@@ -203,7 +203,7 @@ export async function createConversion(
             input.type === 'donation_recurring' && input.donationDetails?.frequency
               ? input.donationDetails.frequency
               : null,
-          paymentMethodToken: input.paymentMethodToken ?? input.paymentExternalId ?? 'unknown',
+          paymentMethodTokenVault: input.paymentMethodToken ?? input.paymentExternalId ?? null,
           status: 'active',
           deductibleGiftRecipientNo: input.donationDetails?.deductibleGiftRecipientNo ?? null,
           einOrEquivalent: input.donationDetails?.einOrEquivalent ?? null,

@@ -672,11 +672,16 @@ model Donation {
   id                        String             @id // don_*
   conversionId              String             @unique
   conversion                Conversion         @relation(fields: [conversionId], references: [id])
-  donorEmail                String /// PII
+  // PII-vault pattern: real email stored AES-256-GCM encrypted; plaintext column holds sentinel.
+  // Write path: donorEmail = 'redacted@vaulted', donorEmailVault = encrypted blob.
+  donorEmail                String             @default("redacted@vaulted") /// PII sentinel
+  donorEmailVault           String?            /// PII — AES-256-GCM(email, AAD=Donation:id)
+  donorEmailDigest          String?            /// deterministic SIV digest for indexed search
   amountCents               BigInt
   currency                  String
   frequency                 DonationFrequency? // null = one-off
-  paymentMethodToken        String // MiCamp token or Stripe pm_*
+  // SEC-009: renamed from paymentMethodToken; stored encrypted at rest.
+  paymentMethodTokenVault   String? // AES-256-GCM encrypted MiCamp/Stripe token
   externalSubscriptionId    String? // MiCamp recurring id or Stripe sub_*
   status                    String             @default("active")
   // Receipt fields (IRS for US, ACNC for AU, COC for SG)
@@ -1024,7 +1029,12 @@ model UserCredential {
   // mfaEnabledAt is stamped on first successful verify, marking setup complete.
   totpSecret      String?
   mfaEnabledAt    DateTime?
-  updatedAt       DateTime  @updatedAt
+  // SEC-003/SEC-007: per-account brute-force lockout.
+  // failedLoginCount increments on every bad password; never resets on lock, only on success.
+  // lockedUntil is set when count crosses thresholds (10 → 15min, 20 → 1h, 30 → 24h).
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  updatedAt        DateTime  @updatedAt
 }
 
 model RefreshToken {

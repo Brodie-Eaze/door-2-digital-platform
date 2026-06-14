@@ -185,7 +185,7 @@ export async function createFieldSignup(
         amountCents,
         currency,
         frequency: donationFrequency,
-        paymentMethodToken: 'unknown', // captured later when the recurring is set up
+        paymentMethodTokenVault: null, // captured + encrypted when the recurring is set up
         status: 'active',
         startedAt: signedAt,
       },
