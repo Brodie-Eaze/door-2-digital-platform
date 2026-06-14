@@ -8,7 +8,7 @@
  *   PATCH  /v1/leads/:id                      status (state-machine), assignedToId
  *   POST   /v1/leads/:id/assign               reassign + LeadActivity entry
  *   POST   /v1/leads/:id/activities           append activity (call/sms/email/note)
- *   POST   /v1/leads/:id/dnk                  501 — handled by Agent 15's DNK service
+ *   POST   /v1/leads/:id/dnk                  flag lead address as do-not-knock + archive lead
  */
 import type { FastifyInstance } from 'fastify';
 import {

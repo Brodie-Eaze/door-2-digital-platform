@@ -5,8 +5,8 @@
  *   POST  /v1/donations/:id/pause          pause recurring (audit-trailed)
  *   POST  /v1/donations/:id/cancel         cancel + cancelledAt (audit-trailed)
  *   POST  /v1/donations/:id/change-amount  change recurring amount (validates recurring)
- *   POST  /v1/donations/:id/resume         501 — Phase 1.4
- *   POST  /v1/donations/:id/receipt        501 — Phase 1.4 receipt PDF regenerate
+ *   POST  /v1/donations/:id/resume         resume a paused recurring donation
+ *   POST  /v1/donations/:id/receipt        regenerate + re-send IRS/DGR receipt PDF
  */
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';

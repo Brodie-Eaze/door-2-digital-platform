@@ -1,7 +1,7 @@
 /**
  * User routes — invite / accept-invite / list / get / patch / archive.
  *
- * Role / MFA-reset endpoints are still 501 stubs (Phase 1.2).
+ * All endpoints are live: invite / accept-invite / list / get / patch / archive / role / reset-mfa.
  */
 import type { FastifyInstance } from 'fastify';
 import {

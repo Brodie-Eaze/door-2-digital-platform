@@ -5,7 +5,7 @@
  *   POST  /v1/pii/unmask-approve/:requestId       approve (must be != requester); mints grant
  *   POST  /v1/pii/unmask/:requestId/reveal        reveal plaintext (grant required)
  *   GET   /v1/pii/unmask-grants/:requestId        status + audit metadata
- *   POST  /v1/pii/decrypt                         501 — direct decryption (operator-tier only)
+ *   POST  /v1/pii/decrypt                         super_admin only (audited, bypasses JIT dual-control)
  *
  * All paths require JWT. Role gates:
  *   - request: super_admin | org_admin | inside_sales

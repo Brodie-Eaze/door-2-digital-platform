@@ -9,8 +9,7 @@
  *   POST   /v1/territories/:id/assignments       assign user
  *   DELETE /v1/territories/:id/assignments/:aid  soft-revoke (expiresAt=now)
  *   GET    /v1/territories/heatmap?bbox=         knock-density aggregate
- *   POST   /v1/territories/:id/draft             501 — polygon draft edit
- *                                                workflow lands in Phase 1.2
+ *   POST   /v1/territories/:id/draft             create draft copy with new polygon (status=draft)
  */
 import type { FastifyInstance } from 'fastify';
 import {

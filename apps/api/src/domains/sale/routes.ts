@@ -4,7 +4,7 @@
  *   GET   /v1/sales/:id                       read with installer schedule
  *   POST  /v1/sales/:id/installer-handoff     set installer + scheduled install date
  *   POST  /v1/sales                           501 — sales are created via /v1/conversions
- *   POST  /v1/sales/:id/cancel                501 — Phase 1.4 refund + clawback
+ *   POST  /v1/sales/:id/cancel                cancel sale + clawback commission
  */
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';

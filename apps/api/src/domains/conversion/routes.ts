@@ -5,8 +5,8 @@
  *                                         Same TX: Conversion + Donation|Sale + Lead.status='converted'.
  *   GET  /v1/conversions                  cursor-paginated list (filters).
  *   GET  /v1/conversions/:id              one with linked donation/sale.
- *   POST /v1/conversions/:id/refund       501 — Phase 1.4 refund + clawback.
- *   POST /v1/conversions/:id/dispute      501 — Phase 1.4 chargeback intake.
+ *   POST /v1/conversions/:id/refund       generate refund instruction (instruct-only, never auto-pays).
+ *   POST /v1/conversions/:id/dispute      log chargeback + freeze conversion.
  *
  * All write paths require Idempotency-Key + JWT. attributionSource enum
  * drives billing rake at create time.
