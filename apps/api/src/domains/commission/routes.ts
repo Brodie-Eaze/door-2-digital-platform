@@ -1,51 +1,67 @@
 /**
- * Commission routes — Phase 0 stubs.
+ * Commission routes — Phase 1.3 real.
  *
- * Full implementation Phase 1.3:
- *   - GET /v1/commissions                          list (filter user, period, status); cursor-paginated
- *   - GET /v1/commissions/projection               projected payout for current period (live)
- *   - GET /v1/commissions/:id                      single commission with derivation trail
- *   - POST /v1/commissions/:id/adjust              manager adjustment (+/- with audit reason)
- *
- * Cross-cutting:
- *   - Plans defined in `CommissionPlan`: per_knock | per_appointment | per_conversion | override.
- *     Crew-leader override is computed by joining knocker → manager hierarchy.
- *   - Calc happens in `commission-calc` worker (BullMQ); this API serves results.
- *   - Projection endpoint reads accrued + estimates remaining via period-to-date run-rate.
- *   - Money in BigInt cents; never floating point.
+ *   GET  /v1/commissions                    cursor-paginated list (per-org; filter user/period/status)
+ *   GET  /v1/commissions/projection         projected payout for current calendar period
+ *   GET  /v1/commissions/:id                one commission with metadata
+ *   POST /v1/commissions/:id/adjust         manager ± adjustment (audit-trailed)
  */
 import type { FastifyInstance } from 'fastify';
-import { commissionQuerySchema } from '@d2d/shared-types';
+import { requireAuth } from '../../shared/middleware/auth-guard';
+import { requireTenant } from '../../shared/middleware/tenant-guard';
+import { adjustCommission, getCommission, getProjection, listCommissions } from './service';
+import { adjustCommissionBodySchema, listCommissionsQuerySchema } from './schemas';
+
+interface IdParams {
+  id: string;
+}
 
 export async function registerCommission(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'commission', status: 'scaffold', phase: '1.3' }));
+  app.get('/_status', async () => ({ domain: 'commission', status: 'live', phase: '1.3' }));
 
-  app.get('/', async (req, reply) => {
-    const parsed = commissionQuerySchema.parse(req.query);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Commission list lands in Phase 1.3',
+  // GET /v1/commissions
+  app.get('/', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listCommissionsQuerySchema.parse(req.query);
+    const result = await listCommissions(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
     });
+    return reply.code(200).send(result);
   });
 
-  app.get('/projection', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Commission projection lands in Phase 1.3',
-    }),
-  );
+  // GET /v1/commissions/projection — must come before /:id to avoid ambiguity
+  app.get('/projection', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const projection = await getProjection({
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ projection });
+  });
 
-  app.get('/:id', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Commission read lands in Phase 1.3',
-    }),
-  );
+  // GET /v1/commissions/:id
+  app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const commission = await getCommission(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send({ commission });
+  });
+
+  // POST /v1/commissions/:id/adjust
+  app.post<{ Params: IdParams }>('/:id/adjust', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = adjustCommissionBodySchema.parse(req.body);
+    const commission = await adjustCommission(
+      req.params.id,
+      { amountCents: body.amountCents, reason: body.reason },
+      { userId: ctx.userId, orgId: ctx.orgId, regionCode: ctx.regionCode as never },
+    );
+    return reply.code(200).send({ commission });
+  });
 }

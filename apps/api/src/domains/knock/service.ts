@@ -16,6 +16,7 @@ import { newId, Problems, ProblemError, addressHash } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import { emitAnalyticsEvent } from '../analytics/service';
+import { accrueKnockCommission } from '../commission/service';
 import type {
   StartSessionRequest,
   CreateKnockRequest,
@@ -254,6 +255,8 @@ export async function createKnock(
         idempotencyKey: input.idempotencyKey,
       },
     });
+    await accrueKnockCommission({ orgId: actor.orgId, userId: actor.userId, knockId: id }, tx);
+
     await writeAudit(tx, {
       orgId: actor.orgId,
       regionCode: actor.regionCode,

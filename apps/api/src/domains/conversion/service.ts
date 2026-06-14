@@ -22,6 +22,7 @@ import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-u
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
+import { accrueConversionCommission } from '../commission/service';
 import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
 
 interface ActorContext {
@@ -225,6 +226,17 @@ export async function createConversion(
         data: { status: 'converted' },
       });
     }
+
+    await accrueConversionCommission(
+      {
+        orgId: actor.orgId,
+        userId: input.knockerId ?? actor.userId,
+        conversionId,
+        conversionType: input.type,
+        amountCents,
+      },
+      tx,
+    );
 
     await AuditService.recordEvent(tx, {
       orgId: actor.orgId,
