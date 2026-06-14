@@ -20,6 +20,7 @@ import {
   updateUser,
   changeUserRole,
   archiveUser,
+  unlockUser,
 } from './service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
@@ -118,6 +119,29 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
         orgId: ctx.orgId,
         handler: async () => {
           const user = await archiveUser(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
+  );
+
+  // POST /v1/users/:id/unlock — clear login lockout (org_admin/super_admin only)
+  app.post<{ Params: UserIdParams }>(
+    '/:id/unlock',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await unlockUser(req.params.id, {
             userId: ctx.userId,
             orgId: ctx.orgId,
             regionCode: ctx.regionCode as never,
