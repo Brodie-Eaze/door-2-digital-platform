@@ -24,6 +24,26 @@ import { Prisma } from '@prisma/client';
 import type { RegionCode } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
+
+// ───────────────────────────────────────────────────────────────────────────
+// Adapter call timeout — 30 s hard cap via AbortSignal.timeout (Node built-in).
+// The adapter contract doesn't accept a signal, so we race against a rejection.
+// ───────────────────────────────────────────────────────────────────────────
+const ADAPTER_TIMEOUT_MS = 30_000;
+
+function withAdapterTimeout<T>(call: Promise<T>): Promise<T> {
+  return Promise.race([
+    call,
+    new Promise<never>((_, reject) => {
+      AbortSignal.timeout(ADAPTER_TIMEOUT_MS).addEventListener(
+        'abort',
+        () => reject(new Error(`Adapter call timed out after ${ADAPTER_TIMEOUT_MS}ms`)),
+        { once: true },
+      );
+    }),
+  ]);
+}
+
 import type {
   IntegrationRegistry,
   ProviderConfig,
@@ -471,7 +491,7 @@ export class MarketingService {
         if (!adapter.generateText) {
           throw new ProblemError(Problems.validation(`${providerKind} does not support text`));
         }
-        const r = await adapter.generateText(input as GenerateTextInput, cfg);
+        const r = await withAdapterTimeout(adapter.generateText(input as GenerateTextInput, cfg));
         outcome = r.ok
           ? { ok: true, data: r.data }
           : { ok: false, errorCode: r.error.code, errorMessage: r.error.message };
@@ -479,7 +499,7 @@ export class MarketingService {
         if (!adapter.generateImage) {
           throw new ProblemError(Problems.validation(`${providerKind} does not support image`));
         }
-        const r = await adapter.generateImage(input as GenerateImageInput, cfg);
+        const r = await withAdapterTimeout(adapter.generateImage(input as GenerateImageInput, cfg));
         outcome = r.ok
           ? { ok: true, data: r.data }
           : { ok: false, errorCode: r.error.code, errorMessage: r.error.message };
@@ -487,7 +507,7 @@ export class MarketingService {
         if (!adapter.generateVideo) {
           throw new ProblemError(Problems.validation(`${providerKind} does not support video`));
         }
-        const r = await adapter.generateVideo(input as GenerateVideoInput, cfg);
+        const r = await withAdapterTimeout(adapter.generateVideo(input as GenerateVideoInput, cfg));
         outcome = r.ok
           ? { ok: true, data: r.data }
           : { ok: false, errorCode: r.error.code, errorMessage: r.error.message };
@@ -495,7 +515,9 @@ export class MarketingService {
         if (!adapter.generateAvatar) {
           throw new ProblemError(Problems.validation(`${providerKind} does not support avatar`));
         }
-        const r = await adapter.generateAvatar(input as GenerateAvatarInput, cfg);
+        const r = await withAdapterTimeout(
+          adapter.generateAvatar(input as GenerateAvatarInput, cfg),
+        );
         outcome = r.ok
           ? { ok: true, data: r.data }
           : { ok: false, errorCode: r.error.code, errorMessage: r.error.message };
@@ -593,7 +615,7 @@ export class MarketingService {
         createdById: actor.userId,
       },
     });
-    const r = await adapter.buildAudience(input, cfg);
+    const r = await withAdapterTimeout(adapter.buildAudience(input, cfg));
     const updated = await prisma().$transaction(async (tx) => {
       const next = await tx.contentGenerationJob.update({
         where: { id: jobId },
@@ -652,7 +674,7 @@ export class MarketingService {
         createdById: actor.userId,
       },
     });
-    const r = await adapter.deliverCampaign(input, cfg);
+    const r = await withAdapterTimeout(adapter.deliverCampaign(input, cfg));
     const updated = await prisma().$transaction(async (tx) => {
       const next = await tx.contentGenerationJob.update({
         where: { id: jobId },

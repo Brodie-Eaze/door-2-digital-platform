@@ -1,3 +1,8 @@
+// TODO(M5): needs a Shift / ShiftSchedule model — no backing table yet.
+// KnockSession tracks field sessions but not advance scheduling. Roster
+// drag-and-drop scheduling requires a new Shift model (userId, day, start,
+// end, territory, status). Remaining on buildRoster() seed until that
+// migration lands.
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
@@ -176,7 +181,9 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
     void (async (): Promise<void> => {
       try {
         const [kRes, tRes] = await Promise.all([
-          fetch(`/api/orgs/${encodeURIComponent(params.slug)}/knockers`, { credentials: 'include' }),
+          fetch(`/api/orgs/${encodeURIComponent(params.slug)}/knockers`, {
+            credentials: 'include',
+          }),
           fetch(`/api/orgs/${encodeURIComponent(params.slug)}/territories`, {
             credentials: 'include',
           }),
@@ -961,7 +968,13 @@ function AddShiftModal({
     start: string;
     end: string;
   }) => Promise<boolean>;
-  onPersisted: (s: { repInitials: string; day: number; start: string; end: string; territory: string }) => void;
+  onPersisted: (s: {
+    repInitials: string;
+    day: number;
+    start: string;
+    end: string;
+    territory: string;
+  }) => void;
 }): JSX.Element {
   // When the account has real knockers AND territories, we roster a real shift
   // (userId + territoryId) that reaches the rep's iOS app. Otherwise we fall

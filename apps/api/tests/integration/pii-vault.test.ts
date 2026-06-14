@@ -140,6 +140,10 @@ async function seedLead(orgId: string, plaintextEmail: string): Promise<string> 
  * Insert a Conversion + Donation pair for a given org. Donation has no orgId
  * column — it inherits tenancy from its Conversion FK, which is exactly the
  * path assertRowOwnedByOrg must resolve. Returns both ids.
+ *
+ * F-004: donor email is now vault-encrypted. The fixture writes the real
+ * vault columns (donorEmailVault + donorEmailDigest) so unmask tests get
+ * a genuine ciphertext to decrypt.
  */
 async function seedDonation(
   orgId: string,
@@ -163,14 +167,20 @@ async function seedDonation(
     },
   });
   const donationId = newId('don');
+  // Encrypt the email into the vault before persisting — the AAD binds the
+  // ciphertext to (rowType='Donation', rowId=donationId) so it cannot be
+  // relocated to another row without failing decryption.
+  const donorEmailVault = PiiVaultService.encryptForRow('Donation', donationId, donorEmail);
   await prisma().donation.create({
     data: {
       id: donationId,
       conversionId,
-      donorEmail,
+      donorEmailVault: donorEmailVault as never,
+      donorEmailDigest: PiiVaultService.digest(donorEmail),
       amountCents: BigInt(5000),
       currency: 'USD',
-      paymentMethodToken: 'tok_test',
+      // SEC-009: paymentMethodToken renamed to paymentMethodTokenVault (Json?).
+      // Test fixtures use a null vault — token presence is not under test here.
       startedAt: new Date(),
     },
   });
@@ -566,6 +576,59 @@ describe('D2 — cross-tenant unmask is refused (404, no info leak)', () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().status).toBe('pending');
+  });
+
+  it('F-004: full Donation vault round-trip — request→approve→reveal decrypts correctly', async () => {
+    // Seed a donation whose email is vault-encrypted via seedDonation.
+    const donorEmail = 'f004-roundtrip@orgb.test';
+    const { donationId } = await seedDonation(orgB, donorEmail);
+
+    // Verify the DB row has NO plaintext column and HAS a vault blob.
+    const row = await prisma().donation.findUnique({ where: { id: donationId } });
+    expect(row?.donorEmailVault).toBeTruthy();
+    expect(row?.donorEmailDigest).toBeTruthy();
+
+    // Unmask flow: request (admin2B as IS-proxy) → approve (adminB) → reveal.
+    const tB = await tokenFor(adminEmailB, adminPassB);
+    const t2B = await tokenFor(secondAdminEmailB, secondAdminPassB);
+
+    const reqRes = await app.inject({
+      method: 'POST',
+      url: '/v1/pii/unmask-request',
+      headers: { authorization: `Bearer ${tB}`, 'idempotency-key': 'f004-rt-req-1' },
+      payload: {
+        rowType: 'Donation',
+        rowId: donationId,
+        fields: ['email'],
+        justification: 'F-004 vault round-trip test — verifying decrypt returns original email',
+      },
+    });
+    expect(reqRes.statusCode).toBe(201);
+    const reqId = reqRes.json().requestId;
+
+    const approveRes = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask-approve/${reqId}`,
+      headers: { authorization: `Bearer ${t2B}`, 'idempotency-key': 'f004-rt-approve-1' },
+      payload: { approved: true },
+    });
+    expect(approveRes.statusCode).toBe(200);
+    const grant = approveRes.json().grantToken;
+
+    const revealRes = await app.inject({
+      method: 'POST',
+      url: `/v1/pii/unmask/${reqId}/reveal`,
+      headers: { authorization: `Bearer ${tB}`, 'idempotency-key': 'f004-rt-reveal-1' },
+      payload: { grantToken: grant },
+    });
+    expect(revealRes.statusCode).toBe(200);
+    // Confirm the decrypted value matches the original plaintext.
+    expect(revealRes.json().values.email).toBe(donorEmail);
+    // Confirm the audit row is attributed to the Donation's owning org.
+    const audit = await prisma().auditEvent.findFirst({
+      where: { action: 'pii.unmask', resourceId: donationId },
+    });
+    expect(audit?.orgId).toBe(orgB);
   });
 
   it('reveal-time: a request whose rowId points at a foreign org is refused, leaks no plaintext, and writes no attacker-org audit', async () => {

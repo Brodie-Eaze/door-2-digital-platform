@@ -191,6 +191,11 @@ module "api_service" {
     { name = "S3_BUCKET_AUDIT", value = module.s3_audit.bucket_name },
     { name = "S3_BUCKET_ASSETS", value = module.s3_assets.bucket_name },
     { name = "S3_BUCKET_EXPORTS", value = module.s3_exports.bucket_name },
+    # HARDENING-LOG P0-perf: scrypt uses libuv threads for password hashing.
+    # Default UV_THREADPOOL_SIZE=4 starves under concurrent login load (50k target).
+    # 16 threads gives headroom for scrypt + any other async-thread-pool work
+    # (crypto, dns, fs) without exhausting Fargate task CPU budget.
+    { name = "UV_THREADPOOL_SIZE", value = "16" },
   ]
 
   secret_arns = local.api_secret_arns

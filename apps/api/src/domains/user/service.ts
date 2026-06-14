@@ -21,6 +21,7 @@ import { prisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { writeAudit } from '../../shared/audit/write';
 import { generateInviteToken, hashRefreshToken } from '../auth/tokens';
+import { revokeUserAccessTokens } from '../auth/token-revocation';
 import { hashPassword } from '../auth/password';
 import type { ListUsersQuery } from './schemas';
 
@@ -174,10 +175,16 @@ export async function acceptInvite(args: {
     where: { inviteTokenHash: hash },
     include: { user: true },
   });
+
+  // SEC-011: always run hashPassword regardless of whether the token was found
+  // or is expired — this normalises the response time across both failure paths
+  // so a probe cannot distinguish "token not found" from "token expired".
+  // The hash result is only used when the token is genuinely valid.
+  const pwHash = await hashPassword(args.password);
+
   if (!cred || !cred.inviteExpiresAt || cred.inviteExpiresAt < new Date()) {
     throw new ProblemError(Problems.unauthorized('Invite token invalid or expired'));
   }
-  const pwHash = await hashPassword(args.password);
   const updated = await prisma().$transaction(async (tx) => {
     await tx.userCredential.update({
       where: { userId: cred.userId },
@@ -353,7 +360,52 @@ export async function changeUserRole(
     });
     return updated;
   });
+  // SEC-002: also stamp the access-token revocation epoch so any live access
+  // token (up to 5 min residual) is rejected immediately. Refresh tokens were
+  // already revoked inside the TX above; this closes the access-token window.
+  await revokeUserAccessTokens(userId);
   return toPublic(next);
+}
+
+/**
+ * Clear a per-account login lockout. Only org_admin and super_admin may call
+ * this — same access level as role-granting. The operation is idempotent: if
+ * the account is not currently locked the write is a no-op and the audit row
+ * still lands so the action is traceable.
+ *
+ * Same-org invariant: actor must be in the target user's org. The service
+ * enforces this explicitly rather than relying solely on the RLS GUC because
+ * UserCredential is keyed on userId and cross-tenant probing must be blocked
+ * before any credential row is read.
+ */
+export async function unlockUser(userId: string, actor: ActorContext): Promise<UserPublic> {
+  // Tighter than USER_ADMIN_ROLES — only org_admin and above; a manager can
+  // archive users but must not be able to unilaterally un-throttle an account.
+  requireActorRole(actor, ROLE_GRANT_ROLES);
+
+  const existing = await prisma().user.findUnique({ where: { id: userId } });
+  if (!existing) throw new ProblemError(Problems.notFound('User', userId));
+  if (existing.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
+  }
+
+  await tenantTx(actor.orgId, async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { lockedUntil: null, failedLoginCount: 0 },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.lockout_cleared',
+      resourceType: 'User',
+      resourceId: userId,
+      metadata: { clearedBy: actor.userId },
+    });
+  });
+
+  return toPublic(existing);
 }
 
 export async function archiveUser(userId: string, actor: ActorContext): Promise<UserPublic> {
@@ -391,6 +443,9 @@ export async function archiveUser(userId: string, actor: ActorContext): Promise<
     });
     return u;
   });
+  // SEC-002: stamp the access-token revocation epoch so any live access token
+  // issued to this user (up to 5 min residual) is rejected immediately.
+  await revokeUserAccessTokens(userId);
   return toPublic(updated);
 }
 
