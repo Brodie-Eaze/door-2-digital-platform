@@ -14,7 +14,7 @@
  *   - PUT  /sso/:orgSlug/config   → upsert IdP config (org_admin+)
  *
  * MFA (TOTP) — GET /mfa/setup + POST /verify-mfa — Phase 1.2 real.
- * WebAuthn remains 501 (Phase 1.2+).
+ * WebAuthn register + assert — POST /webauthn/register/{begin,finish} + assert/{begin,finish} — live.
  */
 import * as querystring from 'node:querystring';
 import { z } from 'zod';
