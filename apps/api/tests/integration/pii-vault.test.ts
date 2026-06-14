@@ -179,7 +179,8 @@ async function seedDonation(
       donorEmailDigest: PiiVaultService.digest(donorEmail),
       amountCents: BigInt(5000),
       currency: 'USD',
-      paymentMethodToken: 'tok_test',
+      // SEC-009: paymentMethodToken renamed to paymentMethodTokenVault (Json?).
+      // Test fixtures use a null vault — token presence is not under test here.
       startedAt: new Date(),
     },
   });

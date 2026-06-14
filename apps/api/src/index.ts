@@ -62,7 +62,12 @@ async function buildServer() {
 
   const app = Fastify({
     logger: log,
-    trustProxy: true,
+    // SEC-006: trust exactly 1 upstream hop (the load balancer). `true` would
+    // trust the entire X-Forwarded-For chain, allowing an attacker to prepend a
+    // spoofed IP and bypass the per-IP rate limit bucket. With hop count = 1,
+    // Fastify takes the rightmost client IP added by our LB — which the caller
+    // cannot control.
+    trustProxy: 1,
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
   });

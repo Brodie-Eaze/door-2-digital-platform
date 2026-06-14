@@ -47,8 +47,12 @@ export interface LeadPublic {
   sourceKnockId: string | null;
   addressId: string | null;
   assignedToId: string | null;
+  // TODO: remove plaintext givenName/familyName after vault migration (SEC-010).
+  // New consumers must use displayName; JIT unmask path provides full name.
   givenName: string;
   familyName: string;
+  /** Initials-only display string safe for non-super_admin surfaces. */
+  displayName: string;
   email: string | null;
   phone: string | null;
   createdAt: string;
@@ -486,8 +490,12 @@ function toPublic(l: {
     sourceKnockId: l.sourceKnockId,
     addressId: l.addressId,
     assignedToId: l.assignedToId,
+    // TODO: remove plaintext givenName/familyName after vault migration (SEC-010).
     givenName: l.givenName,
     familyName: l.familyName,
+    // Safe default display string — callers that need full name must use the
+    // JIT unmask path; this value is safe for org_admin and below.
+    displayName: `${l.givenName[0] ?? '?'}. ${l.familyName[0] ?? '?'}.`,
     email: l.email,
     phone: l.phone,
     createdAt: l.createdAt.toISOString(),

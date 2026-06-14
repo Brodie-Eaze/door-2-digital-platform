@@ -82,13 +82,21 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
       },
     });
 
+    // super_admin is the only role permitted to see full lead names on this surface.
+    // All other roles receive initials — JIT unmask handles step-up.
+    const isSuperAdmin = session.role === 'super_admin';
+
     return {
       source: 'database',
       orgName: org.tradingName,
       leads: leads.map((l, i) => ({
         id: l.id,
-        givenName: l.givenName,
-        familyName: l.familyName,
+        givenName: isSuperAdmin ? l.givenName : `${l.givenName[0] ?? '?'}.`,
+        familyName: isSuperAdmin
+          ? l.familyName
+          : l.familyName.length > 0
+            ? `${l.familyName[0]}.`
+            : '',
         email: maskEmail(l.email),
         phone: maskPhone(l.phone),
         address: l.address

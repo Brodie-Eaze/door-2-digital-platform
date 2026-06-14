@@ -14,11 +14,7 @@
  * 'nodejs'`.
  */
 import { cookies } from 'next/headers';
-import {
-  verifySessionToken,
-  sessionSigningSecret,
-  type AccessClaims,
-} from '@/lib/session-verify';
+import { verifySessionToken, sessionSigningSecret, type AccessClaims } from '@/lib/session-verify';
 
 // Re-export the pure verifier surface so existing importers
 // (`@/lib/session`) keep working unchanged.
@@ -68,7 +64,8 @@ function sessionFromClaims(claims: AccessClaims): Session {
  * Session ONLY when the cookie cryptographically verifies; otherwise null.
  */
 export async function getSession(): Promise<Session | null> {
-  const token = cookies().get('d2d_at')?.value;
+  // Next 15+: cookies() returns a Promise<ReadonlyRequestCookies>; must await.
+  const token = (await cookies()).get('d2d_at')?.value;
   const claims = verifySessionToken(token, sessionSigningSecret());
   if (!claims) return null;
   return sessionFromClaims(claims);
