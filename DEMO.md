@@ -7,7 +7,7 @@
 ## 🚀 Option A — Demo locally (recommended, 30 sec)
 
 ```bash
-cd ~/D2D/d2d-platform
+cd ~/D2D/door-2-digital-platform
 bash scripts/demo.sh
 ```
 
@@ -28,7 +28,7 @@ Press `Ctrl+C` to stop both apps.
 If you want links you can share on a call without screen-share. Both apps deploy independently as Next.js standalone bundles.
 
 ```bash
-cd ~/D2D/d2d-platform
+cd ~/D2D/door-2-digital-platform
 
 # Login once (browser opens; pair your account)
 npx vercel login
@@ -143,12 +143,12 @@ Both have `eslint.ignoreDuringBuilds: true` set so they ship even with lint nits
 
 | What                       | URL                                                                                                               |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **GitHub repo (private)**  | https://github.com/Brodie-Eaze/d2d-platform                                                                       |
+| **GitHub repo (private)**  | https://github.com/Brodie-Eaze/door-2-digital-platform                                                            |
 | **Local Operator Console** | http://localhost:3011                                                                                             |
 | **Local Org Console**      | http://localhost:3012                                                                                             |
 | **Local iPhone preview**   | http://localhost:3011/mobile-preview                                                                              |
 | **Master plan**            | `~/D2D/00-MASTER-PLAN.md` (also in repo at `docs/architecture.md`)                                                |
-| **Handoff for engineers**  | `~/D2D/d2d-platform/HANDOFF.md`                                                                                   |
+| **Handoff for engineers**  | `~/D2D/door-2-digital-platform/HANDOFF.md`                                                                        |
 | **Vercel deploy**          | Not deployed yet — run `npx vercel --prod --yes` from `apps/web-operator/` and `apps/web-org/` to get public URLs |
 
 ---
@@ -176,7 +176,7 @@ The architecture, data model, design system, security primitives, audit trail de
 Then run:
 
 ```bash
-cd ~/D2D/d2d-platform
+cd ~/D2D/door-2-digital-platform
 npx vercel login           # one-time, browser
 cd apps/web-org
 npx vercel --prod --yes    # deploys with Hope Forward branded

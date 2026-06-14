@@ -1,4 +1,4 @@
-# Door 2 Digital — Platform Monorepo
+# Door 2 Digital Platform
 
 > The operating system for door-to-door sales (charity + commercial).
 > Field capture → CRM → AI marketing retargeting → conversion → commission → payout.
@@ -6,8 +6,9 @@
 
 ## Status
 
-**Phase 0 — Scaffold COMPLETE** (2026-05-24).
-Next: Phase 1.1 — Foundations + Auth + Org (Week 2–4).
+**Phase 1 — US enterprise pilot, in build** (updated 2026-06-05).
+Backend + security floor hardened across 10 stacked PRs (not yet merged); AWS IaC `validate`-clean (not yet applied). See `CLAUDE.md` for current state, `docs/PRD.md` for requirements, `docs/intelligence/INTELLIGENCE-LAYER-STRATEGY.md` for the moat.
+Next human-gated unlocks: merge PRs → AWS account + `terraform apply` → MiCamp creds → domain → 50k load test.
 
 ## Quick start
 
@@ -45,7 +46,7 @@ pnpm --filter web-operator dev
 ## Repo layout
 
 ```
-d2d-platform/
+door-2-digital-platform/
 ├── apps/
 │   ├── api/                  Fastify + Prisma backend (port 3010)
 │   ├── web-operator/         Operator Console — Brodie's cross-tenant view (3011)

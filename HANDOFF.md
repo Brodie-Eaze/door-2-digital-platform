@@ -21,7 +21,7 @@ Welcome to the codebase. Phase 0 (Scaffold) is complete. This document tells you
 ✅ **28 ADRs** — full prose for 0001/0002/0003/0007/0008/0009/0010/0011/0012/0013/0014/0016/0019/0022/0028 (the load-bearing decisions), stubs for the rest, README index + template
 ✅ **Docs** — README, CONTRIBUTING, SECURITY, full plan at `docs/architecture.md` (1222 lines)
 
-Repo at `/Users/Brodie/D2D/d2d-platform/`. Plan at `/Users/Brodie/D2D/00-MASTER-PLAN.md` and in-repo at `docs/architecture.md`. Local git initialised on `main`.
+Repo at `/Users/Brodie/D2D/door-2-digital-platform/`. Plan at `/Users/Brodie/D2D/00-MASTER-PLAN.md` and in-repo at `docs/architecture.md`. Local git initialised on `main`.
 
 ---
 
@@ -179,7 +179,7 @@ These need answers before Phase 1.1 starts (none block Phase 0):
 
 ## Verification — Phase 0 is "done" when:
 
-- [x] Repo scaffold at `/Users/Brodie/D2D/d2d-platform/`
+- [x] Repo scaffold at `/Users/Brodie/D2D/door-2-digital-platform/`
 - [x] 28 ADRs (15 full prose, 13 stubs ready to flesh out)
 - [x] Prisma schema covers all 28 entities from plan §4
 - [x] `@d2d/ui-tokens` + `@d2d/ui-web` mirror EazePay Intelligence design DNA exactly
@@ -200,7 +200,7 @@ These need answers before Phase 1.1 starts (none block Phase 0):
 ## How to push to GitHub once the org exists
 
 ```bash
-cd /Users/Brodie/D2D/d2d-platform
+cd /Users/Brodie/D2D/door-2-digital-platform
 gh repo create door2digital/d2d-platform --private --source=. --remote=origin
 git add -A
 git commit -m "Phase 0 scaffold

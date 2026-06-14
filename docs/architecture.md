@@ -12,7 +12,7 @@
 - **Stack simplified** from Nx + NestJS to **Turbo + Fastify + Prisma** matching the newer Eaze Intelligence convention. ADRs 0001 and 0002 updated.
 - **Mobile pivoted** from Expo/React Native to **native iOS via Xcode** (Swift 5.10, SwiftUI, Swift Concurrency, SwiftData/GRDB). Android via Kotlin/Compose deferred to Phase 2. ADR-0003 updated.
 - **MiCamp Gateway API** locked as US payment processor (Brodie's ISO). Stripe falls to AU + SG only. ADR-0028 added.
-- **Plan-execution status:** Phase 0 scaffold COMPLETE in `/Users/Brodie/D2D/d2d-platform/`. See repo `HANDOFF.md` for what's built and queued for Phase 1.1.
+- **Plan-execution status:** Phase 0 scaffold COMPLETE in `/Users/Brodie/D2D/door-2-digital-platform/`. See repo `HANDOFF.md` for what's built and queued for Phase 1.1.
 
 ---
 
@@ -89,7 +89,7 @@ Door-to-door sales — both **charity fundraising** (World Vision, Red Cross, AC
 ### 2.2 Directory tree
 
 ```
-d2d-platform/
+door-2-digital-platform/
 ├── apps/                            # Deployable units. One Dockerfile per app at repo root.
 │   ├── api/                         # NestJS BFF — REST /v1/* + OpenAPI; owns Prisma schema
 │   ├── webhooks/                    # Isolated inbound webhook receiver (Stripe, Twilio, Meta, ABS)

@@ -3,7 +3,7 @@
 **Built:** night of 2026-05-24 → 2026-05-25 (Brodie logged off ~9pm)
 **Final commit:** see end of file (added on top of this brief)
 **Branch:** `main`, pushed to `origin`
-**GitHub:** https://github.com/Brodie-Eaze/d2d-platform
+**GitHub:** https://github.com/Brodie-Eaze/door-2-digital-platform
 **Backend tests:** 198 / 198 passing
 **Web-operator routes:** 170 / 170 returning 200
 **Satellite imagery:** Esri + OSM all green
@@ -62,14 +62,14 @@ Eight commits landed since the last review dossier (`8bd38ee`):
 
 ```bash
 # 1. Web (port 3011) — works standalone, all pages render from fixtures
-cd /Users/Brodie/D2D/d2d-platform
+cd /Users/Brodie/D2D/door-2-digital-platform
 pnpm --filter web-operator dev
 # → http://localhost:3011
 ```
 
 ```bash
 # 2. API (port 3010) — needs Postgres on :5432 + Redis on :6379
-cd /Users/Brodie/D2D/d2d-platform
+cd /Users/Brodie/D2D/door-2-digital-platform
 docker compose up -d postgres redis   # if not already running
 pnpm --filter api db:migrate           # idempotent
 pnpm --filter api dev
@@ -90,7 +90,7 @@ in a non-interactive terminal (errors out with: _"Browserless login
 requires an interactive terminal."_). There is no API-key login path.
 `RAILWAY_TOKEN` was not set.
 
-**Everything is PREPPED.** Your morning command from `/Users/Brodie/D2D/d2d-platform`:
+**Everything is PREPPED.** Your morning command from `/Users/Brodie/D2D/door-2-digital-platform`:
 
 ```bash
 railway login                # opens browser, log in to your account

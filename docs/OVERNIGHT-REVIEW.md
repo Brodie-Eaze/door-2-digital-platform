@@ -17,7 +17,7 @@ is ready for a click-through tour.
 ## How to spin up
 
 ```bash
-cd /Users/Brodie/D2D/d2d-platform
+cd /Users/Brodie/D2D/door-2-digital-platform
 pnpm --filter web-operator dev
 # Then open http://localhost:3011
 ```
