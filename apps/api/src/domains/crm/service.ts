@@ -1,14 +1,16 @@
 /**
  * CRM Sequence service — create templates + enroll leads.
  *
- * Execution (dispatching the BullMQ `lead-sequence` jobs) is handled by the
- * workers process; this service only manages the database state.
+ * After enrolling leads, immediately enqueues the first `lead-sequence` BullMQ
+ * job for each new enrollment. Subsequent steps are scheduled by the worker
+ * itself after each step completes.
  */
 import type { RegionCode } from '@prisma/client';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import type { CreateSequenceRequest, EnrollSequenceRequest } from '@d2d/shared-types';
 import { prisma } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { scheduleSequenceStep } from '../../workers/lead-sequence.worker';
 
 interface ActorContext {
   userId: string;
@@ -167,6 +169,15 @@ export async function enrollLeadsInSequence(
       });
     }
   });
+
+  // Enqueue the first step for every newly-created enrollment.
+  // delayMs is the time until `startAt` from now (floor 0 — never negative).
+  const firstStepDelayMs = Math.max(0, startAt.getTime() - Date.now());
+  await Promise.all(
+    enrollmentIds.map((eid) =>
+      scheduleSequenceStep({ enrollmentId: eid, stepIndex: 0, delayMs: firstStepDelayMs }),
+    ),
+  );
 
   return {
     id: enrollmentIds[0] ?? '',

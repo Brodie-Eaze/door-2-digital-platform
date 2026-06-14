@@ -61,6 +61,7 @@ import { registerIntegrations } from './integrations';
 import { registerMcpServer } from './mcp/server';
 import { startAuditShipper } from './workers/audit-shipper.worker';
 import { startDnkSync } from './workers/dnk-sync.worker';
+import { startLeadSequenceWorker } from './workers/lead-sequence.worker';
 
 async function buildServer() {
   const e = env();
@@ -220,7 +221,8 @@ async function main(): Promise<void> {
   if (e.CRON_LEADER) {
     startAuditShipper();
     startDnkSync();
-    logger().info('CRON_LEADER=true — audit-shipper + dnk-sync workers started');
+    startLeadSequenceWorker();
+    logger().info('CRON_LEADER=true — audit-shipper + dnk-sync + lead-sequence workers started');
   }
 }
 
