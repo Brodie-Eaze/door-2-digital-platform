@@ -59,6 +59,8 @@ import { registerContentStudio } from './domains/content-studio/routes';
 import { registerRealtime } from './domains/realtime/routes';
 import { registerIntegrations } from './integrations';
 import { registerMcpServer } from './mcp/server';
+import { startAuditShipper } from './workers/audit-shipper.worker';
+import { startDnkSync } from './workers/dnk-sync.worker';
 
 async function buildServer() {
   const e = env();
@@ -209,7 +211,12 @@ async function main(): Promise<void> {
   const e = env();
   const app = await buildServer();
   await app.listen({ port: e.PORT, host: e.HOST });
-  // Fastify logger reports the bound address.
+
+  if (e.CRON_LEADER) {
+    startAuditShipper();
+    startDnkSync();
+    logger().info('CRON_LEADER=true — audit-shipper + dnk-sync workers started');
+  }
 }
 
 main().catch((err) => {

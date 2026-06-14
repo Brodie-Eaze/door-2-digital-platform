@@ -19,12 +19,11 @@
  * environments without real Redis can import without crashing.
  */
 import { Worker, Queue } from 'bullmq';
-import { hmacSha256 } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
-import { logger } from '../../config/logger';
-import { redis } from '../../config/redis';
-import { env } from '../../config/env';
-import { ulid } from '@d2d/shared-utils';
+import { hmacSha256, newId } from '@d2d/shared-utils';
+import { prisma } from '../config/db';
+import { logger } from '../config/logger';
+import { redis } from '../config/redis';
+import { env } from '../config/env';
 
 const QUEUE_NAME = 'dnk-sync';
 
@@ -89,7 +88,7 @@ async function syncDncUs(): Promise<void> {
 
     await prisma().doNotCall.create({
       data: {
-        id: ulid(),
+        id: newId('dnc'),
         regionCode: 'US',
         phoneDigest: digest,
         source: 'FTC_DNC',
@@ -135,7 +134,7 @@ async function syncDnkFeed(): Promise<void> {
 
     await prisma().doNotKnock.create({
       data: {
-        id: ulid(),
+        id: newId('dnk'),
         regionCode: 'US',
         addressId,
         source: 'DNK_FEED',

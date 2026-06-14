@@ -102,6 +102,12 @@ const envSchema = z.object({
   S3_BUCKET_ASSETS: z.string(),
   S3_BUCKET_EXPORTS: z.string(),
 
+  // Workers — exactly one replica per region sets this to 'true'
+  CRON_LEADER: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
+
   // Observability
   SENTRY_DSN: z.string().url().optional(),
   DATADOG_API_KEY: z.string().optional(),

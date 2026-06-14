@@ -77,7 +77,10 @@ async function main(): Promise<void> {
   for (const scope of scopes) {
     const where = scope.orgId
       ? { orgId: scope.orgId }
-      : { orgId: null as null, regionCode: scope.regionCode };
+      : {
+          orgId: null as null,
+          regionCode: scope.regionCode as import('@prisma/client').RegionCode,
+        };
 
     const rows = await prisma.auditEvent.findMany({
       where,

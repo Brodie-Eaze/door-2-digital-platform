@@ -19,10 +19,10 @@
  */
 import { Worker, Queue } from 'bullmq';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { prisma } from '../../config/db';
-import { logger } from '../../config/logger';
-import { redis } from '../../config/redis';
-import { env } from '../../config/env';
+import { prisma } from '../config/db';
+import { logger } from '../config/logger';
+import { redis } from '../config/redis';
+import { env } from '../config/env';
 
 const QUEUE_NAME = 'audit-ship';
 const BATCH_SIZE = 1000;
