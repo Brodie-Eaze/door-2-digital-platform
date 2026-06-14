@@ -23,6 +23,7 @@ import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
 import { accrueConversionCommission } from '../commission/service';
+import { emitAnalyticsEvent } from '../analytics/service';
 import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
 
 interface ActorContext {
@@ -246,6 +247,25 @@ export async function createConversion(
       resourceType: 'Conversion',
       resourceId: conversionId,
       afterJson: {
+        type: input.type,
+        attributionSource: input.attributionSource,
+        amountCents: amountCents.toString(),
+        currency: input.currency,
+        paymentProvider: input.paymentProvider,
+        processorResidualCents: processorResidualCents.toString(),
+        d2dRakeCents: rake.toString(),
+      },
+    });
+
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: input.knockerId ?? actor.userId,
+      eventType: 'conversion',
+      entityType: 'Conversion',
+      entityId: conversionId,
+      occurredAt: signedAt,
+      payload: {
         type: input.type,
         attributionSource: input.attributionSource,
         amountCents: amountCents.toString(),

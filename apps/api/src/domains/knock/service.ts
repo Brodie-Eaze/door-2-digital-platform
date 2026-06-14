@@ -92,19 +92,33 @@ export async function startSession(
   }
 
   const id = newId('sess');
-  const created = await prisma().knockSession.create({
-    data: {
-      id,
+  const startedAt = new Date();
+  const created = await prisma().$transaction(async (tx) => {
+    const row = await tx.knockSession.create({
+      data: {
+        id,
+        orgId: actor.orgId,
+        userId: actor.userId,
+        territoryId: input.territoryId,
+        regionCode: actor.regionCode,
+        startedAt,
+        startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
+        deviceId: input.deviceId,
+        appVersion: input.appVersion ?? null,
+        osVersion: input.osVersion ?? null,
+      },
+    });
+    await emitAnalyticsEvent(tx, {
       orgId: actor.orgId,
-      userId: actor.userId,
-      territoryId: input.territoryId,
       regionCode: actor.regionCode,
-      startedAt: new Date(),
-      startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
-      deviceId: input.deviceId,
-      appVersion: input.appVersion ?? null,
-      osVersion: input.osVersion ?? null,
-    },
+      userId: actor.userId,
+      eventType: 'session_start',
+      entityType: 'KnockSession',
+      entityId: id,
+      occurredAt: startedAt,
+      payload: { territoryId: input.territoryId, deviceId: input.deviceId },
+    });
+    return row;
   });
   return toSessionPublic(created);
 }
@@ -118,9 +132,23 @@ export async function endSession(sessionId: string, actor: ActorContext): Promis
   if (existing.endedAt) {
     return toSessionPublic(existing); // idempotent
   }
-  const updated = await prisma().knockSession.update({
-    where: { id: sessionId },
-    data: { endedAt: new Date() },
+  const endedAt = new Date();
+  const updated = await prisma().$transaction(async (tx) => {
+    const row = await tx.knockSession.update({
+      where: { id: sessionId },
+      data: { endedAt },
+    });
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'session_end',
+      entityType: 'KnockSession',
+      entityId: sessionId,
+      occurredAt: endedAt,
+      payload: { territoryId: existing.territoryId },
+    });
+    return row;
   });
   return toSessionPublic(updated);
 }
