@@ -17,6 +17,7 @@ import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import type {
   CreateTerritoryRequest,
+  DraftTerritoryRequest,
   UpdateTerritoryRequest,
   ListTerritoriesQuery,
   CreateAssignmentRequest,
@@ -305,6 +306,82 @@ export async function updateTerritory(
   });
 
   return toPublic(updated);
+}
+
+/**
+ * Propose a polygon edit for an existing territory without replacing it.
+ *
+ * Creates a NEW Territory row with status='draft', carrying the proposed
+ * polygon and a back-reference to the original in metadata.  The original
+ * territory stays active and undisturbed.  A manager reviews the draft via
+ * GET /v1/territories?status=draft, then either:
+ *   - PATCH /v1/territories/:draftId { status: 'archived' } to discard, or
+ *   - PATCH /v1/territories/:originalId { status: 'archived' } + rename the
+ *     draft to take over (polygon edits are immutable once live per ADR-0013).
+ *
+ * No schema migration needed — metadata already carries arbitrary JSON.
+ */
+export async function draftTerritory(
+  originalId: string,
+  input: DraftTerritoryRequest,
+  actor: ActorContext,
+): Promise<TerritoryPublic> {
+  const original = await prisma().territory.findUnique({ where: { id: originalId } });
+  if (!original) throw new ProblemError(Problems.notFound('Territory', originalId));
+  if (original.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(original.orgId));
+  }
+  if (original.status === 'archived') {
+    throw new ProblemError(Problems.conflict('Cannot draft from an archived territory'));
+  }
+
+  const ring = parseWktPolygon(input.polygonWkt);
+  const centroid = centroidOf(ring);
+  const s2 = stubS2Covering(centroid);
+  const draftId = newId('ter');
+
+  const existingMeta = (original.metadata ?? {}) as Record<string, unknown>;
+  const draftMeta: Record<string, unknown> = {
+    ...existingMeta,
+    originalTerritoryId: originalId,
+    draftReason: input.reason ?? null,
+  };
+
+  const created = await prisma().$transaction(async (tx) => {
+    const row = await tx.territory.create({
+      data: {
+        id: draftId,
+        orgId: actor.orgId,
+        regionCode: actor.regionCode,
+        name: `[DRAFT] ${original.name}`,
+        vertical: original.vertical,
+        polygon: input.polygonWkt,
+        centroid: `${centroid.lng} ${centroid.lat}`,
+        s2CellIds: s2,
+        campaignId: original.campaignId ?? null,
+        status: 'draft',
+        metadata: draftMeta as Prisma.InputJsonValue,
+      },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'territory.draft_created',
+      resourceType: 'Territory',
+      resourceId: draftId,
+      afterJson: {
+        originalTerritoryId: originalId,
+        name: row.name,
+        vertical: row.vertical,
+        centroid: `${centroid.lng} ${centroid.lat}`,
+        reason: input.reason ?? null,
+      },
+    });
+    return row;
+  });
+
+  return toPublic(created);
 }
 
 // ───────────────────────────────────────────────────────────────────────────

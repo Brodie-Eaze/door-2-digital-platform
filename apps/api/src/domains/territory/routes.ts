@@ -15,6 +15,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   createTerritoryRequestSchema,
+  draftTerritoryRequestSchema,
   updateTerritoryRequestSchema,
   listTerritoriesQuerySchema,
   createAssignmentRequestSchema,
@@ -22,6 +23,7 @@ import {
 } from './schemas';
 import {
   createTerritory,
+  draftTerritory,
   listTerritories,
   listAssignedTerritories,
   getTerritory,
@@ -176,16 +178,27 @@ export async function registerTerritory(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/territories/:id/draft — 501 stub (polygon edit workflow Phase 1.2)
+  // POST /v1/territories/:id/draft — propose a polygon edit without going live.
+  // Creates a new territory row (status='draft') pointing back to the original.
   app.post<{ Params: TerritoryIdParams }>(
     '/:id/draft',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'Draft polygon edit workflow lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = draftTerritoryRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const territory = await draftTerritory(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 201, body: { territory } };
+        },
+      });
+    },
   );
 }
