@@ -24,7 +24,12 @@ import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
 import { accrueConversionCommission } from '../commission/service';
 import { emitAnalyticsEvent } from '../analytics/service';
-import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
+import type {
+  CreateConversionRequest,
+  DisputeConversionRequest,
+  ListConversionsQuery,
+  RefundConversionRequest,
+} from './schemas';
 
 interface ActorContext {
   userId: string;
@@ -322,6 +327,141 @@ export async function getConversion(id: string, actor: ActorContext): Promise<Co
     throw new ProblemError(Problems.tenantMismatch(row.orgId));
   }
   return toPublic(row, row.donation, row.sale);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Phase 1.4 — Refund instruction + dispute intake (ADR-0019: instruct-only)
+// ───────────────────────────────────────────────────────────────────────────
+
+async function loadConversionAndAssertTenant(
+  id: string,
+  actor: ActorContext,
+): Promise<{
+  id: string;
+  orgId: string;
+  regionCode: RegionCode;
+  amountCents: bigint;
+  currency: string;
+  conversionId: string; // alias for id — keeps callers readable
+}> {
+  const row = await prisma().conversion.findUnique({ where: { id } });
+  if (!row) throw new ProblemError(Problems.notFound('Conversion', id));
+  if (row.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(row.orgId));
+  }
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    regionCode: row.regionCode,
+    amountCents: row.amountCents,
+    currency: row.currency,
+    conversionId: row.id,
+  };
+}
+
+export interface RefundInstructionPublic {
+  id: string;
+  conversionId: string;
+  amountCents: string;
+  currency: string;
+  reason: string;
+  clawbackCommissions: boolean;
+  status: 'pending_manual_action';
+  instructedAt: string;
+}
+
+export async function refundConversion(
+  id: string,
+  input: RefundConversionRequest,
+  actor: ActorContext,
+): Promise<RefundInstructionPublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const instructionId = newId('rfi');
+  const instructedAt = new Date();
+
+  await prisma().$transaction(async (tx) => {
+    if (input.clawbackCommissions) {
+      await tx.commission.updateMany({
+        where: { conversionId: conv.id, status: 'accrued' },
+        data: { status: 'clawback_pending' },
+      });
+    }
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.refund_instruction',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: { amountCents: conv.amountCents.toString(), currency: conv.currency },
+      afterJson: {
+        instructionId,
+        refundAmountCents: input.amountCents.toString(),
+        currency: input.currency,
+        status: 'pending_manual_action',
+        clawbackCommissions: input.clawbackCommissions,
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: instructionId,
+    conversionId: conv.id,
+    amountCents: input.amountCents.toString(),
+    currency: input.currency,
+    reason: input.reason,
+    clawbackCommissions: input.clawbackCommissions,
+    status: 'pending_manual_action',
+    instructedAt: instructedAt.toISOString(),
+  };
+}
+
+export interface DisputePublic {
+  id: string;
+  conversionId: string;
+  reason: string;
+  chargebackCode: string | null;
+  status: 'received';
+  receivedAt: string;
+}
+
+export async function disputeConversion(
+  id: string,
+  input: DisputeConversionRequest,
+  actor: ActorContext,
+): Promise<DisputePublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const disputeId = newId('dsp');
+  const receivedAt = input.notifiedAt ? new Date(input.notifiedAt) : new Date();
+
+  await prisma().$transaction(async (tx) => {
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.dispute_intake',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: {},
+      afterJson: {
+        disputeId,
+        chargebackCode: input.chargebackCode ?? null,
+        status: 'received',
+        receivedAt: receivedAt.toISOString(),
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: disputeId,
+    conversionId: conv.id,
+    reason: input.reason,
+    chargebackCode: input.chargebackCode ?? null,
+    status: 'received',
+    receivedAt: receivedAt.toISOString(),
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
