@@ -23,8 +23,9 @@ export async function GET(
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
 
-  const org = await resolveAccountOrg(params.slug, session);
-  if (!org) return notFound('Org', params.slug);
+  const orgOrErr = await resolveAccountOrg(params.slug, session);
+  if (orgOrErr instanceof Response) return orgOrErr;
+  const org = orgOrErr;
 
   try {
     const todayStart = new Date();

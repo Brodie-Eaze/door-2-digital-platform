@@ -24,6 +24,7 @@ import {
   LogOut,
   Camera,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { AnomalyCard, KpiCard, Money, Section, StatusPill, Banner, Reveal } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { TodayFirstRun } from '@/components/AccountEmptyStates';
@@ -250,14 +251,14 @@ export default async function TodayPage({
 
   // ── Anomalies (contextual, derived from real KPIs) ────────────────────────
   const anomalies: {
-    severity: 'high' | 'medium' | 'low';
+    severity: 'critical' | 'warning' | 'info';
     title: string;
     description: string;
     timestamp: string;
   }[] = [];
   if (activeSessions === 0 && knockCount === 0) {
     anomalies.push({
-      severity: 'medium',
+      severity: 'warning',
       title: 'No field activity today',
       description: 'No reps on shift and no knocks recorded. Check roster.',
       timestamp: 'now',
@@ -265,7 +266,7 @@ export default async function TodayPage({
   }
   if (knockCount > 10 && saleCount === 0) {
     anomalies.push({
-      severity: 'high',
+      severity: 'critical',
       title: 'Zero conversions',
       description: `${knockCount} knocks with no sales. Review pitch and territory.`,
       timestamp: 'today',
@@ -877,7 +878,7 @@ export default async function TodayPage({
  * Map event type to icon + color for the activity stream.
  */
 function getActivityMeta(iconKey: string): {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   iconColor: string;
 } {
   switch (iconKey) {
