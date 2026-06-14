@@ -751,6 +751,15 @@ function toKnockPublic(k: {
   leadId: string | null;
   idempotencyKey: string;
 }): KnockPublic {
+  // PII-first: a knock pinpoints a resident's doorstep + the rep's free-text
+  // notes about them. The default read boundary coarsens geo to a ~100m grid
+  // (3dp), redacts the free-text notes, and never returns the raw photo/signature
+  // S3 object keys. Precise geo, notes, and signed-consent artifacts require an
+  // audited JIT unmask / signed-URL grant — never this list/read path.
+  const rawGeo = toGeo(k.geo);
+  const geo = rawGeo
+    ? { lng: Math.round(rawGeo.lng * 1000) / 1000, lat: Math.round(rawGeo.lat * 1000) / 1000 }
+    : null;
   return {
     id: k.id,
     sessionId: k.sessionId,
@@ -761,13 +770,13 @@ function toKnockPublic(k: {
     regionCode: k.regionCode,
     brandCode: k.brandCode,
     disposition: k.disposition,
-    geo: toGeo(k.geo),
+    geo,
     capturedAt: k.capturedAt.toISOString(),
     serverReceivedAt: k.serverReceivedAt.toISOString(),
     clientOffsetMs: k.clientOffsetMs,
-    photoKey: k.photoKey,
-    signatureKey: k.signatureKey,
-    notes: k.notes,
+    photoKey: null,
+    signatureKey: null,
+    notes: null,
     leadId: k.leadId,
     idempotencyKey: k.idempotencyKey,
   };

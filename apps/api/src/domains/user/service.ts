@@ -394,6 +394,18 @@ export async function archiveUser(userId: string, actor: ActorContext): Promise<
   return toPublic(updated);
 }
 
+/** PII-first masks for the staff directory read boundary. */
+function maskUserEmail(email: string): string {
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+function maskUserPhone(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : '•••';
+}
+
 function toPublic(u: {
   id: string;
   orgId: string;
@@ -412,10 +424,13 @@ function toPublic(u: {
   return {
     id: u.id,
     orgId: u.orgId,
-    email: u.email,
+    // PII-first: staff email + phone masked, family name → initial. Given name
+    // stays (needed for team-management UI). Full contact PII for a specific
+    // staff member requires an audited JIT unmask grant.
+    email: maskUserEmail(u.email),
     givenName: u.givenName,
-    familyName: u.familyName,
-    phone: u.phone,
+    familyName: u.familyName ? `${u.familyName.charAt(0)}.` : '',
+    phone: maskUserPhone(u.phone),
     role: u.role,
     managerId: u.managerId,
     status: u.status,

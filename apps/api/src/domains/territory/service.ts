@@ -57,6 +57,25 @@ export interface TerritoryWithAssignments extends TerritoryPublic {
   assignments: AssignmentPublic[];
 }
 
+/**
+ * Flat shape the Knocker iOS map decodes directly (it expects a bare JSON
+ * array). `polygon`/`centroid` are the stored TEXT placeholders — passed
+ * through verbatim so the client can parse WKT/GeoJSON itself and fall back
+ * to centroid when polygon is null. Distinct from `TerritoryPublic`, which
+ * parses centroid into `{lng,lat}` for the operator console.
+ */
+export interface AssignedTerritory {
+  id: string;
+  name: string;
+  vertical: Vertical;
+  polygon: string | null;
+  centroid: string | null;
+  campaignId: string | null;
+  status: string;
+  areaType: string; // "polygon" | "radius" — lets the Knocker map render a circle
+  radiusMeters: number | null; // set when areaType = 'radius'
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // WKT helpers (no PostGIS — keep math in app code)
 // ───────────────────────────────────────────────────────────────────────────
@@ -370,6 +389,55 @@ export async function removeAssignment(
     return row;
   });
   return toAssignmentPublic(updated);
+}
+
+/**
+ * Territories assigned to the caller for the native Knocker app's map.
+ *
+ * Tenant-scoped through the joined Territory.orgId (TerritoryAssignment has
+ * no org column). Returns only active territories whose assignment is live:
+ * `expiresAt` null (permanent) OR in the future. A revoke sets
+ * `expiresAt = now`, so the strict `gt now` comparison excludes just-revoked
+ * rows on the next read.
+ */
+export async function listAssignedTerritories(
+  actor: ActorContext,
+): Promise<AssignedTerritory[]> {
+  const now = new Date();
+  const assignments = await prisma().territoryAssignment.findMany({
+    where: {
+      userId: actor.userId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      territory: { orgId: actor.orgId, status: 'active' },
+    },
+    select: {
+      territory: {
+        select: {
+          id: true,
+          name: true,
+          vertical: true,
+          polygon: true,
+          centroid: true,
+          campaignId: true,
+          status: true,
+          areaType: true,
+          radiusMeters: true,
+        },
+      },
+    },
+    orderBy: { territory: { name: 'asc' } },
+  });
+  return assignments.map((a) => ({
+    id: a.territory.id,
+    name: a.territory.name,
+    vertical: a.territory.vertical,
+    polygon: a.territory.polygon,
+    centroid: a.territory.centroid,
+    campaignId: a.territory.campaignId,
+    status: a.territory.status,
+    areaType: a.territory.areaType,
+    radiusMeters: a.territory.radiusMeters,
+  }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

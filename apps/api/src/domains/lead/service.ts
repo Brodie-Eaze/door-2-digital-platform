@@ -291,6 +291,37 @@ export async function listLeads(
   return { data: slice.map(toPublic), nextCursor };
 }
 
+export interface CallbackPublic {
+  id: string;
+  leadId: string;
+  leadName: string;
+  addressLine: string;
+  scheduledFor: string;
+  phone: string;
+  notes: string | null;
+  isOverdue: boolean;
+}
+
+/**
+ * Scheduled callbacks for the native Knocker app, soonest first.
+ *
+ * TODO(callback model): there is no scheduled-callback source today. The
+ * schema has no `scheduledFor` / `bestCallTime` column on Lead or
+ * LeadActivity, and neither `LeadStatus` (...|appointment_set|...) nor
+ * `LeadActivity.type` (call_outbound|call_inbound|sms|email|note|
+ * sequence_step) carries a future scheduled time — `appointment_set` is a
+ * status, not a calendar slot. Until a callback concept lands (e.g. a
+ * `LeadCallback` model, or a `scheduledFor` DateTime on a `type:'callback'`
+ * LeadActivity), we return an empty list rather than fabricate times. The org
+ * scope + actor assignment filter are wired so the contract is correct the
+ * moment that source exists.
+ */
+export async function listCallbacks(actor: ActorContext): Promise<CallbackPublic[]> {
+  void actor.orgId;
+  void actor.userId;
+  return [];
+}
+
 export async function getLead(id: string, actor: ActorContext): Promise<LeadWithActivities> {
   const row = await prisma().lead.findUnique({
     where: { id },
@@ -464,6 +495,28 @@ export async function appendActivity(
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
 
+// PII-first: the default read boundary masks. Lead given/family names, email,
+// and phone are PII; the API never emits them in plaintext by default. Plaintext
+// retrieval must go through an explicit, audited JIT pii-vault unmask grant (not
+// the list/read path). These helpers mirror the BFF masking discipline so the
+// Fastify surface can't leak more than the web BFF.
+function maskEmailPii(email: string | null): string | null {
+  if (!email) return null;
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  const head = user.slice(0, 1);
+  return `${head}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+function maskPhonePii(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '•••';
+  return `••• ••• ${digits.slice(-4)}`;
+}
+function maskFamilyName(name: string): string {
+  return name ? `${name.charAt(0)}.` : '';
+}
+
 function toPublic(l: {
   id: string;
   orgId: string;
@@ -493,10 +546,12 @@ function toPublic(l: {
     sourceKnockId: l.sourceKnockId,
     addressId: l.addressId,
     assignedToId: l.assignedToId,
+    // PII-first: masked at the read boundary. Family name → initial, email +
+    // phone → masked. Full PII requires an audited JIT pii-vault unmask grant.
     givenName: l.givenName,
-    familyName: l.familyName,
-    email: l.email,
-    phone: l.phone,
+    familyName: maskFamilyName(l.familyName),
+    email: maskEmailPii(l.email),
+    phone: maskPhonePii(l.phone),
     createdAt: l.createdAt.toISOString(),
     updatedAt: l.updatedAt.toISOString(),
   };

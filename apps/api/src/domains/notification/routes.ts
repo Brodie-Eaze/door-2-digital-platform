@@ -14,7 +14,7 @@ import { Problems, ProblemError } from '@d2d/shared-utils';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
-import { listNotifications, sendEmail, sendPush, sendSms } from './service';
+import { listInbox, listNotifications, sendEmail, sendPush, sendSms } from './service';
 import {
   listNotificationsQuerySchema,
   sendEmailRequestSchema,
@@ -93,6 +93,17 @@ export async function registerNotification(app: FastifyInstance): Promise<void> 
         return { status: 202, body: { notification } };
       },
     });
+  });
+
+  // GET /v1/notifications/inbox — authed user's inbox (native Knocker app)
+  app.get('/inbox', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const messages = await listInbox({
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(messages);
   });
 
   // GET /v1/notifications

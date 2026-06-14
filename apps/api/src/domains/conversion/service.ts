@@ -296,6 +296,13 @@ export async function getConversion(id: string, actor: ActorContext): Promise<Co
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
 
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org). */
+function maskDonorEmail(email: string): string {
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+
 function toPublic(
   c: {
     id: string;
@@ -356,7 +363,9 @@ function toPublic(
     amountCents: c.amountCents.toString(),
     currency: c.currency,
     signedAt: c.signedAt.toISOString(),
-    signatureKey: c.signatureKey,
+    // PII-first: the signature S3 key points at a signed consent/contract — never
+    // returned on the read path; signed-doc retrieval is an audited signed-URL grant.
+    signatureKey: null,
     paymentProvider: c.paymentProvider,
     paymentExternalId: c.paymentExternalId,
     processorResidualCents: c.processorResidualCents.toString(),
@@ -365,7 +374,8 @@ function toPublic(
       ? {
           id: donation.id,
           conversionId: donation.conversionId,
-          donorEmail: donation.donorEmail,
+          // PII-first: donor email masked at the read boundary.
+          donorEmail: maskDonorEmail(donation.donorEmail),
           amountCents: donation.amountCents.toString(),
           currency: donation.currency,
           frequency: donation.frequency,

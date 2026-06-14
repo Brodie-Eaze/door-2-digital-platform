@@ -184,6 +184,13 @@ export async function changeDonationAmount(
   return toPublic(updated);
 }
 
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org). */
+function maskDonorEmail(email: string): string {
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+
 function toPublic(r: {
   id: string;
   conversionId: string;
@@ -199,7 +206,8 @@ function toPublic(r: {
   return {
     id: r.id,
     conversionId: r.conversionId,
-    donorEmail: r.donorEmail,
+    // PII-first: donor email masked at the read boundary (m•••@example.org).
+    donorEmail: maskDonorEmail(r.donorEmail),
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,

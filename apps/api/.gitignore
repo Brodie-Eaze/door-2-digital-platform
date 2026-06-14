@@ -1,0 +1,3 @@
+# Dev blob storage — KnockPhoto/VoiceRecording binaries written by the local
+# BlobStore seam. Prod swaps this for S3, so these bytes must never be committed.
+.blobstore/

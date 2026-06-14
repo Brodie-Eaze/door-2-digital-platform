@@ -32,6 +32,13 @@ import { registerKnock, registerKnockSessions } from './domains/knock/routes';
 import { registerLead } from './domains/lead/routes';
 import { registerCrm } from './domains/crm/routes';
 import { registerConversion } from './domains/conversion/routes';
+import { registerFieldSignup } from './domains/field-signup/routes';
+import { registerCatalog } from './domains/catalog/routes';
+import { registerRoster } from './domains/roster/routes';
+import { registerPhoto } from './domains/photo/routes';
+import { registerPropensity } from './domains/propensity/routes';
+import { registerVoice } from './domains/voice/routes';
+import { registerAnalytics } from './domains/analytics/routes';
 import { registerDonation } from './domains/donation/routes';
 import { registerSale } from './domains/sale/routes';
 import { registerCommission } from './domains/commission/routes';
@@ -157,6 +164,13 @@ async function buildServer() {
   // CRM + money (Phase 1.3)
   await app.register(registerCrm, { prefix: '/v1/crm' });
   await app.register(registerConversion, { prefix: '/v1/conversions' });
+  await app.register(registerFieldSignup, { prefix: '/v1/field' });
+  await app.register(registerCatalog, { prefix: '/v1/catalog' });
+  await app.register(registerRoster, { prefix: '/v1/roster' });
+  await app.register(registerPhoto, { prefix: '/v1/photos' });
+  await app.register(registerPropensity, { prefix: '/v1/propensity' });
+  await app.register(registerVoice, { prefix: '/v1/voice' });
+  await app.register(registerAnalytics, { prefix: '/v1/analytics' });
   await app.register(registerDonation, { prefix: '/v1/donations' });
   await app.register(registerSale, { prefix: '/v1/sales' });
   await app.register(registerCommission, { prefix: '/v1/commissions' });

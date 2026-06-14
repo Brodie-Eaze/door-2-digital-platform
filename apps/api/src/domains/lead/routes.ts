@@ -18,7 +18,15 @@ import {
   leadActivityRequestSchema,
   listLeadsQuerySchema,
 } from './schemas';
-import { createLead, listLeads, getLead, updateLead, assignLead, appendActivity } from './service';
+import {
+  createLead,
+  listLeads,
+  listCallbacks,
+  getLead,
+  updateLead,
+  assignLead,
+  appendActivity,
+} from './service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
@@ -59,6 +67,18 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
       regionCode: ctx.regionCode as never,
     });
     return reply.code(200).send(result);
+  });
+
+  // GET /v1/leads/callbacks — scheduled callbacks for the native Knocker app.
+  // Static segment so find-my-way matches it ahead of the `/:id` param route.
+  app.get('/callbacks', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const callbacks = await listCallbacks({
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(callbacks);
   });
 
   // GET /v1/leads/:id — one + last 20 activities

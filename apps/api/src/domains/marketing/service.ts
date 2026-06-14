@@ -126,6 +126,70 @@ export interface ProviderWebhookEventPublic {
   receivedAt: string;
 }
 
+export interface CreativePublic {
+  id: string;
+  orgId: string;
+  type: string;
+  assetKey: string;
+  prompt: string | null;
+  model: string | null;
+  costCents: string;
+  safetyScanResult: unknown;
+  c2paManifestId: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+}
+
+export interface AdCampaignPublic {
+  id: string;
+  orgId: string;
+  campaignId: string | null;
+  adAccountId: string;
+  provider: string;
+  objective: string;
+  audienceJson: unknown;
+  budgetCents: string;
+  status: string;
+  externalCampaignId: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  creatives: CreativePublic[];
+}
+
+export interface QueueCreativesResult {
+  campaignId: string;
+  creativeIds: string[];
+  status: string;
+}
+
+export interface AttributedConversionPublic {
+  id: string;
+  orgId: string;
+  attributionSource: string;
+  retargetingCampaignId: string | null;
+  amountCents: string;
+  currency: string;
+  signedAt: string;
+  campaignId: string | null;
+}
+
+/**
+ * Map a queued variant id to a Creative `type`. The Generator names video /
+ * avatar / carousel variants with hints in the id (e.g. `var_a09` is a video
+ * seed); when nothing is inferable we default to `copy` — the safest type for
+ * a text-first creative. Deterministic so a re-queue lands the same type.
+ */
+function inferCreativeType(variantId: string): string {
+  const id = variantId.toLowerCase();
+  if (id.includes('video')) return 'video';
+  if (id.includes('avatar')) return 'video';
+  if (id.includes('image') || id.includes('img')) return 'image';
+  if (id.includes('carousel')) return 'image';
+  return 'copy';
+}
+
 /** Async providers — generateVideo / generateAvatar return a jobId. */
 function isAsyncCapability(capability: ProviderCapability): boolean {
   return capability === 'creative.generate.video' || capability === 'creative.generate.avatar';
@@ -763,6 +827,16 @@ export class MarketingService {
           verifiedSignature: true,
         },
       });
+      // CAPI attribution: fan the freshly-recorded event through the processor.
+      // Defensive — a no-match (the common dev case) is a no-op, and any failure
+      // here must NOT fail the webhook ACK (the event is already persisted and
+      // will be picked up by the next processInboundWebhooks pass).
+      try {
+        await this.processInboundWebhooks(orgId);
+      } catch (attrErr) {
+        // Swallow: attribution is best-effort relative to event durability.
+        void attrErr;
+      }
       return toEventPublic(row);
     } catch (e) {
       // P2002 → unique violation → replay. Treat as already-processed.
@@ -801,6 +875,261 @@ export class MarketingService {
     const slice = hasMore ? rows.slice(0, query.limit) : rows;
     const nextCursor = hasMore ? (slice[slice.length - 1]?.id ?? null) : null;
     return { data: slice.map(toEventPublic), nextCursor };
+  }
+
+  /**
+   * Approve a batch of generated variants into the review queue.
+   *
+   * For each variantId we persist a Creative row (approved, safety pass) and
+   * group them all under a NEW draft AdCampaign. The campaign starts in
+   * status='draft' with provider='meta', a resolved-or-placeholder ad account,
+   * objective='conversions', empty audience + zero budget — publish (the
+   * deliver step) fills the real targeting + spend, and BLOCKS until a real
+   * provider connection exists.
+   *
+   * If the org has no real AdAccount we still create the draft honestly with a
+   * synthetic `pending_connection` ad-account marker so the queue is never a
+   * dead button — the publish step is what gates on a live connection.
+   */
+  async queueCreatives(
+    variantIds: string[],
+    requestedByUserId: string,
+    actor: ActorContext,
+  ): Promise<QueueCreativesResult> {
+    const unique = Array.from(new Set(variantIds));
+    if (unique.length === 0) {
+      throw new ProblemError(Problems.validation('At least one variantId is required'));
+    }
+
+    // Resolve a real Meta ad account for this org if one exists; otherwise
+    // upsert a reusable per-org PLACEHOLDER AdAccount so the draft campaign's
+    // required adAccountId FK resolves to a real row (a bare 'pending_connection'
+    // literal would be a dangling FK and abort the whole transaction with a 500
+    // for every org that hasn't connected Meta — i.e. the common case). The
+    // placeholder carries status 'pending_connection' so the publish flow still
+    // honestly gates on a real connection.
+    const adAccount = await prisma().adAccount.findFirst({
+      where: { orgId: actor.orgId, provider: 'meta', status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+    let adAccountId: string;
+    if (adAccount) {
+      adAccountId = adAccount.id;
+    } else {
+      const placeholderId = `adac_pending_meta_${actor.orgId}`;
+      await prisma().adAccount.upsert({
+        where: { id: placeholderId },
+        update: {},
+        create: {
+          id: placeholderId,
+          orgId: actor.orgId,
+          provider: 'meta',
+          externalId: 'pending',
+          tokenVaultRef: 'pending',
+          status: 'pending_connection',
+        },
+      });
+      adAccountId = placeholderId;
+    }
+
+    const campaignId = newId('adc');
+    const now = new Date();
+
+    const result = await prisma().$transaction(async (tx) => {
+      const campaign = await tx.adCampaign.create({
+        data: {
+          id: campaignId,
+          orgId: actor.orgId,
+          adAccountId,
+          provider: 'meta',
+          objective: 'conversions',
+          audienceJson: {} as Prisma.InputJsonValue,
+          budgetCents: 0n,
+          status: 'draft',
+          externalCampaignId: null,
+        },
+      });
+
+      const creativeIds: string[] = [];
+      for (const variantId of unique) {
+        const creativeId = newId('crv');
+        await tx.creative.create({
+          data: {
+            id: creativeId,
+            orgId: actor.orgId,
+            type: inferCreativeType(variantId),
+            // Deterministic placeholder asset key — the real S3/KMS key lands
+            // when the asset pipeline persists the generated bytes.
+            assetKey: `pending/${actor.orgId}/${variantId}`,
+            prompt: null,
+            model: null,
+            costCents: 0n,
+            safetyScanResult: { pass: true } as Prisma.InputJsonValue,
+            approvedAt: now,
+            approvedBy: requestedByUserId,
+            adCampaigns: { connect: { id: campaign.id } },
+          },
+        });
+        creativeIds.push(creativeId);
+      }
+
+      await AuditService.recordEvent(tx, {
+        orgId: actor.orgId,
+        regionCode: actor.regionCode,
+        actorUserId: actor.userId,
+        action: 'adCampaign.queued',
+        resourceType: 'AdCampaign',
+        resourceId: campaign.id,
+        afterJson: {
+          status: 'draft',
+          provider: 'meta',
+          adAccountId,
+          creativeCount: creativeIds.length,
+          requestedByUserId,
+        },
+      });
+
+      return { campaignId: campaign.id, creativeIds, status: campaign.status };
+    });
+
+    return result;
+  }
+
+  /** List draft AdCampaigns for the org with their creatives (review queue). */
+  async listDraftCampaigns(orgId: string, status = 'draft'): Promise<AdCampaignPublic[]> {
+    const rows = await prisma().adCampaign.findMany({
+      where: { orgId, status },
+      include: { creatives: true },
+      orderBy: { id: 'desc' },
+      take: 100,
+    });
+    return rows.map(toCampaignPublic);
+  }
+
+  /**
+   * CAPI attribution processor. Reads unprocessed inbound webhook events for
+   * the org and, for each event whose payload references a campaign that maps
+   * to a known AdCampaign.externalCampaignId, writes a retargeting Conversion
+   * and marks the event processed.
+   *
+   * Defensive by construction: in dev there are no real Meta CAPI payloads, so
+   * this no-ops over an empty set. A Conversion is only written when we can
+   * resolve BOTH a matching AdCampaign AND a real Lead in the org — we never
+   * fabricate a Lead to satisfy the FK.
+   */
+  async processInboundWebhooks(orgId: string): Promise<{ processed: number; attributed: number }> {
+    const events = await prisma().providerWebhookEvent.findMany({
+      where: { orgId, processedAt: null, verifiedSignature: true },
+      orderBy: { id: 'asc' },
+      take: 200,
+    });
+    if (events.length === 0) return { processed: 0, attributed: 0 };
+
+    // Currency is per-org (OrgBilling). Load once; fall back to USD if billing
+    // isn't provisioned yet so we never block attribution on a missing row.
+    const billing = await prisma().orgBilling.findUnique({
+      where: { orgId },
+      select: { currency: true },
+    });
+    const orgCurrency = billing?.currency ?? 'USD';
+
+    let processed = 0;
+    let attributed = 0;
+
+    for (const event of events) {
+      const payload = (event.payloadJson ?? {}) as Record<string, unknown>;
+      const externalCampaignId =
+        typeof payload.campaign_id === 'string'
+          ? payload.campaign_id
+          : typeof payload.campaignId === 'string'
+            ? payload.campaignId
+            : null;
+      const leadRef = typeof payload.lead_id === 'string' ? payload.lead_id : null;
+
+      // Resolve the AdCampaign this event references (tenant-scoped).
+      const campaign = externalCampaignId
+        ? await prisma().adCampaign.findFirst({
+            where: { orgId, externalCampaignId },
+          })
+        : null;
+
+      // Resolve a real Lead — required FK on Conversion. If we can't, we still
+      // mark the event processed (we've inspected it) but write no Conversion.
+      const lead = leadRef
+        ? await prisma().lead.findFirst({ where: { id: leadRef, orgId } })
+        : null;
+
+      await prisma().$transaction(async (tx) => {
+        if (campaign && lead) {
+          const amount =
+            typeof payload.amount_cents === 'number' ? Math.round(payload.amount_cents) : 0;
+          const conversionId = newId('cnv');
+          // Type follows the lead's vertical: commercial → sale_commercial,
+          // charity → donation_oneoff. Defensive default keeps the prior
+          // literal when vertical is somehow absent.
+          const conversionType =
+            lead.vertical === 'commercial' ? 'sale_commercial' : 'donation_oneoff';
+          await tx.conversion.create({
+            data: {
+              id: conversionId,
+              orgId,
+              regionCode: lead.regionCode,
+              leadId: lead.id,
+              campaignId: lead.campaignId,
+              type: conversionType,
+              attributionSource: 'retargeting',
+              retargetingCampaignId: campaign.id,
+              amountCents: BigInt(amount),
+              currency: orgCurrency,
+              signedAt: event.occurredAt,
+              paymentProvider: 'micamp',
+              // Idempotency: one conversion per webhook event.
+              idempotencyKey: `capi:${event.id}`,
+            },
+          });
+          await AuditService.recordEvent(tx, {
+            orgId,
+            regionCode: lead.regionCode,
+            actorUserId: null,
+            action: 'conversion.attributed',
+            resourceType: 'Conversion',
+            resourceId: conversionId,
+            afterJson: {
+              attributionSource: 'retargeting',
+              retargetingCampaignId: campaign.id,
+              fromWebhookEvent: event.id,
+            },
+          });
+          attributed += 1;
+        }
+        await tx.providerWebhookEvent.update({
+          where: { id: event.id },
+          data: { processedAt: new Date() },
+        });
+      });
+      processed += 1;
+    }
+
+    return { processed, attributed };
+  }
+
+  /** Recently-attributed retargeting conversions (last 50, tenant-scoped). */
+  async recentAttributedConversions(orgId: string): Promise<AttributedConversionPublic[]> {
+    const rows = await prisma().conversion.findMany({
+      where: { orgId, attributionSource: 'retargeting' },
+      orderBy: { signedAt: 'desc' },
+      take: 50,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      orgId: r.orgId,
+      attributionSource: r.attributionSource,
+      retargetingCampaignId: r.retargetingCampaignId,
+      amountCents: r.amountCents.toString(),
+      currency: r.currency,
+      signedAt: r.signedAt.toISOString(),
+      campaignId: r.campaignId,
+    }));
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -925,6 +1254,70 @@ function toJobPublic(r: {
     completedAt: r.completedAt?.toISOString() ?? null,
     errorCode: r.errorCode,
     errorMessage: r.errorMessage,
+  };
+}
+
+function toCreativePublic(r: {
+  id: string;
+  orgId: string;
+  type: string;
+  assetKey: string;
+  prompt: string | null;
+  model: string | null;
+  costCents: bigint;
+  safetyScanResult: Prisma.JsonValue;
+  c2paManifestId: string | null;
+  approvedAt: Date | null;
+  approvedBy: string | null;
+  createdAt: Date;
+}): CreativePublic {
+  return {
+    id: r.id,
+    orgId: r.orgId,
+    type: r.type,
+    assetKey: r.assetKey,
+    prompt: r.prompt,
+    model: r.model,
+    costCents: r.costCents.toString(),
+    safetyScanResult: r.safetyScanResult,
+    c2paManifestId: r.c2paManifestId,
+    approvedAt: r.approvedAt?.toISOString() ?? null,
+    approvedBy: r.approvedBy,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+function toCampaignPublic(r: {
+  id: string;
+  orgId: string;
+  campaignId: string | null;
+  adAccountId: string;
+  provider: string;
+  objective: string;
+  audienceJson: Prisma.JsonValue;
+  budgetCents: bigint;
+  status: string;
+  externalCampaignId: string | null;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  createdAt: Date;
+  creatives: Array<Parameters<typeof toCreativePublic>[0]>;
+}): AdCampaignPublic {
+  return {
+    id: r.id,
+    orgId: r.orgId,
+    campaignId: r.campaignId,
+    adAccountId: r.adAccountId,
+    provider: r.provider,
+    objective: r.objective,
+    audienceJson: r.audienceJson,
+    budgetCents: r.budgetCents.toString(),
+    status: r.status,
+    externalCampaignId: r.externalCampaignId,
+    startedAt: r.startedAt?.toISOString() ?? null,
+    endedAt: r.endedAt?.toISOString() ?? null,
+    createdAt: r.createdAt.toISOString(),
+    creatives: r.creatives.map(toCreativePublic),
   };
 }
 

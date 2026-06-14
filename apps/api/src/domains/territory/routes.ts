@@ -23,6 +23,7 @@ import {
 import {
   createTerritory,
   listTerritories,
+  listAssignedTerritories,
   getTerritory,
   updateTerritory,
   addAssignment,
@@ -50,6 +51,20 @@ export async function registerTerritory(app: FastifyInstance): Promise<void> {
     const ctx = requireTenant(req);
     const query = heatmapQuerySchema.parse(req.query);
     const result = await heatmap(query, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // GET /assigned — territories assigned to the caller (Knocker iOS map).
+  // Must be declared before GET /:id so Fastify doesn't capture "assigned"
+  // as a route parameter. Returns a bare JSON array — the iOS client decodes
+  // it directly, so do NOT wrap it in an envelope.
+  app.get('/assigned', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const result = await listAssignedTerritories({
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,

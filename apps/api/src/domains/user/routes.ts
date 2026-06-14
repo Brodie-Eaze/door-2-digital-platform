@@ -21,6 +21,7 @@ import {
   changeUserRole,
   archiveUser,
 } from './service';
+import { getDailyStats } from './daily-stats.service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
@@ -82,6 +83,24 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     });
     return reply.code(200).send({ user });
   });
+
+  // GET /v1/users/:userId/daily-stats — today's activity + in-org leaderboard
+  // for the native Knocker "Me" screen. Self-only unless the caller is an
+  // admin/manager (enforced in the service).
+  app.get<{ Params: { userId: string } }>(
+    '/:userId/daily-stats',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const stats = await getDailyStats(req.params.userId, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as never,
+        role: ctx.role,
+      });
+      return reply.code(200).send(stats);
+    },
+  );
 
   // PATCH /v1/users/:id
   app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {

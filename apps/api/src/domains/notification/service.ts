@@ -168,6 +168,37 @@ export async function listNotifications(
   return { data: slice.map(toPublic), nextCursor };
 }
 
+export interface InboxMessage {
+  id: string;
+  fromName: string;
+  subject: string;
+  body: string;
+  sentAt: string;
+  readAt: string | null;
+  priority: 'normal' | 'high' | 'urgent';
+}
+
+/**
+ * Inbox for the native Knocker app — manager/admin messages addressed TO the
+ * authed user.
+ *
+ * TODO(inbox model): there is no inbound/per-recipient message table today.
+ * `NotificationLog` is OUTBOUND-only — it carries an HMAC `recipientHash`
+ * (never a recipient userId) and a 200-char `bodyPreview`, so it cannot be
+ * queried as "messages for user X" nor render a full body. Until a
+ * `UserMessage` / `InboxMessage` model lands (id, orgId, recipientUserId,
+ * fromUserId, subject, body, priority, sentAt, readAt) we return an empty
+ * inbox rather than fabricate messages. The org scope is honoured here so the
+ * contract and tenant-pinning are correct the moment that model exists.
+ */
+export async function listInbox(
+  actor: ActorContext,
+): Promise<InboxMessage[]> {
+  void actor.orgId;
+  void actor.userId;
+  return [];
+}
+
 function toPublic(r: {
   id: string;
   orgId: string;
