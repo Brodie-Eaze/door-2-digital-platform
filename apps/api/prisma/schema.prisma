@@ -216,6 +216,7 @@ model Org {
   voiceRecordings            VoiceRecording[]
   propensityScores           PropensityScore[]
   analyticsEvents            AnalyticsEvent[]
+  invoices                   Invoice[]
 
   @@index([regionCode, status])
   @@index([type, status])
@@ -708,6 +709,63 @@ model PayoutBatch {
   commissions Commission[]
 
   @@index([orgId, status])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Billing — Invoice + line items (Phase 1.3)
+// ───────────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id         String     @id // inv_*
+  orgId      String
+  org        Org        @relation(fields: [orgId], references: [id])
+  regionCode RegionCode
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // Status: draft → sent → paid | void
+  status String @default("draft") // draft | sent | paid | void
+
+  // Computed totals (sum of lineItems)
+  platformFeeCents      BigInt @default(0)
+  doorRakeCents         BigInt @default(0)
+  insideSalesRakeCents  BigInt @default(0)
+  retargetingRakeCents  BigInt @default(0)
+  additionalCents       BigInt @default(0) // overages, credits, one-offs
+  totalCents            BigInt
+  currency              String @default("USD")
+
+  // Idempotency — one invoice per (org, period) pair
+  idempotencyKey String @unique // "inv-${orgId}-${periodStart.slice(0,7)}"
+
+  sentAt DateTime?
+  paidAt DateTime?
+
+  lineItems InvoiceLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, periodStart])
+  @@index([orgId, status])
+}
+
+model InvoiceLineItem {
+  id        String  @id // ili_*
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  // kind drives label + display order
+  kind        String // platform_fee | door_rake | inside_sales_rake | retargeting_rake | overage | credit | one_off
+  description String
+  amountCents BigInt
+  currency    String @default("USD")
+
+  // For rake lines — how many conversions contributed
+  conversionCount Int @default(0)
+
+  @@index([invoiceId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────
