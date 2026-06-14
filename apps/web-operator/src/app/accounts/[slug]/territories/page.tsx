@@ -13,6 +13,7 @@ import {
 } from '@/components/TerritoryHeatmap';
 import { TerritoriesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { TerritoryAssignments } from '@/components/TerritoryAssignments';
+import { CanvassAreaTool } from '@/components/CanvassAreaTool';
 import { getAccount, type Account } from '@/lib/accounts';
 import { getAccountTerritory } from '@/lib/account-territory-cells';
 import { firstRunSnapshot } from '@/lib/first-run';
@@ -208,6 +209,10 @@ export default function AccountTerritoriesPage({
         >
           <AccountLiveMap accountSlug={params.slug} />
         </Section>
+
+        {/* Manager canvass-area tool — set the AREA (radius/polygon) reps
+            canvass, guided by the real propensity heatmap; pushes to iOS. */}
+        <CanvassAreaTool slug={params.slug} />
 
         {/* Live knocker → territory assignment (writes to the iOS map) */}
         <TerritoryAssignments slug={params.slug} />

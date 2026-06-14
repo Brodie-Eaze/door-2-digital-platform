@@ -61,6 +61,7 @@ export const newShiftId = (): string => `ksft_${ulid()}`;
 export const newAssignmentId = (): string => `tas_${ulid()}`;
 export const newUserId = (): string => `usr_${ulid()}`;
 export const newOfferingId = (): string => `svo_${ulid()}`;
+export const newTerritoryId = (): string => `ter_${ulid()}`;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Invite tokens — mirrors apps/api domains/auth/tokens.generateInviteToken.

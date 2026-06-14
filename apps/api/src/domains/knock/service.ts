@@ -15,6 +15,7 @@ import type { RegionCode, Prisma, KnockDisposition } from '@prisma/client';
 import { newId, Problems, ProblemError, addressHash } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
+import { emitAnalyticsEvent } from '../analytics/service';
 import type {
   StartSessionRequest,
   CreateKnockRequest,
@@ -268,6 +269,24 @@ export async function createKnock(
         capturedAt: capturedAt.toISOString(),
       },
       metadata: { clientOffsetMs },
+    });
+    // Real-time warehouse outbox: emit "knock" in the SAME tx as the insert so
+    // the event commits atomically with its Knock row (only on the non-duplicate
+    // path — a deduped knock short-circuits above and never reaches here).
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'knock',
+      entityType: 'Knock',
+      entityId: row.id,
+      occurredAt: capturedAt,
+      payload: {
+        disposition: row.disposition,
+        latitude: input.geo.lat,
+        longitude: input.geo.lng,
+        territoryId,
+      },
     });
     return row;
   });
@@ -637,6 +656,33 @@ export async function createKnockBatch(
               where: { id: { in: allocatedKnockIds } },
             })
           : [];
+
+      // Real-time warehouse outbox: one "knock" event per NEWLY-CREATED knock,
+      // emitted in the SAME tx as the batch insert. `out` is the re-read of rows
+      // we allocated this turn — a row that lost the skipDuplicates race kept the
+      // winner's (different) id, so it isn't in `out`; deduped/in-batch dups never
+      // reach here. Hence exactly-once per new knock, never for a duplicate.
+      // We read disposition/territoryId/geo off the persisted row (full-precision
+      // geo, not the coarsened read projection) so the warehouse sees the truth.
+      for (const k of out) {
+        const geo = toGeo(k.geo);
+        await emitAnalyticsEvent(tx, {
+          orgId: actor.orgId,
+          regionCode: actor.regionCode,
+          userId: actor.userId,
+          eventType: 'knock',
+          entityType: 'Knock',
+          entityId: k.id,
+          occurredAt: k.capturedAt,
+          payload: {
+            disposition: k.disposition,
+            latitude: geo?.lat ?? null,
+            longitude: geo?.lng ?? null,
+            territoryId: k.territoryId,
+          },
+        });
+      }
+
       return { insertedCount, out };
     },
     { timeout: 30_000 },

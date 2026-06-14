@@ -25,6 +25,7 @@ import type { RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { emitAnalyticsEvent } from '../analytics/service';
 import type { CreatePhotoRequest, ListPhotosQuery, PhotoContentType } from './schemas';
 
 interface ActorContext {
@@ -128,6 +129,9 @@ export async function capturePhoto(
   }
 
   const id = newId('kph');
+  // Parse once: the row's capturedAt, the audit timestamp, and the analytics
+  // occurredAt must all reference the same business event time.
+  const capturedAt = new Date(input.capturedAt);
   // Bucket-relative, S3-safe key: tenant-partitioned so prod lifecycle/replication
   // rules can target a single org's objects.
   const storageKey = `org/${actor.orgId}/knockphoto/${id}.${extFor(contentType)}`;
@@ -149,7 +153,7 @@ export async function capturePhoto(
         storageKey,
         contentType,
         byteSize: bytes.length,
-        capturedAt: new Date(input.capturedAt),
+        capturedAt,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
         addressLine: input.addressLine ?? null,
@@ -169,11 +173,29 @@ export async function capturePhoto(
         storageKey,
         contentType,
         byteSize: bytes.length,
-        capturedAt: new Date(input.capturedAt).toISOString(),
+        capturedAt: capturedAt.toISOString(),
         clientKnockId: input.clientKnockId ?? null,
         knockId: input.knockId ?? null,
         hasLocation: input.latitude !== undefined && input.longitude !== undefined,
         hasAddressLine: input.addressLine !== undefined,
+      },
+    });
+
+    // Real-time warehouse outbox: emit "photo" in the SAME tenantTx as the
+    // KnockPhoto insert so the event commits atomically with it. The image bytes
+    // are never on the payload — only the pointer-grade metadata.
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'photo',
+      entityType: 'KnockPhoto',
+      entityId: id,
+      occurredAt: capturedAt,
+      payload: {
+        clientKnockId: input.clientKnockId ?? null,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
       },
     });
   });

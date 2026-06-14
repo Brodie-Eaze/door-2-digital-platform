@@ -20,6 +20,7 @@ import type { DonationFrequency, RegionCode } from '@prisma/client';
 import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { emitAnalyticsEvent } from '../analytics/service';
 import { PiiVaultService } from '../pii-vault/service';
 import type { CreateFieldSignupRequest, FieldSignupFrequency } from './schemas';
 
@@ -212,6 +213,27 @@ export async function createFieldSignup(
         // PII redacted — digests are reversible only with PII_SEARCH_KEY.
         emailDigest: emailDig,
         phoneDigest: phoneDig,
+      },
+    });
+
+    // Real-time warehouse outbox: emit the "sale" event in the SAME tenantTx as
+    // the Conversion so the AnalyticsEvent commits atomically with it (no event
+    // can exist without its conversion, and vice-versa). orgId/regionCode/userId
+    // come from the auth principal — never the request body.
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'sale',
+      entityType: 'Conversion',
+      entityId: conversionId,
+      occurredAt: signedAt,
+      payload: {
+        amountCents: Number(amountCents),
+        attributionSource: 'door',
+        type: conversionType,
+        serviceId: input.serviceId,
+        frequency: input.frequency,
       },
     });
 

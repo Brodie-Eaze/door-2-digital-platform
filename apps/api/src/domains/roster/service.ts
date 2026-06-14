@@ -15,6 +15,7 @@ import type { RegionCode } from '@prisma/client';
 import { newId, problem, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { emitAnalyticsEvent } from '../analytics/service';
 import type { ClockInRequest, CreateShiftRequest } from './schemas';
 
 interface ActorContext {
@@ -233,6 +234,9 @@ export async function clockIn(
       : null;
 
   const sessionId = newId('sess');
+  // One `now` shared by the session's startedAt and the analytics occurredAt so
+  // the warehouse "session_start" time matches the session row exactly.
+  const now = new Date();
 
   await tenantTx(actor.orgId, async (tx) => {
     await tx.knockerShift.update({
@@ -247,7 +251,7 @@ export async function clockIn(
         userId: actor.userId,
         territoryId,
         regionCode: actor.regionCode,
-        startedAt: new Date(),
+        startedAt: now,
         startGeo,
         deviceId: input.deviceId,
         appVersion: input.appVersion ?? null,
@@ -264,6 +268,19 @@ export async function clockIn(
       resourceType: 'KnockerShift',
       resourceId: shiftId,
       afterJson: { sessionId, territoryId, deviceId: input.deviceId, hasGeo: startGeo !== null },
+    });
+
+    // Real-time warehouse outbox: emit "session_start" in the SAME tenantTx as
+    // the KnockSession insert so the event commits atomically with it.
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'session_start',
+      entityType: 'KnockSession',
+      entityId: sessionId,
+      occurredAt: now,
+      payload: { shiftId, territoryId },
     });
   });
 
@@ -299,10 +316,12 @@ export async function clockOut(
       select: { id: true },
     });
 
+    // One `now` shared by the session's endedAt and the analytics occurredAt.
+    const now = new Date();
     if (open) {
       await tx.knockSession.update({
         where: { id: open.id },
-        data: { endedAt: new Date() },
+        data: { endedAt: now },
       });
     }
 
@@ -315,6 +334,22 @@ export async function clockOut(
       resourceId: shiftId,
       afterJson: { sessionId: open?.id ?? null, territoryId: shift.territoryId },
     });
+
+    // Real-time warehouse outbox: emit "session_end" in the SAME tenantTx as the
+    // session close, only when a session was actually closed (clock-out without a
+    // prior clock-in legitimately closes nothing — no session entity to emit for).
+    if (open) {
+      await emitAnalyticsEvent(tx, {
+        orgId: actor.orgId,
+        regionCode: actor.regionCode,
+        userId: actor.userId,
+        eventType: 'session_end',
+        entityType: 'KnockSession',
+        entityId: open.id,
+        occurredAt: now,
+        payload: { shiftId, sessionId: open.id },
+      });
+    }
 
     return { shiftId, sessionId: open?.id ?? null };
   });
