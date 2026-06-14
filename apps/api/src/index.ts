@@ -88,7 +88,7 @@ async function buildServer() {
       directives: {
         'default-src': ["'self'"],
         'script-src': ["'self'"],
-        'style-src': ["'self'", "'unsafe-inline'"],
+        'style-src': ["'self'"],
         'img-src': ["'self'", 'data:', 'blob:'],
         'connect-src': ["'self'"],
         'frame-ancestors': ["'none'"],

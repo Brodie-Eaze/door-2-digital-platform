@@ -190,4 +190,17 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
         detail: 'MFA reset lands in Phase 1.2',
       }),
   );
+
+  // DELETE /v1/users/:id — soft-delete (sets status → 'archived', revokes tokens).
+  // ADR-0013: immutable history — records are never hard-deleted.
+  app.delete<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const user = await archiveUser(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+      role: ctx.role,
+    });
+    return reply.code(200).send({ user });
+  });
 }
