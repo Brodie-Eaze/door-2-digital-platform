@@ -1,19 +1,17 @@
 /**
- * CRM (sequences + activities) routes — Phase 1.3.
+ * CRM (sequences + activities) routes — Phase 1.4 real.
  *
- *   GET  /v1/crm/activities          cross-lead activity feed for the org
- *   POST /v1/crm/sequences           501 — BullMQ workers needed (Phase 1.3b)
- *   POST /v1/crm/sequences/:id/enroll 501 — BullMQ workers needed (Phase 1.3b)
- *
- * Sequence execution requires BullMQ step workers + notification dispatch.
- * The activity feed is standalone and ships now.
+ *   GET  /v1/crm/activities              cross-lead activity feed
+ *   POST /v1/crm/sequences               create sequence template (audit-trailed)
+ *   POST /v1/crm/sequences/:id/enroll    enroll leads into sequence (audit-trailed)
  */
 import type { FastifyInstance } from 'fastify';
 import { createSequenceRequestSchema, enrollSequenceRequestSchema } from '@d2d/shared-types';
 import { requireAuth } from '../../shared/middleware/auth-guard';
-import { requireIdempotencyKey } from '../../shared/middleware/idempotency';
+import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import { prisma } from '../../config/db';
+import { createSequence, enrollLeadsInSequence } from './service';
 
 interface ActivitiesQuery {
   userId?: string;
@@ -22,8 +20,12 @@ interface ActivitiesQuery {
   limit?: string;
 }
 
+interface IdParams {
+  id: string;
+}
+
 export async function registerCrm(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'crm', status: 'live', phase: '1.3' }));
+  app.get('/_status', async () => ({ domain: 'crm', status: 'live', phase: '1.4' }));
 
   // GET /v1/crm/activities — paginated cross-lead activity feed scoped to caller's org
   app.get('/activities', { preHandler: requireAuth }, async (req, reply) => {
@@ -63,29 +65,45 @@ export async function registerCrm(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /v1/crm/sequences — 501 until BullMQ step workers land
+  // POST /v1/crm/sequences — create a sequence template
   app.post('/sequences', { preHandler: requireAuth }, async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = createSequenceRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'CRM sequence execution requires BullMQ workers — Phase 1.3b',
+    const ctx = requireTenant(req);
+    const body = createSequenceRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const sequence = await createSequence(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 201, body: { sequence } };
+      },
     });
   });
 
-  // POST /v1/crm/sequences/:id/enroll — 501 until BullMQ step workers land
-  app.post('/sequences/:id/enroll', { preHandler: requireAuth }, async (req, reply) => {
-    requireIdempotencyKey(req);
-    const parsed = enrollSequenceRequestSchema.parse(req.body);
-    void parsed;
-    return reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'CRM sequence enrollment requires BullMQ workers — Phase 1.3b',
-    });
-  });
+  // POST /v1/crm/sequences/:id/enroll — enroll leads into a sequence
+  app.post<{ Params: IdParams }>(
+    '/sequences/:id/enroll',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = enrollSequenceRequestSchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const enrollment = await enrollLeadsInSequence(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { enrollment } };
+        },
+      });
+    },
+  );
 }

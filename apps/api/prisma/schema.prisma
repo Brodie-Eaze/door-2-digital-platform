@@ -218,6 +218,8 @@ model Org {
   analyticsEvents            AnalyticsEvent[]
   invoices                   Invoice[]
   dsarRequests               DsarRequest[]
+  crmSequences               CrmSequence[]
+  crmSequenceEnrollments     CrmSequenceEnrollment[]
 
   @@index([regionCode, status])
   @@index([type, status])
@@ -557,10 +559,11 @@ model Lead {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  knocks         Knock[]
-  activities     LeadActivity[]
-  conversions    Conversion[]
-  consentRecords ConsentRecord[]
+  knocks               Knock[]
+  activities           LeadActivity[]
+  conversions          Conversion[]
+  consentRecords       ConsentRecord[]
+  sequenceEnrollments  CrmSequenceEnrollment[]
 
   @@index([orgId, status, assignedToId])
   @@index([phoneDigest])
@@ -579,6 +582,49 @@ model LeadActivity {
   createdAt DateTime @default(now())
 
   @@index([leadId, createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// CRM Sequences — multi-touch SMS/email/task campaigns
+// Steps stored as JSON; BullMQ schedules each step per enrollment.
+// ───────────────────────────────────────────────────────────────────────────
+
+model CrmSequence {
+  id          String                 @id // seq_*
+  orgId       String
+  org         Org                    @relation(fields: [orgId], references: [id])
+  regionCode  RegionCode
+  name        String
+  description String?                @db.Text
+  stepsJson   Json                   // array of {order, channel, delayHours, templateId?, body?}
+  status      String                 @default("active") // active | archived
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  enrollments CrmSequenceEnrollment[]
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt(sort: Desc)])
+}
+
+model CrmSequenceEnrollment {
+  id           String      @id // enr_*
+  sequenceId   String
+  sequence     CrmSequence @relation(fields: [sequenceId], references: [id])
+  leadId       String
+  lead         Lead        @relation(fields: [leadId], references: [id])
+  orgId        String
+  org          Org         @relation(fields: [orgId], references: [id])
+  currentStep  Int         @default(0)
+  status       String      @default("active") // active | paused | completed | cancelled
+  startAt      DateTime    @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([sequenceId, leadId]) // one active enrollment per lead per sequence
+  @@index([orgId, status])
+  @@index([sequenceId, status])
+  @@index([leadId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

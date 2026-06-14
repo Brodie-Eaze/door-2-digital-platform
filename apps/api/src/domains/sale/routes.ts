@@ -11,8 +11,8 @@ import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import { z } from 'zod';
-import { getSale, installerHandoff, updateSaleStatus } from './service';
-import { installerHandoffRequestSchema } from './schemas';
+import { cancelSale, getSale, installerHandoff, updateSaleStatus } from './service';
+import { cancelSaleRequestSchema, installerHandoffRequestSchema } from './schemas';
 
 interface IdParams {
   id: string;
@@ -91,13 +91,22 @@ export async function registerSale(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/sales/:id/cancel — Phase 1.4
-  app.post<{ Params: IdParams }>('/:id/cancel', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Sale cancel + clawback lands in Phase 1.4',
-    }),
-  );
+  // POST /v1/sales/:id/cancel
+  app.post<{ Params: IdParams }>('/:id/cancel', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = cancelSaleRequestSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const sale = await cancelSale(req.params.id, body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 200, body: { sale } };
+      },
+    });
+  });
 }

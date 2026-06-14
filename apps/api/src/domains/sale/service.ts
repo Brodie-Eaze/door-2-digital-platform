@@ -5,7 +5,7 @@ import type { RegionCode } from '@prisma/client';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { AuditService } from '../audit/service';
-import type { InstallerHandoffRequest } from './schemas';
+import type { CancelSaleRequest, InstallerHandoffRequest } from './schemas';
 
 interface ActorContext {
   userId: string;
@@ -128,6 +128,52 @@ export async function updateSaleStatus(
     return next;
   });
 
+  return toPublic(updated);
+}
+
+export async function cancelSale(
+  id: string,
+  input: CancelSaleRequest,
+  actor: ActorContext,
+): Promise<SalePublic> {
+  const { row } = await loadSaleAndAssertTenant(id, actor);
+  if (row.status === 'cancelled') return toPublic(row);
+
+  const allowed = VALID_STATUS_TRANSITIONS[row.status] ?? [];
+  if (!allowed.includes('cancelled')) {
+    throw new ProblemError(Problems.conflict(`Cannot cancel a sale with status ${row.status}`));
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.sale.update({
+      where: { id },
+      data: { status: 'cancelled' },
+    });
+
+    if (input.clawbackCommissions) {
+      // Mark accrued commissions on this conversion as clawback-pending.
+      await tx.commission.updateMany({
+        where: { conversionId: next.conversionId, status: 'accrued' },
+        data: { status: 'clawback_pending' },
+      });
+    }
+
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'sale.cancelled',
+      resourceType: 'Sale',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'cancelled' },
+      metadata: {
+        reason: input.reason,
+        clawbackCommissions: input.clawbackCommissions,
+      },
+    });
+    return next;
+  });
   return toPublic(updated);
 }
 
