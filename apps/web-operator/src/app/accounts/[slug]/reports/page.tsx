@@ -1,4 +1,19 @@
-import { BarChart3, Download, Sparkles, ChevronRight } from 'lucide-react';
+/**
+ * /accounts/[slug]/reports — attribution + revenue analytics for a single account.
+ *
+ * Server component. Reads live MTD conversion aggregates from Prisma for
+ * the KPI rail + attribution breakdown. The 14-day bar chart and pipeline
+ * velocity sections remain seed-driven until a time-series aggregation model
+ * exists. Falls back to full fixture when the DB is unreachable.
+ *
+ * TODO(M5): 14d revenue time-series needs a ConversionDailySummary
+ * materialised view or equivalent — no backing aggregation table yet.
+ * TODO(M5): Pipeline velocity needs a LeadActivity duration model.
+ *
+ * Authorization: cross-tenant operators see any slug; org-scoped sessions
+ * are pinned to their own org's slug.
+ */
+import { BarChart3, Download, Sparkles, ChevronRight, Database, AlertTriangle } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { ReportsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
@@ -6,8 +21,147 @@ import { getAccount } from '@/lib/accounts';
 import { seedFor } from '@/lib/seed';
 import { rollupFor } from '@/lib/seed/kpis';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { getSession } from '@/lib/session';
+import { isCrossTenantOperator } from '@/lib/api-helpers';
 
-export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+// ─── types ──────────────────────────────────────────────────────────────────
+
+interface ReportsData {
+  conversionsMTD: number;
+  revenueCentsMTD: bigint;
+  doorCount: number;
+  insideCount: number;
+  retargCount: number;
+  doorRevenue: bigint;
+  insideRevenue: bigint;
+  retargRevenue: bigint;
+  source: 'database' | 'fixture-fallback';
+  error?: string;
+}
+
+// ─── data loader ────────────────────────────────────────────────────────────
+
+async function loadReports(slug: string): Promise<ReportsData> {
+  const session = await getSession();
+  if (!session) {
+    return {
+      conversionsMTD: 0,
+      revenueCentsMTD: 0n,
+      doorCount: 0,
+      insideCount: 0,
+      retargCount: 0,
+      doorRevenue: 0n,
+      insideRevenue: 0n,
+      retargRevenue: 0n,
+      source: 'fixture-fallback',
+      error: 'no session',
+    };
+  }
+
+  try {
+    const { db } = await import('@d2d/database');
+
+    const org = await db.org.findFirst({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!org) throw new Error(`org with slug '${slug}' not found`);
+
+    if (!isCrossTenantOperator(session) && session.orgId !== org.id) {
+      throw new Error('tenant scope violation');
+    }
+
+    const mtdStart = new Date();
+    mtdStart.setDate(1);
+    mtdStart.setHours(0, 0, 0, 0);
+
+    const convAgg = await db.conversion.groupBy({
+      by: ['attributionSource'],
+      where: { orgId: org.id, signedAt: { gte: mtdStart } },
+      _count: { _all: true },
+      _sum: { amountCents: true },
+    });
+
+    let doorCount = 0,
+      insideCount = 0,
+      retargCount = 0;
+    let doorRevenue = 0n,
+      insideRevenue = 0n,
+      retargRevenue = 0n;
+    let totalMTD = 0;
+    let totalRevCents = 0n;
+
+    for (const row of convAgg) {
+      const c = row._count._all;
+      const r = row._sum.amountCents ?? 0n;
+      totalMTD += c;
+      totalRevCents += r;
+      if (row.attributionSource === 'door') {
+        doorCount = c;
+        doorRevenue = r;
+      } else if (row.attributionSource === 'inside_sales') {
+        insideCount = c;
+        insideRevenue = r;
+      } else if (row.attributionSource === 'retargeting') {
+        retargCount = c;
+        retargRevenue = r;
+      }
+    }
+
+    return {
+      conversionsMTD: totalMTD,
+      revenueCentsMTD: totalRevCents,
+      doorCount,
+      insideCount,
+      retargCount,
+      doorRevenue,
+      insideRevenue,
+      retargRevenue,
+      source: 'database',
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[reports/${slug}] DB load failed, falling back to fixture:`, err);
+    const seed = seedFor(slug);
+    const rollup = rollupFor(slug);
+    const ledgerByAttr = seed.conversions.reduce(
+      (acc, c) => {
+        acc[c.attribution] = (acc[c.attribution] ?? 0) + 1;
+        return acc;
+      },
+      { door: 0, inside_sales: 0, retargeting: 0, other: 0 } as Record<string, number>,
+    );
+    const total =
+      (ledgerByAttr.door ?? 0) + (ledgerByAttr.inside_sales ?? 0) + (ledgerByAttr.retargeting ?? 0);
+    const doorShare = total > 0 ? (ledgerByAttr.door ?? 0) / total : 0;
+    const insideShare = total > 0 ? (ledgerByAttr.inside_sales ?? 0) / total : 0;
+    const retargShare = total > 0 ? (ledgerByAttr.retargeting ?? 0) / total : 0;
+
+    return {
+      conversionsMTD: rollup.conversionsMTD,
+      revenueCentsMTD: rollup.revenueCentsMTD,
+      doorCount: Math.round(rollup.conversionsMTD * doorShare),
+      insideCount: Math.round(rollup.conversionsMTD * insideShare),
+      retargCount: Math.round(rollup.conversionsMTD * retargShare),
+      doorRevenue: BigInt(Math.round(Number(rollup.revenueCentsMTD) * doorShare)),
+      insideRevenue: BigInt(Math.round(Number(rollup.revenueCentsMTD) * insideShare)),
+      retargRevenue: BigInt(Math.round(Number(rollup.revenueCentsMTD) * retargShare)),
+      source: 'fixture-fallback',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ─── page ────────────────────────────────────────────────────────────────────
+
+export default async function ReportsPage({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<JSX.Element> {
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
@@ -22,42 +176,38 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
       </AccountShell>
     );
   }
+
+  const {
+    conversionsMTD,
+    revenueCentsMTD,
+    doorCount,
+    insideCount,
+    retargCount,
+    doorRevenue,
+    insideRevenue,
+    retargRevenue,
+    source,
+    error,
+  } = await loadReports(params.slug);
+
+  // Seed rollup still drives the 14d chart and deltas until those are DB-backed.
+  // TODO(M5): 14d chart needs ConversionDailySummary view — no backing table yet.
   const seed = seedFor(params.slug);
   const rollup = rollupFor(params.slug);
   const region = account.region === 'AU' ? 'AU' : 'US';
 
-  // 30-day attribution split: derive from the conversions ledger (count) and
-  // multiply by avg-ticket to get GMV. Door / Inside / Retarget mix from the
-  // 60-row ledger is statistically representative of MTD attribution.
-  const ledgerByAttr = seed.conversions.reduce(
-    (acc, c) => {
-      acc[c.attribution] = (acc[c.attribution] ?? 0) + 1;
-      return acc;
-    },
-    { door: 0, inside_sales: 0, retargeting: 0, other: 0 } as Record<string, number>,
-  );
-  const total = ledgerByAttr.door! + ledgerByAttr.inside_sales! + ledgerByAttr.retargeting!;
-  const doorShare = ledgerByAttr.door! / total;
-  const insideShare = ledgerByAttr.inside_sales! / total;
-  const retargShare = ledgerByAttr.retargeting! / total;
-
-  const doorConv = Math.round(rollup.conversionsMTD * doorShare);
-  const insideConv = Math.round(rollup.conversionsMTD * insideShare);
-  const retargConv = rollup.conversionsMTD - doorConv - insideConv;
-
-  const doorGmv = (rollup.revenueCentsMTD * BigInt(Math.round(doorShare * 1000))) / 1000n;
-  const insideGmv = (rollup.revenueCentsMTD * BigInt(Math.round(insideShare * 1000))) / 1000n;
-  const retargGmv = rollup.revenueCentsMTD - doorGmv - insideGmv;
-  const doorRake = (doorGmv * 15n) / 100n;
-  const insideRake = (insideGmv * 10n) / 100n;
-  const retargRake = (retargGmv * 5n) / 100n;
+  // Attribution bars — prefer live data.
+  const doorRake = (doorRevenue * 15n) / 100n;
+  const insideRake = (insideRevenue * 10n) / 100n;
+  const retargRake = (retargRevenue * 5n) / 100n;
   const blendedRake = doorRake + insideRake + retargRake;
-  // Implied CPA — total spend across the marketing studio is ~12% of GMV.
-  const impliedSpendCents = (rollup.revenueCentsMTD * 12n) / 100n;
-  const blendedCpaCents =
-    rollup.conversionsMTD > 0 ? impliedSpendCents / BigInt(rollup.conversionsMTD) : 0n;
 
-  // Top knockers by today's revenue — pull straight from the seeded roster.
+  // CPA — implied ~12% of GMV as marketing spend.
+  const impliedSpendCents = (revenueCentsMTD * 12n) / 100n;
+  const blendedCpaCents = conversionsMTD > 0 ? impliedSpendCents / BigInt(conversionsMTD) : 0n;
+
+  // Top knockers from seed until per-rep live leaderboard is DB-backed.
+  // TODO(M5): top-knockers leaderboard needs per-rep live aggregation query.
   const topKnockers = [...seed.knockers]
     .filter((k) => k.status !== 'offline')
     .sort((a, b) => b.conversionsToday - a.conversionsToday)
@@ -66,24 +216,24 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
   const attrBars = [
     {
       src: 'Door',
-      count: doorConv,
-      value: doorGmv,
+      count: doorCount,
+      value: doorRevenue,
       rake: 15,
       rakeAmt: doorRake,
       color: 'bg-success',
     },
     {
       src: 'Inside sales',
-      count: insideConv,
-      value: insideGmv,
+      count: insideCount,
+      value: insideRevenue,
       rake: 10,
       rakeAmt: insideRake,
       color: 'bg-accent',
     },
     {
       src: 'Retargeting',
-      count: retargConv,
-      value: retargGmv,
+      count: retargCount,
+      value: retargRevenue,
       rake: 5,
       rakeAmt: retargRake,
       color: 'bg-accent/60',
@@ -95,22 +245,36 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
     <AccountShell accountSlug={params.slug} pageTitle="Reports">
       <div className="space-y-5 max-w-[1500px]">
         <Banner tone="info">
-          <span className="text-[13px] flex items-center gap-2">
-            <Sparkles size={13} className="text-accent" /> Every report can be scheduled to email
-            weekly or piped to Slack via webhook.
+          <span className="text-[13px] flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Sparkles size={13} className="text-accent" /> Every report can be scheduled to email
+              weekly or piped to Slack via webhook.
+            </span>
+            {source === 'database' ? (
+              <span className="inline-flex items-center gap-1 text-success text-[10px] uppercase tracking-wider font-semibold ml-4 shrink-0">
+                <Database size={10} /> Live
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold ml-4 shrink-0"
+                title={error}
+              >
+                <AlertTriangle size={10} /> Fixture
+              </span>
+            )}
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard
             label="MTD revenue"
-            value={<Money cents={rollup.revenueCentsMTD} region={region} />}
+            value={<Money cents={revenueCentsMTD} region={region} />}
             delta="+18.2%"
             deltaTone="positive"
           />
           <KpiCard
             label="MTD conv."
-            value={rollup.conversionsMTD.toLocaleString()}
+            value={conversionsMTD.toLocaleString()}
             delta="+12%"
             deltaTone="positive"
           />
@@ -206,6 +370,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
           </Section>
 
           <Section title="Pipeline velocity by stage" subtitle="Median time per stage · last 30d">
+            {/* TODO(M5): pipeline velocity needs LeadActivity duration model — no backing table yet */}
             <div className="space-y-3">
               {[
                 { stage: 'New → Contacted', days: 0.3, prev: 0.5 },
@@ -237,6 +402,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
           title="14-day conversion trend"
           subtitle="Weekday peaks · weekend trough · trend +2.2% WoW"
         >
+          {/* TODO(M5): replace with ConversionDailySummary query once view is created */}
           <SimpleBarChart
             data={rollup.conversions14d}
             label={`${account.shortName} · daily conversions`}
@@ -296,8 +462,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
 }
 
 /**
- * Hand-rolled bar chart — no external deps. Shows the real weekly pattern
- * (Sun trough, Wed/Thu peak) so the chart looks like a real ops dashboard.
+ * Hand-rolled bar chart — no external deps.
  */
 function SimpleBarChart({
   data,

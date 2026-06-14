@@ -1,3 +1,19 @@
+/**
+ * /accounts/[slug]/today — per-account command centre.
+ *
+ * Server component. Live KPI rail (revenue today, knocks, conversions,
+ * active knockers) loaded from Prisma. Pipeline snapshot, AI insights,
+ * activity stream, and funnel remain seed-driven until backing models exist.
+ *
+ * TODO(M5): pipeline snapshot needs Lead.status live query — currently
+ * fixture-backed; Lead model exists but no per-account pipeline API yet.
+ * TODO(M5): activity stream needs LeadActivity live feed.
+ * TODO(M5): funnel steps need KnockSession aggregation.
+ * TODO(M5): AI insights need a separate inference service.
+ *
+ * Authorization: cross-tenant operators see any slug; org-scoped sessions
+ * are pinned to their own org's slug.
+ */
 import {
   Trophy,
   MapPin,
@@ -31,8 +47,87 @@ import { accountData, PIPELINE_STAGES } from '@/lib/account-fixtures';
 import { rollupFor } from '@/lib/seed/kpis';
 import { values as seriesValues } from '@/lib/seed/time-series';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { getSession } from '@/lib/session';
+import { isCrossTenantOperator } from '@/lib/api-helpers';
 
-export default function TodayPage({ params }: { params: { slug: string } }): JSX.Element {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+// ─── live KPI loader ─────────────────────────────────────────────────────────
+
+interface LiveKpis {
+  revenueCentsToday: bigint;
+  knocksToday: number;
+  conversionsToday: number;
+  activeKnockers: number;
+  source: 'database' | 'fixture-fallback';
+}
+
+async function loadLiveKpis(
+  slug: string,
+  fallbackRollup: ReturnType<typeof rollupFor>,
+): Promise<LiveKpis> {
+  const session = await getSession();
+  if (!session) {
+    return {
+      revenueCentsToday: fallbackRollup.revenueCentsToday,
+      knocksToday: fallbackRollup.knocksToday,
+      conversionsToday: fallbackRollup.conversionsToday,
+      activeKnockers: fallbackRollup.activeReps,
+      source: 'fixture-fallback',
+    };
+  }
+
+  try {
+    const { db } = await import('@d2d/database');
+
+    const org = await db.org.findFirst({ where: { slug }, select: { id: true } });
+    if (!org) throw new Error(`org with slug '${slug}' not found`);
+
+    if (!isCrossTenantOperator(session) && session.orgId !== org.id) {
+      throw new Error('tenant scope violation');
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [knocksToday, convAgg, activeKnockers] = await Promise.all([
+      db.knock.count({ where: { orgId: org.id, capturedAt: { gte: todayStart } } }),
+      db.conversion.aggregate({
+        where: { orgId: org.id, signedAt: { gte: todayStart } },
+        _count: { _all: true },
+        _sum: { amountCents: true },
+      }),
+      db.user.count({ where: { orgId: org.id, role: 'knocker', status: 'active' } }),
+    ]);
+
+    return {
+      revenueCentsToday: convAgg._sum.amountCents ?? 0n,
+      knocksToday,
+      conversionsToday: convAgg._count._all,
+      activeKnockers,
+      source: 'database',
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[today/${slug}] DB load failed, falling back to fixture:`, err);
+    return {
+      revenueCentsToday: fallbackRollup.revenueCentsToday,
+      knocksToday: fallbackRollup.knocksToday,
+      conversionsToday: fallbackRollup.conversionsToday,
+      activeKnockers: fallbackRollup.activeReps,
+      source: 'fixture-fallback',
+    };
+  }
+}
+
+// ─── page ────────────────────────────────────────────────────────────────────
+
+export default async function TodayPage({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<JSX.Element> {
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (
@@ -51,9 +146,11 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
     );
   }
 
-  // Pull canonical rollup so headline numbers reconcile with the
-  // command-centre + reports view.
+  // Canonical seed rollup — used for chart data + deltas until DB-backed.
   const rollup = rollupFor(params.slug);
+
+  // Live KPI override where the DB is reachable.
+  const liveKpis = await loadLiveKpis(params.slug, rollup);
   const region = account.region === 'AU' ? 'AU' : 'US';
   const isCharity = account.vertical === 'charity';
   const isHealth = account.vertical === 'healthcare';
@@ -63,10 +160,10 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
   const activeKnockers = knockers.filter((n) => n.status === 'active');
   const topKnockers = [...activeKnockers].sort((a, b) => b.conversions - a.conversions).slice(0, 6);
 
-  // Headline numbers from rollup (account-wide), not just the 6 we display.
-  const todayRev = rollup.revenueCentsToday;
-  const totalKnocks = rollup.knocksToday;
-  const totalConv = rollup.conversionsToday;
+  // Headline numbers: prefer live DB values; fall back to seed rollup.
+  const todayRev = liveKpis.revenueCentsToday;
+  const totalKnocks = liveKpis.knocksToday;
+  const totalConv = liveKpis.conversionsToday;
 
   // Build pipeline snapshot — 5 columns with top 2 leads each
   const pipelineSnapshot = PIPELINE_STAGES.map((s) => ({
@@ -182,12 +279,23 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
       <div className="space-y-5 max-w-[1500px]">
         {/* Scope + freshness banner */}
         <Banner tone="info">
-          <span className="text-[13px] flex items-center gap-2">
-            <Sparkles size={13} />
-            <span>
-              <span className="font-semibold">{account.shortName}</span> · {account.region} ·{' '}
-              {account.plan} plan · last sync 47 seconds ago. All systems nominal.
+          <span className="text-[13px] flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Sparkles size={13} />
+              <span>
+                <span className="font-semibold">{account.shortName}</span> · {account.region} ·{' '}
+                {account.plan} plan · last sync 47 seconds ago. All systems nominal.
+              </span>
             </span>
+            {liveKpis.source === 'database' ? (
+              <span className="inline-flex items-center gap-1 text-success text-[10px] uppercase tracking-wider font-semibold ml-4 shrink-0">
+                <Database size={10} /> Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold ml-4 shrink-0">
+                Fixture
+              </span>
+            )}
           </span>
         </Banner>
 
@@ -209,7 +317,7 @@ export default function TodayPage({ params }: { params: { slug: string } }): JSX
           />
           <KpiCard
             label={`Active ${repsLabel}`}
-            value={rollup.activeReps}
+            value={liveKpis.activeKnockers}
             hint={`of ${rollup.rosterSize} on roster`}
           />
           <KpiCard

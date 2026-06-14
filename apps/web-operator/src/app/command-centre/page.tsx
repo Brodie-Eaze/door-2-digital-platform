@@ -1,3 +1,7 @@
+// TODO(M5): needs KnockSession real-time feed, fleet GPS model, and AI zone
+// suggestion endpoint — no backing table for live fleet status or AI zone
+// scores yet. FLEET_REPS and hqRollup() remain seed-driven until those are
+// wired. Converts to a Server Component once live-session aggregation lands.
 'use client';
 
 import { Radio } from 'lucide-react';
