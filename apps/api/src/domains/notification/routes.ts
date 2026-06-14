@@ -33,7 +33,11 @@ function requireRole(role: string, allowed: Set<string>): void {
 }
 
 export async function registerNotification(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'notification', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'notification',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // POST /v1/notifications/sms
   app.post('/sms', { preHandler: requireAuth }, async (req, reply) => {

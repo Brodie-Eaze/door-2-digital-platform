@@ -15,11 +15,9 @@ const envSchema = z.object({
   // HTTP
   PORT: z.coerce.number().int().default(3010),
   HOST: z.string().default('0.0.0.0'),
-  CORS_ORIGINS: z
-    .string()
-    .default(
-      'http://localhost:3011,http://localhost:3012,https://d2d-production-1fab.up.railway.app',
-    ),
+  // SEC-010: prod Railway URL removed from default. In production CORS_ORIGINS
+  // must be set explicitly via env; the fail-fast below catches a missing value.
+  CORS_ORIGINS: z.string().default('http://localhost:3011,http://localhost:3012'),
 
   // Database + Redis
   DATABASE_URL: z.string().url(),
@@ -128,6 +126,20 @@ export function env(): Env {
       process.exit(1);
     }
     _env = parsed.data;
+    // SEC-010: CORS_ORIGINS must be explicitly configured in production.
+    // The default only contains localhost dev origins, which would make every
+    // cross-origin request fail silently in prod if the env var is forgotten.
+    if (
+      _env.NODE_ENV === 'production' &&
+      !_env.CORS_ORIGINS.split(',')
+        .map((o) => o.trim())
+        .some((o) => o.length > 0 && !o.startsWith('http://localhost'))
+    ) {
+      console.error(
+        'Fatal: CORS_ORIGINS is not set to a production origin. Set it to the deployed app URL.',
+      );
+      process.exit(1);
+    }
   }
   return _env;
 }

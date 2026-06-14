@@ -33,7 +33,11 @@ interface UserIdParams {
 }
 
 export async function registerUser(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'user', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'user',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/users — invite a user; returns inviteToken
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -57,11 +61,17 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
   });
 
   // POST /v1/users/accept-invite — unauthenticated
-  app.post('/accept-invite', async (req, reply) => {
-    const body = acceptInviteRequestSchema.parse(req.body);
-    const user = await acceptInvite(body);
-    return reply.code(200).send({ user });
-  });
+  // SEC-003: tight rate limit — 5 attempts per IP per minute. Prevents invite
+  // token brute-force on this unauthenticated endpoint.
+  app.post(
+    '/accept-invite',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = acceptInviteRequestSchema.parse(req.body);
+      const user = await acceptInvite(body);
+      return reply.code(200).send({ user });
+    },
+  );
 
   // GET /v1/users — list within actor's org
   app.get('/', { preHandler: requireAuth }, async (req, reply) => {

@@ -33,7 +33,11 @@ interface IdParams {
 }
 
 export async function registerDonation(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'donation', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'donation',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // GET /v1/donations/:id
   app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {

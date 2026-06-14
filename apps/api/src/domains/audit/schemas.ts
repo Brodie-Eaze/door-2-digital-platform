@@ -27,6 +27,10 @@ export const verifyChainRequestSchema = z
   .object({
     fromUlid: z.string().min(20).max(40).optional(),
     toUlid: z.string().min(20).max(40).optional(),
+    /** Cursor returned as nextAfterId from the previous page (string form of BigInt). */
+    afterId: z.string().regex(/^\d+$/).optional(),
+    /** Max rows per call; server caps at 10 000. */
+    limit: z.number().int().min(1).max(10_000).optional(),
   })
   .strict();
 export type VerifyChainRequest = z.infer<typeof verifyChainRequestSchema>;

@@ -55,3 +55,38 @@ describe('RelayState freshness window', () => {
     expect(() => verifyRelayState(rs)).toThrow();
   });
 });
+
+describe('RelayState — SEC-009 binary timing-safe comparison', () => {
+  it('accepts a valid signature decoded from hex to binary', () => {
+    const rs = signRelayState('sec009-org');
+    // Must not throw — the binary comparison path must handle a genuine token.
+    expect(() => verifyRelayState(rs)).not.toThrow();
+    expect(verifyRelayState(rs).slug).toBe('sec009-org');
+  });
+
+  it('rejects a signature that is valid hex but wrong value', () => {
+    const rs = signRelayState('sec009-org');
+    const [payload, sig] = rs.split('.');
+    // Flip the last byte — still valid hex, still 64 chars, still 32 bytes decoded.
+    const lastTwo = sig!.slice(-2);
+    const flipped = lastTwo === 'ff' ? '00' : String(parseInt(lastTwo, 16) + 1).padStart(2, '0');
+    const tamperedSig = sig!.slice(0, -2) + flipped;
+    expect(() => verifyRelayState(`${payload}.${tamperedSig}`)).toThrow('signature mismatch');
+  });
+
+  it('rejects a non-hex signature (would decode to wrong byte length)', () => {
+    const rs = signRelayState('sec009-org');
+    const [payload] = rs.split('.');
+    // A UTF-8 string that is not 64 hex chars won't decode to 32 bytes.
+    const notHex = 'not-valid-hex-at-all';
+    expect(() => verifyRelayState(`${payload}.${notHex}`)).toThrow('signature mismatch');
+  });
+
+  it('rejects a hex signature padded to bypass a naive length guard', () => {
+    // An all-zero signature of the right length (64 hex chars) is still wrong.
+    const rs = signRelayState('sec009-org');
+    const [payload] = rs.split('.');
+    const zeroSig = '0'.repeat(64);
+    expect(() => verifyRelayState(`${payload}.${zeroSig}`)).toThrow('signature mismatch');
+  });
+});

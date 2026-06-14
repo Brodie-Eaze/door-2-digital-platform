@@ -55,9 +55,21 @@ export function verifyRelayState(relayState: string): { slug: string } {
   }
 
   const expectedSig = sign(payloadB64);
-  const a = Buffer.from(providedSig);
-  const b = Buffer.from(expectedSig);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  // SEC-009: decode both signatures from hex to raw binary Buffers BEFORE
+  // comparing. Comparing UTF-8 hex strings with timingSafeEqual is correct
+  // only if both strings are exactly the same byte-length, but a crafted
+  // input that is NOT valid hex can produce a Buffer of different length
+  // because Buffer.from(str) (default 'utf-8') does not validate hex pairs.
+  // Decoding via 'hex' enforces canonical length (SHA-256 = 32 bytes) and
+  // eliminates any character-encoding variation that could leak timing
+  // information through the length guard.
+  const SHA256_BYTE_LEN = 32;
+  const aBuf = Buffer.from(providedSig, 'hex');
+  const bBuf = Buffer.from(expectedSig, 'hex');
+  if (aBuf.length !== SHA256_BYTE_LEN || bBuf.length !== SHA256_BYTE_LEN) {
+    throw new Error('RelayState signature mismatch');
+  }
+  if (!timingSafeEqual(aBuf, bBuf)) {
     throw new Error('RelayState signature mismatch');
   }
 

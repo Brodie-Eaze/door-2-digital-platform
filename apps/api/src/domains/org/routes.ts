@@ -26,7 +26,11 @@ interface OrgIdParams {
 }
 
 export async function registerOrg(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'org', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'org',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/orgs — SEC-011: super_admin only + tight rate-limit (5/min/IP).
   // Idempotency-Key still required; new orgs are scoped under the special

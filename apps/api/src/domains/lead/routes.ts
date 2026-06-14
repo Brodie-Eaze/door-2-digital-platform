@@ -37,7 +37,11 @@ interface IdParams {
 }
 
 export async function registerLead(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'lead', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'lead',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // POST /v1/leads — create
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {

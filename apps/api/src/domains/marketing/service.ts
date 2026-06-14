@@ -746,11 +746,15 @@ export class MarketingService {
     if (query.providerKind) where.providerKind = query.providerKind;
     if (query.capability) where.capability = query.capability;
     if (query.status) where.status = query.status;
+    // MARKETING-LISTJOBS: switch to createdAt DESC to match the
+    // @@index([orgId, status, createdAt(sort: Desc)]) covering index and avoid
+    // a filesort. ULIDs are monotonic so createdAt order == id order; cursor
+    // pagination continues to use the id field (stable unique tie-breaker).
     const rows = await prisma().contentGenerationJob.findMany({
       where,
       take: query.limit + 1,
       ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-      orderBy: { id: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
     const hasMore = rows.length > query.limit;
     const slice = hasMore ? rows.slice(0, query.limit) : rows;

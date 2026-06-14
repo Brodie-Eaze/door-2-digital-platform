@@ -78,7 +78,11 @@ function requireAdmin(role: string): void {
 export async function registerMarketing(app: FastifyInstance): Promise<void> {
   const service = new MarketingService(app.integrations);
 
-  app.get('/_status', async () => ({ domain: 'marketing', status: 'live', phase: '3.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'marketing',
+    status: 'live',
+    phase: '3.1',
+  }));
 
   // ── Providers ──────────────────────────────────────────────────────────
 

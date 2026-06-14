@@ -19,7 +19,7 @@
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isDemoLoginEnabled, sessionSigningSecret } from '@/lib/session-verify';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -183,7 +183,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const acct = DEMO_TABLE.find((a) => a.email === body.email);
-  if (!acct || acct.password !== body.password) {
+  // F-010: timing-safe password comparison. HMAC-SHA256 both sides with a
+  // per-request random nonce so the digests are always the same length (32
+  // bytes) regardless of the input strings, eliminating timing side-channels.
+  const nonce = createHmac('sha256', 'demo-compare-nonce').update(String(Date.now())).digest();
+  const expected = createHmac('sha256', nonce)
+    .update(acct ? acct.password : '')
+    .digest();
+  const provided = createHmac('sha256', nonce).update(body.password).digest();
+  if (!acct || !timingSafeEqual(expected, provided)) {
     return NextResponse.json(
       {
         type: 'https://docs.d2d.io/problems/unauthorized',

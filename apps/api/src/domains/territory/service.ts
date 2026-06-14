@@ -400,9 +400,7 @@ export async function removeAssignment(
  * `expiresAt = now`, so the strict `gt now` comparison excludes just-revoked
  * rows on the next read.
  */
-export async function listAssignedTerritories(
-  actor: ActorContext,
-): Promise<AssignedTerritory[]> {
+export async function listAssignedTerritories(actor: ActorContext): Promise<AssignedTerritory[]> {
   const now = new Date();
   const assignments = await prisma().territoryAssignment.findMany({
     where: {
@@ -462,15 +460,26 @@ export async function heatmap(
     where: { orgId: actor.orgId, status: 'active' },
     select: { id: true, centroid: true, s2CellIds: true },
   });
+
+  // PERF-INDEXES / HEATMAP-N+1: one groupBy instead of per-territory count.
+  // Territories with zero knocks are not present in the groupBy result; they
+  // are merged below with a default of 0 so the return shape is unchanged.
+  const knockGroups = await prisma().knock.groupBy({
+    by: ['territoryId'],
+    where: { orgId: actor.orgId },
+    _count: { _all: true },
+  });
+  const knockCountByTerritory = new Map<string, number>(
+    knockGroups.map((g) => [g.territoryId, g._count._all]),
+  );
+
   const cells: Array<{ cellId: string; count: number; centroid: { lng: number; lat: number } }> =
     [];
   for (const t of territories) {
     const c = toCentroid(t.centroid);
     if (!c) continue;
     if (c.lng < w || c.lng > e || c.lat < s || c.lat > n) continue;
-    const count = await prisma().knock.count({
-      where: { territoryId: t.id, orgId: actor.orgId },
-    });
+    const count = knockCountByTerritory.get(t.id) ?? 0;
     const cellId = t.s2CellIds[0] ?? `S2L13_${c.lng.toFixed(3)}_${c.lat.toFixed(3)}`;
     cells.push({ cellId, count, centroid: c });
   }
