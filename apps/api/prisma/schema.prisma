@@ -708,6 +708,7 @@ model PayoutBatch {
 
   commissions Commission[]
 
+  @@unique([orgId, periodStart, periodEnd])
   @@index([orgId, status])
 }
 

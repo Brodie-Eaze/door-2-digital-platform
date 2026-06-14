@@ -16,7 +16,7 @@
  * Override commissions (crew-leaders earning % of team earnings) are computed
  * here at batch-generation time, ensuring the full period is captured.
  */
-import type { RegionCode } from '@prisma/client';
+import type { PayoutBatch, RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import type { CreatePayoutBatchBody, ListPayoutBatchesQuery } from './schemas';
@@ -202,25 +202,43 @@ export async function generatePayoutBatch(
   }
 
   const batchId = newId('pay');
-  const batch = await prisma().$transaction(async (tx) => {
-    const b = await tx.payoutBatch.create({
-      data: {
-        id: batchId,
-        orgId: actor.orgId,
-        regionCode: actor.regionCode,
-        periodStart,
-        periodEnd,
-        status: 'draft',
-        totalCents,
-        currency: body.currency ?? 'USD',
-      },
+  let batch: PayoutBatch;
+  try {
+    batch = await prisma().$transaction(async (tx) => {
+      const b = await tx.payoutBatch.create({
+        data: {
+          id: batchId,
+          orgId: actor.orgId,
+          regionCode: actor.regionCode,
+          periodStart,
+          periodEnd,
+          status: 'draft',
+          totalCents,
+          currency: body.currency ?? 'USD',
+        },
+      });
+      await tx.commission.updateMany({
+        where: { id: { in: commissions.map((c) => c.id) } },
+        data: { payoutBatchId: batchId, status: 'included' },
+      });
+      return b;
     });
-    await tx.commission.updateMany({
-      where: { id: { in: commissions.map((c) => c.id) } },
-      data: { payoutBatchId: batchId, status: 'included' },
-    });
-    return b;
-  });
+  } catch (err: unknown) {
+    // P2002 = Prisma unique constraint violation — concurrent call already created a batch for this period
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === 'P2002'
+    ) {
+      throw new ProblemError(
+        Problems.conflict(
+          `A payout batch already exists for ${body.periodStart}–${body.periodEnd}. Use the existing batch or choose a different period.`,
+        ),
+      );
+    }
+    throw err;
+  }
 
   return toPublic(batch, commissions.length);
 }
