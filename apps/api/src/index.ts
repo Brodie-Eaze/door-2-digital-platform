@@ -63,6 +63,9 @@ import { startAuditShipper } from './workers/audit-shipper.worker';
 import { startDnkSync } from './workers/dnk-sync.worker';
 import { startLeadSequenceWorker } from './workers/lead-sequence.worker';
 import { startNotificationSendWorker } from './workers/notification-send.worker';
+import { startWebhookDeliverWorker } from './workers/webhook-deliver.worker';
+import { startCommissionCalcWorker } from './workers/commission-calc.worker';
+import { startPayoutPrepareWorker } from './workers/payout-prepare.worker';
 
 async function buildServer() {
   const e = env();
@@ -224,8 +227,11 @@ async function main(): Promise<void> {
     startDnkSync();
     startLeadSequenceWorker();
     startNotificationSendWorker();
+    startWebhookDeliverWorker();
+    startCommissionCalcWorker();
+    startPayoutPrepareWorker();
     logger().info(
-      'CRON_LEADER=true — audit-shipper + dnk-sync + lead-sequence + notification-send workers started',
+      'CRON_LEADER=true — audit-shipper + dnk-sync + lead-sequence + notification-send + webhook-deliver + commission-calc + payout-prepare workers started',
     );
   }
 }
