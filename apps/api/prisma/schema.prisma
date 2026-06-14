@@ -284,12 +284,15 @@ model User {
   id               String       @id // usr_*
   orgId            String
   org              Org          @relation(fields: [orgId], references: [id])
-  email            String /// PII (vaulted ciphertext column)
+  email            String /// PII — plaintext (used by invite email flow); vault pending notification-service decrypt wiring
   emailDigest      String       @unique // deterministic-SIV for unique lookup
-  phone            String? /// PII
+  phone            String? /// PII — masked sentinel when phoneVault present
   phoneDigest      String?      @unique
-  givenName        String /// PII
-  familyName       String /// PII
+  phoneVault       Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
+  givenName        String /// PII — masked sentinel when givenNameVault present
+  givenNameVault   Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
+  familyName       String /// PII — masked sentinel when familyNameVault present
+  familyNameVault  Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
   role             PlatformRole
   managerId        String? // org-hierarchy parent
   manager          User?        @relation("ReportsTo", fields: [managerId], references: [id])
@@ -1309,7 +1312,8 @@ model KnockPhoto {
   capturedAt    DateTime
   latitude      Float?
   longitude     Float?
-  addressLine   String? /// PII — captured address context
+  addressLine     String? /// PII — masked sentinel '[vaulted]' when addressLineVault present
+  addressLineVault Json? // AES-256-GCM encrypted blob; AAD = 'KnockPhoto:{id}'
   mlLabels      Json? // data-science annotations (written by the ML pipeline)
   mlProcessedAt DateTime?
   createdAt     DateTime   @default(now())
@@ -1364,7 +1368,8 @@ model VoiceRecording {
   capturedAt          DateTime
   consentObtained     Boolean    @default(false) // all-party consent gate (legal)
   transcriptionStatus String     @default("pending") // pending|processing|done|failed|skipped
-  transcript          String? /// PII — written by the ML pipeline
+  transcript          String? /// PII — masked sentinel '[vaulted]' when transcriptVault present; written by ML pipeline
+  transcriptVault     Json? // AES-256-GCM encrypted blob; AAD = 'VoiceRecording:{id}'; written by ML pipeline
   analysis            Json? // sentiment / objections / outcome (ML)
   processedAt         DateTime?
   createdAt           DateTime   @default(now())

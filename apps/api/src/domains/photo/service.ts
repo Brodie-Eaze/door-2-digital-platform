@@ -21,10 +21,11 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { RegionCode } from '@prisma/client';
+import type { RegionCode, Prisma } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
+import { PiiVaultService } from '../pii-vault/service';
 import { emitAnalyticsEvent } from '../analytics/service';
 import type { CreatePhotoRequest, ListPhotosQuery, PhotoContentType } from './schemas';
 
@@ -156,7 +157,14 @@ export async function capturePhoto(
         capturedAt,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
-        addressLine: input.addressLine ?? null,
+        addressLine: input.addressLine ? '[vaulted]' : null,
+        addressLineVault: input.addressLine
+          ? (PiiVaultService.encryptForRow(
+              'KnockPhoto',
+              id,
+              input.addressLine,
+            ) as Prisma.JsonObject)
+          : null,
         // mlLabels / mlProcessedAt are written by the ML pipeline, not capture.
       },
     });

@@ -20,9 +20,21 @@ import type {
 import { prisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { writeAudit } from '../../shared/audit/write';
+import { PiiVaultService } from '../pii-vault/service';
 import { generateInviteToken, hashRefreshToken } from '../auth/tokens';
 import { revokeUserAccessTokens } from '../auth/token-revocation';
 import { hashPassword } from '../auth/password';
+
+function maskGivenName(name: string): string {
+  return name.length > 0 ? `${name[0]}${'•'.repeat(Math.max(2, name.length - 1))}` : '•••';
+}
+function maskFamilyName(name: string): string {
+  return name.length > 0 ? `${name[0]}.` : '•.';
+}
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : '•••';
+}
 import type { ListUsersQuery } from './schemas';
 
 interface ActorContext {
@@ -123,9 +135,22 @@ export async function inviteUser(
         orgId: actor.orgId,
         email: input.email,
         emailDigest: digest,
-        phone: input.phone ?? null,
-        givenName: input.givenName,
-        familyName: input.familyName,
+        phone: input.phone ? maskPhone(input.phone) : null,
+        phoneVault: input.phone
+          ? (PiiVaultService.encryptForRow('User', userId, input.phone) as Prisma.JsonObject)
+          : null,
+        givenName: maskGivenName(input.givenName),
+        givenNameVault: PiiVaultService.encryptForRow(
+          'User',
+          userId,
+          input.givenName,
+        ) as Prisma.JsonObject,
+        familyName: maskFamilyName(input.familyName),
+        familyNameVault: PiiVaultService.encryptForRow(
+          'User',
+          userId,
+          input.familyName,
+        ) as Prisma.JsonObject,
         role: input.role,
         managerId: input.managerId ?? null,
         regionCode: actor.regionCode,
@@ -274,9 +299,28 @@ export async function updateUser(
       // changeUserRole() (guarded). `UpdateUserRequest` omits `role` so this
       // path can never escalate, even if a body smuggled the field. (D3)
       data: {
-        ...(input.givenName !== undefined && { givenName: input.givenName }),
-        ...(input.familyName !== undefined && { familyName: input.familyName }),
-        ...(input.phone !== undefined && { phone: input.phone }),
+        ...(input.givenName !== undefined && {
+          givenName: maskGivenName(input.givenName),
+          givenNameVault: PiiVaultService.encryptForRow(
+            'User',
+            userId,
+            input.givenName,
+          ) as Prisma.JsonObject,
+        }),
+        ...(input.familyName !== undefined && {
+          familyName: maskFamilyName(input.familyName),
+          familyNameVault: PiiVaultService.encryptForRow(
+            'User',
+            userId,
+            input.familyName,
+          ) as Prisma.JsonObject,
+        }),
+        ...(input.phone !== undefined && {
+          phone: input.phone ? maskPhone(input.phone) : null,
+          phoneVault: input.phone
+            ? (PiiVaultService.encryptForRow('User', userId, input.phone) as Prisma.JsonObject)
+            : null,
+        }),
         ...(input.managerId !== undefined && { managerId: input.managerId }),
       },
     });
