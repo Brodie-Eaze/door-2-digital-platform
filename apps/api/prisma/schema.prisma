@@ -971,6 +971,10 @@ model UserCredential {
   // Optional invite token (HMAC of opaque token), present while user is pending acceptance
   inviteTokenHash String?   @unique
   inviteExpiresAt DateTime?
+  // TOTP MFA — AES-256-GCM encrypted otplib secret; null until setup begins.
+  // mfaEnabledAt is stamped on first successful verify, marking setup complete.
+  totpSecret      String?
+  mfaEnabledAt    DateTime?
   updatedAt       DateTime  @updatedAt
 }
 

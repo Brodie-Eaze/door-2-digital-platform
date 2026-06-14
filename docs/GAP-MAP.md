@@ -35,30 +35,30 @@ Ordered by Priority for Pilot-Charlie launch readiness.
 
 ### P0 — Launch Blockers (must close before Pilot-Charlie go-live)
 
-| ID     | Domain     | Gap                                                                                                                                               | Effort |
-| ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| **C1** | Auth       | `POST /v1/auth/saml/callback` is a 501 stub — SAML SP metadata is written but the ACS endpoint that processes the SAMLResponse is not implemented | M      |
-| **C2** | Auth       | `POST /v1/auth/mfa/verify` and `GET /v1/auth/mfa/setup` are 501 stubs                                                                             | S      |
-| **C3** | Sale       | `POST /v1/sales`, `PATCH /v1/sales/:id/status` are 501 stubs — sale lifecycle is incomplete                                                       | M      |
-| **C4** | Donation   | `PATCH /v1/donations/:id/cancel`, `POST /v1/donations/:id/change-amount` are 501 stubs                                                            | S      |
-| **C5** | Lead       | `POST /v1/leads/:id/assign` is a 501 stub                                                                                                         | S      |
-| **C6** | Conversion | `GET /v1/conversions` pagination export endpoint is 501                                                                                           | S      |
-| **C7** | Billing    | All 4 billing routes are 501 stubs — monthly invoice not generated for Pilot-Charlie                                                              | L      |
-| **C8** | CI         | Cross-tenant isolation probe is an `echo "TODO"` — needs a real synthetic test asserting 403 + audit row                                          | S      |
+| ID         | Domain     | Gap                                                                                                                                                                                   | Effort                                  |
+| ---------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --- |
+| **C1**     | Auth       | `POST /v1/auth/saml/callback` is a 501 stub — SAML SP metadata is written but the ACS endpoint that processes the SAMLResponse is not implemented                                     | M                                       |
+| ~~**C2**~~ | Auth       | ~~`POST /v1/auth/mfa/verify` and `GET /v1/auth/mfa/setup` are 501 stubs~~ **CLOSED 2026-06-14** — TOTP MFA real: migration + AES-256-GCM encrypted credential + setup + verify routes | S                                       |
+| ~~**C3**~~ | Sale       | ~~`PATCH /v1/sales/:id/status` is a 501 stub — sale lifecycle is incomplete~~ **CLOSED 2026-06-14** — status transitions (pending_install→installed                                   | cancelled, installed→cancelled) + audit | M   |
+| **C4**     | Donation   | `PATCH /v1/donations/:id/cancel`, `POST /v1/donations/:id/change-amount` are 501 stubs                                                                                                | S                                       |
+| **C5**     | Lead       | `POST /v1/leads/:id/assign` is a 501 stub                                                                                                                                             | S                                       |
+| **C6**     | Conversion | `GET /v1/conversions` pagination export endpoint is 501                                                                                                                               | S                                       |
+| **C7**     | Billing    | All 4 billing routes are 501 stubs — monthly invoice not generated for Pilot-Charlie                                                                                                  | L                                       |
+| **C8**     | CI         | Cross-tenant isolation probe is an `echo "TODO"` — needs a real synthetic test asserting 403 + audit row                                                                              | S                                       |
 
 ### P1 — Important Before Scale (close before 200+ knockers)
 
-| ID      | Domain     | Gap                                                                                                                                   | Effort |
-| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| **C9**  | Commission | Batch-knock commission accrual deferred (see `createKnockBatch` TODO Phase 1.3b) — commissions not accrued for offline-synced batches | M      |
-| **C10** | Payout     | `services/payout` has no idempotency guard on `generatePayoutBatch` — concurrent calls could create two batches for the same period   | S      |
-| **C11** | Audit      | Audit-chain Merkle replay CI job is `echo "TODO"` — no integrity verification runs weekly                                             | M      |
-| **C12** | Compliance | `PATCH /v1/compliance/state-clearance` (mark a state cleared after paid-solicitor approval) is a 501                                  | S      |
-| **C13** | DNC/DNK    | FTC + FCC + state DNC API scrub cron is not implemented — `apps/workers` has no `dnk-sync` job                                        | M      |
-| **C14** | Realtime   | Ably channel grant endpoint (`POST /v1/realtime/token`) is a 501 — live knock feed won't work                                         | S      |
-| **C15** | PII Vault  | `POST /v1/pii-vault/unmask` (JIT unmask with second-approver flow) is a 501                                                           | M      |
-| **C16** | Security   | `unsafe-inline` still in `style-src` CSP — needs nonce middleware (ADR drops `unsafe-inline`)                                         | S      |
-| **C17** | CI         | Dependabot config (`.github/dependabot.yml`) not added                                                                                | S      |
+| ID          | Domain     | Gap                                                                                                                                                                                                            | Effort |
+| ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **C9**      | Commission | Batch-knock commission accrual deferred (see `createKnockBatch` TODO Phase 1.3b) — commissions not accrued for offline-synced batches                                                                          | M      |
+| **C10**     | Payout     | `services/payout` has no idempotency guard on `generatePayoutBatch` — concurrent calls could create two batches for the same period                                                                            | S      |
+| **C11**     | Audit      | Audit-chain Merkle replay CI job is `echo "TODO"` — no integrity verification runs weekly                                                                                                                      | M      |
+| ~~**C12**~~ | Compliance | ~~`POST /v1/compliance/state-clearance` is a 501~~ **CLOSED 2026-06-14** — manual clearance for post-approval campaigns: validates reg + expiry + state match + tenant, upserts CampaignStateClearance + audit | S      |
+| **C13**     | DNC/DNK    | FTC + FCC + state DNC API scrub cron is not implemented — `apps/workers` has no `dnk-sync` job                                                                                                                 | M      |
+| **C14**     | Realtime   | Ably channel grant endpoint (`POST /v1/realtime/token`) is a 501 — live knock feed won't work                                                                                                                  | S      |
+| **C15**     | PII Vault  | `POST /v1/pii-vault/unmask` (JIT unmask with second-approver flow) is a 501                                                                                                                                    | M      |
+| **C16**     | Security   | `unsafe-inline` still in `style-src` CSP — needs nonce middleware (ADR drops `unsafe-inline`)                                                                                                                  | S      |
+| **C17**     | CI         | Dependabot config (`.github/dependabot.yml`) not added                                                                                                                                                         | S      |
 
 ### P2 — Phase 1.4 / SOC 2 Hardening
 

@@ -10,7 +10,8 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
-import { getSale, installerHandoff } from './service';
+import { z } from 'zod';
+import { getSale, installerHandoff, updateSaleStatus } from './service';
 import { installerHandoffRequestSchema } from './schemas';
 
 interface IdParams {
@@ -54,6 +55,32 @@ export async function registerSale(app: FastifyInstance): Promise<void> {
         orgId: ctx.orgId,
         handler: async () => {
           const sale = await installerHandoff(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { sale } };
+        },
+      });
+    },
+  );
+
+  // PATCH /v1/sales/:id/status — transition sale status.
+  // Valid: pending_install → installed | cancelled; installed → cancelled.
+  const statusBodySchema = z.object({ status: z.enum(['installed', 'cancelled']) }).strict();
+
+  app.patch<{ Params: IdParams }>(
+    '/:id/status',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = statusBodySchema.parse(req.body);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const sale = await updateSaleStatus(req.params.id, body.status, {
             userId: ctx.userId,
             orgId: ctx.orgId,
             regionCode: ctx.regionCode as never,

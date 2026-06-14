@@ -23,7 +23,12 @@ import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import type { RegionCode } from '@prisma/client';
-import { fileRegistration, getStateClearanceMatrix, transitionRegistration } from './service';
+import {
+  fileRegistration,
+  getStateClearanceMatrix,
+  transitionRegistration,
+  manualClearance,
+} from './service';
 
 const stateClearanceQuerySchema = z.object({ campaignId: z.string().min(1).optional() }).strict();
 
@@ -82,6 +87,35 @@ export async function registerCompliance(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ registration });
     },
   );
+
+  // POST /v1/compliance/state-clearance — manual clearance override.
+  // Links a campaign to an existing approved registration for campaigns created
+  // after the registration was approved (auto-upsert only covers at-approval-time).
+  const manualClearanceSchema = z
+    .object({
+      campaignId: z.string().min(1),
+      state: z.string().min(2).max(2),
+      paidSolicitorRegistrationId: z.string().min(1),
+    })
+    .strict();
+
+  app.post('/state-clearance', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = manualClearanceSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const clearance = await manualClearance(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as RegionCode,
+        });
+        return { status: 201, body: { clearance } };
+      },
+    });
+  });
 
   // GET /v1/compliance/cooling-off-windows — out of scope for Phase 1.2.
   app.get('/cooling-off-windows', async (_req, reply) =>

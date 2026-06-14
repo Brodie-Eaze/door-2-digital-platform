@@ -13,13 +13,16 @@
  *   - GET  /sso/:orgSlug/config   → cert-free config view (org_admin+)
  *   - PUT  /sso/:orgSlug/config   → upsert IdP config (org_admin+)
  *
- * MFA / WebAuthn remain 501 stubs (Phase 1.2).
+ * MFA (TOTP) — GET /mfa/setup + POST /verify-mfa — Phase 1.2 real.
+ * WebAuthn remains 501 (Phase 1.2+).
  */
 import * as querystring from 'node:querystring';
+import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { loginRequestSchema, refreshRequestSchema, logoutRequestSchema } from './schemas';
 import { login, refresh, logout, getCurrentUser } from './service';
+import { setupTotp, verifyTotp } from './mfa';
 import { optionalAuth, requireAuth } from '../../shared/middleware/auth-guard';
 import { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from './tokens';
 import { env } from '../../config/env';
@@ -193,16 +196,42 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ user: me });
   });
 
-  // ── Stubs preserved for Phase 1.2 ─────────────────────────────────────
+  // ── MFA — TOTP setup + verify (Phase 1.2 real) ────────────────────────
 
-  app.post('/verify-mfa', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'TOTP/SMS verification lands in Phase 1.2',
-    }),
-  );
+  const verifyMfaSchema = z.object({ token: z.string().length(6) }).strict();
+
+  // GET /v1/auth/mfa/setup — generate + store a TOTP credential.
+  // Returns the otpauth:// URI the authenticator app scans.
+  // Requires a live session (auth guard). Re-calling overwrites any pending
+  // un-confirmed credential; to prevent casual reset of an active MFA, gate
+  // at the product layer (e.g. require re-password before calling this).
+  app.get('/mfa/setup', { preHandler: requireAuth }, async (req, reply) => {
+    const userId = req.principal?.userId;
+    if (!userId) throw new ProblemError(Problems.unauthorized());
+    const me = await getCurrentUser(userId);
+    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    const result = await setupTotp(userId, me.email, {
+      orgId: me.orgId,
+      regionCode: me.regionCode,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // POST /v1/auth/verify-mfa — verify a TOTP code.
+  // On the first successful call after setup, stamps mfaEnabledAt.
+  // Subsequent calls serve as step-up verification.
+  app.post('/verify-mfa', { preHandler: requireAuth }, async (req, reply) => {
+    const userId = req.principal?.userId;
+    if (!userId) throw new ProblemError(Problems.unauthorized());
+    const me = await getCurrentUser(userId);
+    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    const body = verifyMfaSchema.parse(req.body);
+    const result = await verifyTotp(userId, body.token, {
+      orgId: me.orgId,
+      regionCode: me.regionCode,
+    });
+    return reply.code(200).send(result);
+  });
 
   // ── SAML SSO (Phase 1.1 enterprise table-stakes) ──────────────────────
 

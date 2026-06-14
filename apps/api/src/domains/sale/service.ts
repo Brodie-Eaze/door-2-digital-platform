@@ -90,6 +90,47 @@ export async function installerHandoff(
   return toPublic(updated);
 }
 
+const VALID_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  pending_install: ['installed', 'cancelled'],
+  installed: ['cancelled'],
+  cancelled: [],
+};
+
+export async function updateSaleStatus(
+  id: string,
+  newStatus: string,
+  actor: ActorContext,
+): Promise<SalePublic> {
+  const { row } = await loadSaleAndAssertTenant(id, actor);
+
+  const allowed = VALID_STATUS_TRANSITIONS[row.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    throw new ProblemError(
+      Problems.conflict(`Cannot transition sale from ${row.status} to ${newStatus}`),
+    );
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.sale.update({
+      where: { id },
+      data: { status: newStatus },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'sale.status_updated',
+      resourceType: 'Sale',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: newStatus },
+    });
+    return next;
+  });
+
+  return toPublic(updated);
+}
+
 function toPublic(s: {
   id: string;
   conversionId: string;
