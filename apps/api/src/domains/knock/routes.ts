@@ -28,6 +28,7 @@ import {
   endSession,
   createKnock,
   createKnockBatch,
+  contestKnock,
   listKnocks,
   getKnock,
 } from './service';
@@ -155,13 +156,34 @@ export async function registerKnock(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ knock });
   });
 
-  // POST /v1/knocks/:id/contest — 501 stub
-  app.post<{ Params: IdParams }>('/:id/contest', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Knock disposition contest workflow lands in Phase 1.2',
-    }),
+  // POST /v1/knocks/:id/contest — log a disposition dispute + audit event
+  app.post<{ Params: IdParams }>(
+    '/:id/contest',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = (req.body as { reason?: string }) ?? {};
+      const reason =
+        typeof body.reason === 'string' && body.reason.trim()
+          ? body.reason.trim()
+          : 'No reason provided';
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const knock = await contestKnock(
+            req.params.id,
+            { reason },
+            {
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              regionCode: ctx.regionCode as never,
+            },
+          );
+          return { status: 200, body: { knock } };
+        },
+      });
+    },
   );
 }

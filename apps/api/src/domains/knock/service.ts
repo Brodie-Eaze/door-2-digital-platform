@@ -779,6 +779,32 @@ export async function getKnock(id: string, actor: ActorContext): Promise<KnockPu
   return toKnockPublic(row);
 }
 
+export async function contestKnock(
+  id: string,
+  input: { reason: string },
+  actor: ActorContext,
+): Promise<KnockPublic> {
+  const row = await prisma().knock.findUnique({ where: { id } });
+  if (!row) throw new ProblemError(Problems.notFound('Knock', id));
+  if (row.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(row.orgId));
+
+  await prisma().$transaction(async (tx) => {
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'knock.disposition_contested',
+      resourceType: 'Knock',
+      resourceId: id,
+      beforeJson: { disposition: row.disposition },
+      afterJson: { contested: true },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return toKnockPublic(row);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ import {
   updateLead,
   assignLead,
   appendActivity,
+  flagLeadDnk,
 } from './service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
@@ -146,13 +147,26 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/leads/:id/dnk — 501 stub, DNK service in Agent 15
-  app.post<{ Params: IdParams }>('/:id/dnk', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'DNK marking is handled by the do-not-knock service (Agent 15)',
-    }),
-  );
+  // POST /v1/leads/:id/dnk — flag lead's address as do-not-knock + update status
+  app.post<{ Params: IdParams }>('/:id/dnk', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = (req.body as { reason?: string }) ?? {};
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const lead = await flagLeadDnk(
+          req.params.id,
+          { reason: body.reason },
+          {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          },
+        );
+        return { status: 200, body: { lead } };
+      },
+    });
+  });
 }

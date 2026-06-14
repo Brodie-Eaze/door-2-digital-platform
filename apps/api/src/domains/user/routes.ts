@@ -20,6 +20,8 @@ import {
   updateUser,
   changeUserRole,
   archiveUser,
+  resendInvite,
+  resetMfa,
 } from './service';
 import { getDailyStats } from './daily-stats.service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
@@ -138,17 +140,27 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/users/:id/invite — resend invite (501 until rotation lands)
+  // POST /v1/users/:id/invite — resend invite token
   app.post<{ Params: UserIdParams }>(
     '/:id/invite',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'Invite-resend lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const result = await resendInvite(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: result };
+        },
+      });
+    },
   );
 
   // POST /v1/users/:id/role — guarded role change. requireAuth + org_admin/
@@ -178,17 +190,27 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/users/:id/reset-mfa — 501 (Phase 1.2)
+  // POST /v1/users/:id/reset-mfa — clear TOTP secret; user must re-enroll
   app.post<{ Params: UserIdParams }>(
     '/:id/reset-mfa',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'MFA reset lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await resetMfa(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
   );
 
   // DELETE /v1/users/:id — soft-delete (sets status → 'archived', revokes tokens).

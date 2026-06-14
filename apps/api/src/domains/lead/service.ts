@@ -491,6 +491,53 @@ export async function appendActivity(
   return toActivityPublic(created);
 }
 
+export async function flagLeadDnk(
+  id: string,
+  input: { reason?: string },
+  actor: ActorContext,
+): Promise<LeadPublic> {
+  const lead = await prisma().lead.findUnique({ where: { id } });
+  if (!lead) throw new ProblemError(Problems.notFound('Lead', id));
+  if (lead.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(lead.orgId));
+  if (!lead.addressId) {
+    throw new ProblemError(Problems.validation('Lead has no address to flag as do-not-knock'));
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    await tx.doNotKnock.upsert({
+      where: {
+        regionCode_addressId: { regionCode: lead.regionCode, addressId: lead.addressId! },
+      },
+      create: {
+        id: newId('dnk'),
+        regionCode: lead.regionCode,
+        addressId: lead.addressId!,
+        source: 'manager_flag',
+        loadedAt: new Date(),
+      },
+      update: { source: 'manager_flag', loadedAt: new Date() },
+    });
+    const next = await tx.lead.update({
+      where: { id },
+      data: { status: 'do_not_contact' },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'lead.do_not_knock',
+      resourceType: 'Lead',
+      resourceId: id,
+      beforeJson: { status: lead.status },
+      afterJson: { status: 'do_not_contact' },
+      metadata: { addressId: lead.addressId, reason: input.reason ?? null },
+    });
+    return next;
+  });
+
+  return toPublic(updated);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────

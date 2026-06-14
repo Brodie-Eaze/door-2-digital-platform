@@ -394,6 +394,71 @@ export async function archiveUser(userId: string, actor: ActorContext): Promise<
   return toPublic(updated);
 }
 
+const MFA_ADMIN_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin']);
+
+export async function resendInvite(userId: string, actor: ActorContext): Promise<InviteResult> {
+  requireActorRole(actor, USER_ADMIN_ROLES);
+  const user = await prisma().user.findUnique({ where: { id: userId } });
+  if (!user) throw new ProblemError(Problems.notFound('User', userId));
+  if (user.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(user.orgId));
+  if (user.status !== 'invited') {
+    throw new ProblemError(Problems.conflict('User is not in invited status'));
+  }
+
+  const invite = generateInviteToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await prisma().$transaction(async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { inviteTokenHash: invite.hash, inviteExpiresAt: expiresAt },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.invite_resent',
+      resourceType: 'User',
+      resourceId: userId,
+      afterJson: { status: user.status },
+      metadata: { resentBy: actor.userId, expiresAt: expiresAt.toISOString() },
+    });
+  });
+
+  return {
+    user: toPublic(user),
+    inviteToken: invite.plaintext,
+    inviteExpiresAt: expiresAt.toISOString(),
+  };
+}
+
+export async function resetMfa(userId: string, actor: ActorContext): Promise<UserPublic> {
+  requireActorRole(actor, MFA_ADMIN_ROLES);
+  const user = await prisma().user.findUnique({ where: { id: userId } });
+  if (!user) throw new ProblemError(Problems.notFound('User', userId));
+  if (user.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(user.orgId));
+
+  await prisma().$transaction(async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { totpSecret: null, mfaEnabledAt: null },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.mfa_reset',
+      resourceType: 'User',
+      resourceId: userId,
+      beforeJson: { mfaEnabled: true },
+      afterJson: { mfaEnabled: false },
+      metadata: { resetBy: actor.userId },
+    });
+  });
+
+  return toPublic(user);
+}
+
 /** PII-first masks for the staff directory read boundary. */
 function maskUserEmail(email: string): string {
   const [user, domain] = email.split('@');
