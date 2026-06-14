@@ -11,9 +11,10 @@
  * (least-recently-assigned). Replaced with a proper queue/skill router in
  * a later phase.
  *
- * PII: givenName, familyName, email, phone are stored plaintext for now.
- * TODO(Agent 15 / pii-vault): route through the deterministic-encrypt
- * + envelope-encrypt path once the vault domain is live.
+ * PII: email and phone are envelope-encrypted into *Vault columns and their
+ * HMAC-SHA256 SIV digests stored for O(1) lookup. The legacy `email`/`phone`
+ * TEXT columns hold only the masked form (e.g. j•••@gmail.com) so the read
+ * boundary never exposes plaintext. Full values require a JIT unmask grant.
  */
 import type { LeadStatus, RegionCode, Vertical } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -206,12 +207,12 @@ export async function createLead(
         campaignId: input.campaignId ?? null,
         givenName: input.givenName,
         familyName: input.familyName,
-        // Legacy plaintext columns kept for backwards compatibility — the
-        // canonical PII lives in *Vault and is read via PiiVaultService.
-        email: input.email ?? null,
+        // email/phone columns store only the masked form so no plaintext PII
+        // ever lands in the legacy TEXT column. Full values live in *Vault.
+        email: input.email ? maskEmailPii(input.email) : null,
         emailDigest: emailDig,
         emailVault: emailVault ? (emailVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-        phone: input.phone ?? null,
+        phone: input.phone ? maskPhonePii(input.phone) : null,
         phoneDigest: phoneDig,
         phoneVault: phoneVault ? (phoneVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
         notesVault: notesVault ? (notesVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
