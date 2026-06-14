@@ -29,6 +29,7 @@ import {
   transitionRegistration,
   manualClearance,
 } from './service';
+import { COOLING_OFF_WINDOWS, COOLING_OFF_BY_STATE } from './cooling-off-data';
 
 const stateClearanceQuerySchema = z.object({ campaignId: z.string().min(1).optional() }).strict();
 
@@ -121,13 +122,47 @@ export async function registerCompliance(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // GET /v1/compliance/cooling-off-windows — out of scope for Phase 1.2.
-  app.get('/cooling-off-windows', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Cooling-off windows lands in Phase 1.2',
-    }),
-  );
+  // GET /v1/compliance/cooling-off-windows — per-jurisdiction FTC + state cooling-off windows.
+  // Optional query param ?state=CA for a single-state lookup.
+  // Auth required: only authenticated org members need this data.
+  const coolingOffQuerySchema = z
+    .object({ state: z.string().length(2).toUpperCase().optional() })
+    .strict();
+
+  app.get('/cooling-off-windows', { preHandler: requireAuth }, async (req, reply) => {
+    const query = coolingOffQuerySchema.parse(req.query);
+
+    if (query.state) {
+      const window = COOLING_OFF_BY_STATE.get(query.state);
+      if (!window) {
+        return reply
+          .code(404)
+          .type('application/problem+json')
+          .send({
+            type: 'https://docs.d2d.io/problems/not-found',
+            title: 'State not found',
+            status: 404,
+            detail: `No cooling-off window data for state '${query.state}'.`,
+          });
+      }
+      return reply.code(200).send({
+        window,
+        meta: {
+          dataAsOf: '2026-06',
+          legalDisclaimer:
+            'This data is provided for operational reference only. Consult qualified legal counsel before relying on it for compliance decisions. State laws change; review quarterly.',
+        },
+      });
+    }
+
+    return reply.code(200).send({
+      windows: COOLING_OFF_WINDOWS,
+      meta: {
+        count: COOLING_OFF_WINDOWS.length,
+        dataAsOf: '2026-06',
+        legalDisclaimer:
+          'This data is provided for operational reference only. Consult qualified legal counsel before relying on it for compliance decisions. State laws change; review quarterly.',
+      },
+    });
+  });
 }
