@@ -17,6 +17,8 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { SitesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
@@ -419,10 +421,21 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
               ))}
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" leftIcon={<Edit3 size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Edit3 size={12} />}
+              onClick={() => toast.info('Open editor — site/funnel editor lands in Phase 1.2')}
+            >
               Open editor
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New site / funnel — builder lands in Phase 1.2')}
+            >
               New site / funnel
             </Button>
           </div>
@@ -486,13 +499,31 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
                       {s.trend}% WoW
                     </span>
                     <div className="flex items-center gap-1">
-                      <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                      <button
+                        onClick={() =>
+                          toast.info(`Edit "${s.name}" — editor lands in Phase 1.2`)
+                        }
+                        aria-label={`Edit ${s.name}`}
+                        className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                      >
                         <Edit3 size={11} />
                       </button>
-                      <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                      <button
+                        onClick={() =>
+                          toast.info(`Analytics for "${s.name}" — wiring lands in Phase 1.2`)
+                        }
+                        aria-label={`Analytics for ${s.name}`}
+                        className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                      >
                         <BarChart3 size={11} />
                       </button>
-                      <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                      <button
+                        onClick={() =>
+                          toast.info(`Open d2d.io${s.slug} — live preview lands in Phase 1.2`)
+                        }
+                        aria-label={`Open ${s.name}`}
+                        className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                      >
                         <ExternalLink size={11} />
                       </button>
                     </div>
@@ -587,7 +618,12 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
                 </div>
               ))}
               <div className="px-5 py-2.5">
-                <button className="text-[11px] text-accent font-medium hover:underline">
+                <button
+                  onClick={() =>
+                    toast.info('Add domain — DNS connect lands in Phase 1.2')
+                  }
+                  className="text-[11px] text-accent font-medium hover:underline"
+                >
                   + Add domain
                 </button>
               </div>

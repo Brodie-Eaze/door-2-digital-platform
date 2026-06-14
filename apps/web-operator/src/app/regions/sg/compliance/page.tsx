@@ -1,3 +1,5 @@
+'use client';
+
 import {
   ShieldCheck,
   AlertTriangle,
@@ -11,8 +13,10 @@ import {
   EyeOff,
   Globe2,
 } from 'lucide-react';
+
 import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { toast } from '@/components/Toaster';
 
 /**
  * SG compliance deep-dive.
@@ -343,6 +347,9 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
                       <button
                         className="text-[11px] font-semibold text-accent hover:underline"
                         type="button"
+                        onClick={() =>
+                          toast.info(`Cancel & refund ${w.donor} — wiring lands in Phase 1.2`)
+                        }
                       >
                         Cancel & refund
                       </button>

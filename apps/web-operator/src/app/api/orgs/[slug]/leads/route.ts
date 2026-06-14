@@ -84,19 +84,20 @@ export async function GET(
       org: { id: org.id, slug: org.slug, tradingName: org.tradingName, regionCode: org.regionCode },
       leads: items.map((l) => ({
         id: l.id,
+        // PII-first: this is a BULK list surface. Reduce the PII footprint —
+        // given name + family INITIAL only (e.g. "Maria S."), masked email/phone,
+        // and a COARSE address (locality + region; no street/postcode). Full
+        // name + precise address for a single lead is available only through the
+        // lead-detail JIT PII-unmask path, which audits the access.
         givenName: l.givenName,
-        familyName: l.familyName,
+        familyName: l.familyName ? `${l.familyName.charAt(0)}.` : null,
         status: l.status,
         vertical: l.vertical,
-        // PII vault present → masked; legacy plaintext → also masked.
-        // We never echo raw email/phone from this BFF.
         email: maskEmail(l.email),
         phone: maskPhone(l.phone),
         emailDigestPrefix: l.emailDigest?.slice(0, 8) ?? null,
         address: l.address
-          ? `${l.address.street}, ${l.address.locality}${
-              l.address.region ? `, ${l.address.region}` : ''
-            }${l.address.postcode ? ` ${l.address.postcode}` : ''}`
+          ? `${l.address.locality}${l.address.region ? `, ${l.address.region}` : ''}`
           : null,
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,

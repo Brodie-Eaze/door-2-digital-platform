@@ -8,8 +8,11 @@
  */
 
 import dynamic from 'next/dynamic';
+import type { HQLiveMapProps } from './HQLiveMapImpl';
 
-export const HQLiveMap = dynamic(() => import('./HQLiveMapImpl').then((m) => m.HQLiveMapImpl), {
+export type { HQLiveMapProps } from './HQLiveMapImpl';
+
+const HQLiveMapDynamic = dynamic(() => import('./HQLiveMapImpl').then((m) => m.HQLiveMapImpl), {
   ssr: false,
   loading: () => (
     <div
@@ -20,3 +23,11 @@ export const HQLiveMap = dynamic(() => import('./HQLiveMapImpl').then((m) => m.H
     </div>
   ),
 });
+
+/**
+ * Client wrapper that forwards the signature-interaction props
+ * (flyTarget + highlightCoords) through the SSR-disabled dynamic boundary.
+ */
+export function HQLiveMap(props: HQLiveMapProps): JSX.Element {
+  return <HQLiveMapDynamic {...props} />;
+}

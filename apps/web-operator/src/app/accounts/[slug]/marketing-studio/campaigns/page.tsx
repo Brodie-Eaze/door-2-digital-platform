@@ -14,6 +14,8 @@ import {
   CHANNEL_BADGE,
   type ScopedCampaign,
 } from '@/lib/account-marketing';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account campaigns dashboard — shows only campaigns running on
@@ -119,10 +121,21 @@ export default function Page({ params }: PageProps): JSX.Element {
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+              <DataSourceBadge source="fixture" />
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() => toast.info('Campaign filters — wiring lands in Phase 1.2')}
+              >
                 Filter
               </Button>
-              <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={13} />}
+                onClick={() => toast.info('New campaign builder — wiring lands in Phase 1.2')}
+              >
                 New campaign
               </Button>
             </div>
@@ -205,7 +218,10 @@ export default function Page({ params }: PageProps): JSX.Element {
                       {c.status === 'active' ? (
                         <button
                           type="button"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.info(`Pause "${c.name}" — wiring lands in Phase 1.2`);
+                          }}
                           className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                           title="Pause"
                         >
@@ -214,7 +230,10 @@ export default function Page({ params }: PageProps): JSX.Element {
                       ) : c.status === 'paused' ? (
                         <button
                           type="button"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.info(`Resume "${c.name}" — wiring lands in Phase 1.2`);
+                          }}
                           className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-success"
                           title="Resume"
                         >
@@ -234,7 +253,12 @@ export default function Page({ params }: PageProps): JSX.Element {
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.info(
+                            `Open in ${CHANNEL_LABEL[c.channel]} — wiring lands in Phase 1.2`,
+                          );
+                        }}
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                         title="Open in channel dashboard"
                       >
@@ -400,15 +424,32 @@ export default function Page({ params }: PageProps): JSX.Element {
               </div>
               <div className="flex items-center gap-2 pt-3 border-t border-line2">
                 {opened.status === 'active' ? (
-                  <Button variant="ghost" size="sm" leftIcon={<Pause size={12} />}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Pause size={12} />}
+                    onClick={() => toast.info(`Pause "${opened.name}" — wiring lands in Phase 1.2`)}
+                  >
                     Pause campaign
                   </Button>
                 ) : opened.status === 'paused' ? (
-                  <Button variant="primary" size="sm" leftIcon={<Play size={12} />}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Play size={12} />}
+                    onClick={() => toast.info(`Resume "${opened.name}" — wiring lands in Phase 1.2`)}
+                  >
                     Resume campaign
                   </Button>
                 ) : null}
-                <Button variant="ghost" size="sm" leftIcon={<ExternalLink size={12} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<ExternalLink size={12} />}
+                  onClick={() =>
+                    toast.info(`Open in ${CHANNEL_LABEL[opened.channel]} — wiring lands in Phase 1.2`)
+                  }
+                >
                   Open in {CHANNEL_LABEL[opened.channel]}
                 </Button>
               </div>

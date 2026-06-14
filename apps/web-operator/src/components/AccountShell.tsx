@@ -32,6 +32,7 @@ import {
   Sparkles,
   Radio,
   Target,
+  ShoppingBag,
   LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -142,6 +143,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
         { href: `${base}/forms`, label: 'Forms', icon: FileText },
         { href: `${base}/sites`, label: 'Sites & Funnels', icon: Globe },
         { href: `${base}/memberships`, label: 'Memberships', icon: Heart },
+        { href: `${base}/services`, label: 'Services', icon: ShoppingBag },
         { href: `${base}/tasks`, label: 'Tasks', icon: CheckSquare },
         { href: `${base}/workflows`, label: 'Workflows', icon: Workflow },
         { href: `${base}/files`, label: 'Files', icon: FolderOpen },

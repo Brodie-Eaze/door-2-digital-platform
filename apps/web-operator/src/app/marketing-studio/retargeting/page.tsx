@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Target,
   Users,
@@ -11,6 +13,9 @@ import {
 import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 
 /**
  * Retargeting roundtrip dashboard.
@@ -279,6 +284,10 @@ export default function RetargetingPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="Retargeting roundtrip">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="retargeting" />
+          <DataSourceBadge source="fixture" />
+        </div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Target size={14} className="text-accent" />
@@ -437,7 +446,13 @@ export default function RetargetingPage(): JSX.Element {
             </thead>
             <tbody>
               {COHORTS.map((c) => (
-                <tr key={c.id} className="cursor-pointer hover:bg-paper">
+                <tr
+                  key={c.id}
+                  onClick={() =>
+                    toast.info(`Inspect cohort ${c.id} — detail panel wiring lands in Phase 1.2`)
+                  }
+                  className="cursor-pointer hover:bg-paper"
+                >
                   <td className="!pr-0 w-[60px]">
                     <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
                       <img

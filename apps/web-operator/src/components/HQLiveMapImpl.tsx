@@ -25,6 +25,7 @@ import {
   LayersControl,
   ZoomControl,
   ScaleControl,
+  useMap,
 } from 'react-leaflet';
 import { Phone, MessageSquare, Coffee, Play, Zap } from 'lucide-react';
 import { FLEET_REPS, AI_ZONES, STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
@@ -83,7 +84,38 @@ function apiRepToFleetRep(r: {
   };
 }
 
-export function HQLiveMapImpl(): JSX.Element {
+/** Imperative map controller — keyed on `target`, flies the map there. */
+function FlyController({
+  target,
+}: {
+  target: { lat: number; lng: number; zoom?: number } | null;
+}): null {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo([target.lat, target.lng], target.zoom ?? 13, { duration: 0.8 });
+    // Re-fly whenever the target identity changes (lat/lng/zoom).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.lat, target?.lng, target?.zoom]);
+  return null;
+}
+
+export interface HQLiveMapProps {
+  /** When set, the map flies to these coordinates (signature interaction). */
+  flyTarget?: { lat: number; lng: number; zoom?: number } | null;
+  /**
+   * When set, draws a pulsing amber highlight ring directly at these
+   * coordinates. Keying off coords (not a rep id) keeps the highlight working
+   * across the fixture→live fleet swap, since a fixture rep id never matches a
+   * live /api/fleet id.
+   */
+  highlightCoords?: { lat: number; lng: number } | null;
+}
+
+export function HQLiveMapImpl({
+  flyTarget = null,
+  highlightCoords = null,
+}: HQLiveMapProps): JSX.Element {
   // Live fleet data — seeded from fixture, updated every 30s from /api/fleet.
   const [fleet, setFleet] = useState<FleetRep[]>(FLEET_REPS);
   const { source, updatedAt, markFresh } = useDataFreshness('fixture');
@@ -143,6 +175,8 @@ export function HQLiveMapImpl(): JSX.Element {
           style={{ height: '100%', width: '100%', background: '#0b1220' }}
           attributionControl={true}
         >
+          <FlyController target={flyTarget} />
+
           <LayersControl position="topright">
             <LayersControl.BaseLayer name="Streets (OSM)">
               <TileLayer
@@ -195,6 +229,24 @@ export function HQLiveMapImpl(): JSX.Element {
               </Popup>
             </CircleMarker>
           ))}
+
+          {/* Amber highlight ring — drawn directly at the anomaly's coordinates
+              (not by matching a rendered pin), so it survives the fixture→live
+              fleet swap where rep ids change. */}
+          {highlightCoords && (
+            <CircleMarker
+              center={[highlightCoords.lat, highlightCoords.lng]}
+              radius={20}
+              pathOptions={{
+                color: '#F59E0B',
+                weight: 3,
+                fillColor: '#F59E0B',
+                fillOpacity: 0.12,
+                className: 'd2d-knock-pulse',
+              }}
+              interactive={false}
+            />
+          )}
 
           {/* Rep pins — polled from /api/fleet every 30s. Falls back to seed
               fixture when no active sessions exist (dev / first-run). */}

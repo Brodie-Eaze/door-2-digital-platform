@@ -129,8 +129,13 @@ export async function GET(req: NextRequest): Promise<Response> {
         orgId: true,
         disposition: true,
         capturedAt: true,
+        // PII: a household's street address is location PII — never emitted in
+        // this org-wide polling feed, especially paired with a disposition like
+        // "Hostile"/"Do Not Knock" (it would link a residence to a resident's
+        // reaction). Only the coarse locality (suburb/city) is surfaced. Precise
+        // address resolution must go through the JIT PII-unmask + audit path.
         address: {
-          select: { formatted: true, street: true, locality: true },
+          select: { locality: true },
         },
       },
     });
@@ -139,8 +144,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       const disp = k.disposition as KnockDisp;
       const type = dispositionToEventType(disp);
       const primary = dispositionLabel(disp);
-      const addr = k.address?.street ?? k.address?.formatted ?? 'Unknown address';
-      const locality = k.address?.locality ? ` · ${k.address.locality}` : '';
+      const locality = k.address?.locality ?? 'Unknown area';
 
       return {
         id: k.id,
@@ -148,7 +152,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         actorInitials: userIdToInitials(k.userId),
         type,
         primary,
-        secondary: `${addr}${locality}`,
+        secondary: locality,
       };
     });
 

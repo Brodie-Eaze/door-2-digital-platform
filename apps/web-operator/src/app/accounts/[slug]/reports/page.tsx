@@ -1,11 +1,13 @@
-import { BarChart3, Download, Sparkles, ChevronRight } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { Sparkles } from 'lucide-react';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { ReportsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { getAccount } from '@/lib/accounts';
 import { seedFor } from '@/lib/seed';
 import { rollupFor } from '@/lib/seed/kpis';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { BuildReportButton, SavedReportCard } from './ReportActions';
 
 export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
   const account = getAccount(params.slug);
@@ -245,9 +247,10 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
           title="Saved reports"
           subtitle="Scheduled to email · click to view"
           action={
-            <Button variant="primary" size="sm" leftIcon={<BarChart3 size={13} />}>
-              Build report
-            </Button>
+            <>
+              <DataSourceBadge source="fixture" />
+              <BuildReportButton />
+            </>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -267,24 +270,12 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
               { title: 'Pipeline velocity', schedule: 'Weekly · Fri 17:00', last: 'May 16' },
               { title: 'Cohort retention (donors)', schedule: 'Monthly · 1st', last: 'May 1' },
             ].map((r) => (
-              <div
+              <SavedReportCard
                 key={r.title}
-                className="card card-pad hover:shadow-md transition cursor-pointer"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-[13px] font-semibold text-ink">{r.title}</div>
-                    <div className="text-[11px] text-muted mt-0.5">{r.schedule}</div>
-                  </div>
-                  <ChevronRight size={14} className="text-soft" />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-[11px]">
-                  <span className="text-muted">Last run {r.last}</span>
-                  <button className="text-accent font-medium hover:underline flex items-center gap-1">
-                    <Download size={11} /> CSV
-                  </button>
-                </div>
-              </div>
+                title={r.title}
+                schedule={r.schedule}
+                last={r.last}
+              />
             ))}
           </div>
         </Section>

@@ -23,6 +23,8 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FilesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
@@ -303,7 +305,11 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
               <div className="text-[11px] uppercase tracking-wider text-muted font-semibold">
                 Folders
               </div>
-              <button className="text-soft hover:text-ink">
+              <button
+                onClick={() => toast.info('New folder — wiring lands in Phase 1.2')}
+                aria-label="New folder"
+                className="text-soft hover:text-ink"
+              >
                 <Plus size={13} />
               </button>
             </div>
@@ -346,6 +352,7 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
                 size="sm"
                 className="w-full"
                 leftIcon={<Upload size={12} />}
+                onClick={() => toast.info('Upload — file uploads land in Phase 1.2')}
               >
                 Upload
               </Button>
@@ -395,7 +402,13 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
                     List
                   </button>
                 </div>
-                <Button variant="ghost" size="sm" leftIcon={<Filter size={12} />}>
+                <DataSourceBadge source="fixture" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Filter size={12} />}
+                  onClick={() => toast.info('Filter — file filters land in Phase 1.2')}
+                >
                   Filter
                 </Button>
               </div>
@@ -486,13 +499,31 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
                           </td>
                           <td>
                             <div className="flex items-center gap-1">
-                              <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                              <button
+                                onClick={() =>
+                                  toast.info(`Download ${f.name} — wiring lands in Phase 1.2`)
+                                }
+                                aria-label={`Download ${f.name}`}
+                                className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                              >
                                 <Download size={11} />
                               </button>
-                              <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                              <button
+                                onClick={() =>
+                                  toast.info(`Share ${f.name} — public-link wiring lands in Phase 1.2`)
+                                }
+                                aria-label={`Share ${f.name}`}
+                                className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                              >
                                 <ExternalLink size={11} />
                               </button>
-                              <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink">
+                              <button
+                                onClick={() =>
+                                  toast.info(`More actions for ${f.name} — wiring lands in Phase 1.2`)
+                                }
+                                aria-label={`More actions for ${f.name}`}
+                                className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
+                              >
                                 <MoreVertical size={11} />
                               </button>
                             </div>

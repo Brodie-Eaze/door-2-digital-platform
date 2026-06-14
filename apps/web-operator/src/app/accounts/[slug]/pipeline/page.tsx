@@ -196,6 +196,9 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [quickAddStage, setQuickAddStage] = useState<string | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddPhone, setQuickAddPhone] = useState('');
+  const [quickAddAddress, setQuickAddAddress] = useState('');
 
   // Track whether the user is mid-drag — used to suppress click events on cards
   // so dropping doesn't accidentally re-open the side panel.
@@ -356,6 +359,39 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
       curr && curr.id === lead.id ? { ...curr, status: stage, daysInStage: 0 } : curr,
     );
     void persistSingleMove(lead.id, stage, prev);
+  }
+
+  /** Quick-add: optimistically prepend a new lead card to local state. */
+  function addQuickLead(): void {
+    if (!quickAddStage) return;
+    const name = quickAddName.trim();
+    if (!name) {
+      toast.error('Lead name is required');
+      return;
+    }
+    const stage = quickAddStage as LeadRow['status'];
+    const newLead: PipelineLead = {
+      id: `local_${Date.now().toString(36)}`,
+      name,
+      status: stage,
+      source: sourceFilter !== 'all' ? (sourceFilter as LeadRow['source']) : 'door',
+      address: quickAddAddress.trim(),
+      phone: quickAddPhone.trim(),
+      assignee: 'Unassigned',
+      tier: 'medium',
+      capturedAt: new Date().toISOString(),
+      valueCents: 0n,
+      daysInStage: 0,
+      aiScore: 0,
+      aiSuggestion: AI_SUGGESTIONS[0],
+      activity: { calls: 0, sms: 0, emails: 0 },
+    };
+    setLeads((p) => [newLead, ...p]);
+    setQuickAddName('');
+    setQuickAddPhone('');
+    setQuickAddAddress('');
+    setQuickAddStage(null);
+    toast.success(`Added "${name}" — saved locally; server persistence lands in Phase 1.2`);
   }
 
   function onDrop(stage: LeadRow['status']) {
@@ -1138,21 +1174,39 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Lead name"
                 autoFocus
+                value={quickAddName}
+                onChange={(e) => setQuickAddName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') addQuickLead();
+                }}
               />
               <input
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
                 placeholder="Phone"
+                value={quickAddPhone}
+                onChange={(e) => setQuickAddPhone(e.target.value)}
               />
               <input
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Address"
+                value={quickAddAddress}
+                onChange={(e) => setQuickAddAddress(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2 justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setQuickAddStage(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuickAddName('');
+                  setQuickAddPhone('');
+                  setQuickAddAddress('');
+                  setQuickAddStage(null);
+                }}
+              >
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={() => setQuickAddStage(null)}>
+              <Button variant="primary" size="sm" onClick={addQuickLead}>
                 Add lead
               </Button>
             </div>

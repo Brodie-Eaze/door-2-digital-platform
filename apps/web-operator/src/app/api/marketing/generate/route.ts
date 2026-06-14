@@ -14,7 +14,15 @@
  */
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { forbidden, internal, ok, requireSession, validation } from '@/lib/api-helpers';
+import {
+  canOperate,
+  forbidden,
+  internal,
+  isCrossTenantOperator,
+  ok,
+  requireSession,
+  validation,
+} from '@/lib/api-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,7 +47,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
 
-  if (!session.orgId && !['super_admin', 'platform_admin'].includes(session.role ?? '')) {
+  // Authz: generating creatives is an operator action (uses the inline allowlist
+  // 'platform_admin' previously — a role that doesn't exist in the enum, so it
+  // was dead. Use the centralised gates instead.)
+  if (!canOperate(session)) {
+    return forbidden('Insufficient role to generate marketing creatives');
+  }
+  if (!session.orgId && !isCrossTenantOperator(session)) {
     return forbidden('No org context for marketing generation');
   }
 

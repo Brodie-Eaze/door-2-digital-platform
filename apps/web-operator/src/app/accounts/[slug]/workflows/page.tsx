@@ -27,6 +27,8 @@ import { AccountShell } from '@/components/AccountShell';
 import { WorkflowsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 interface WorkflowDef {
   id: string;
@@ -483,6 +485,16 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
     'all' | 'active' | 'paused' | 'failing' | 'draft'
   >('all');
   const [query, setQuery] = useState('');
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, WorkflowDef['status']>>(
+    {},
+  );
+
+  function toggleWorkflow(w: WorkflowDef): void {
+    const current = statusOverrides[w.id] ?? w.status;
+    const next: WorkflowDef['status'] = current === 'paused' ? 'active' : 'paused';
+    setStatusOverrides((prev) => ({ ...prev, [w.id]: next }));
+    toast.success(`"${w.name}" ${next === 'paused' ? 'paused' : 'resumed'}`);
+  }
 
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
@@ -498,7 +510,10 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
     );
   }
 
-  const allWfs = buildWorkflows(params.slug);
+  const allWfs = buildWorkflows(params.slug).map((w) => ({
+    ...w,
+    status: statusOverrides[w.id] ?? w.status,
+  }));
   const wfs = allWfs
     .filter((w) => (statusFilter === 'all' ? true : w.status === statusFilter))
     .filter((w) => w.name.toLowerCase().includes(query.toLowerCase()));
@@ -561,10 +576,21 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
               />
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" leftIcon={<GitBranch size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<GitBranch size={12} />}
+              onClick={() => toast.info('Open builder — workflow builder lands in Phase 1.2')}
+            >
               Open builder
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New workflow — builder wiring lands in Phase 1.2')}
+            >
               New workflow
             </Button>
           </div>
@@ -646,10 +672,18 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 pt-2 border-t border-line2">
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Edit "${w.name}" — workflow builder lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Edit3 size={11} /> Edit
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() => toggleWorkflow(w)}
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         {w.status === 'paused' ? (
                           <>
                             <Play size={11} /> Resume
@@ -660,7 +694,12 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
                           </>
                         )}
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Clone "${w.name}" — wiring lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Copy size={11} /> Clone
                       </button>
                     </div>
@@ -774,6 +813,9 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
               ].map((t) => (
                 <button
                   key={t.name}
+                  onClick={() =>
+                    toast.info(`Use "${t.name}" template — builder wiring lands in Phase 1.2`)
+                  }
                   className="w-full text-left p-2.5 rounded-lg bg-paper border border-line2 hover:border-line transition flex items-center gap-2"
                 >
                   <t.icon size={12} className="text-accent" />

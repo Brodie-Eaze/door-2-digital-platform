@@ -26,6 +26,8 @@ import {
   type CreativeStatus,
 } from '@/lib/account-marketing';
 import { pickCreativeImage } from '@/lib/creative-images';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account creative library — only this account's creatives, filtered
@@ -71,6 +73,17 @@ export default function Page({ params }: PageProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, CreativeStatus>>({});
+
+  function approveCreative(id: string, headline: string): void {
+    setStatusOverrides((prev) => ({ ...prev, [id]: 'approved' }));
+    toast.success(`Approved "${headline}" — marked approved locally (publish wiring: Phase 1.2)`);
+  }
+
+  function rejectCreative(id: string, headline: string): void {
+    setStatusOverrides((prev) => ({ ...prev, [id]: 'blocked' }));
+    toast.success(`Rejected "${headline}" — marked blocked locally (publish wiring: Phase 1.2)`);
+  }
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -199,7 +212,13 @@ export default function Page({ params }: PageProps): JSX.Element {
                 />
               ))}
               <div className="ml-auto flex items-center gap-2">
-                <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+                <DataSourceBadge source="fixture" />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Plus size={13} />}
+                  onClick={() => toast.info('New creative builder — wiring lands in Phase 1.2')}
+                >
                   New creative
                 </Button>
               </div>
@@ -233,6 +252,18 @@ export default function Page({ params }: PageProps): JSX.Element {
                   size="sm"
                   leftIcon={<Send size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() => {
+                    setStatusOverrides((prev) => {
+                      const next = { ...prev };
+                      selectedIds.forEach((id) => {
+                        next[id] = 'review';
+                      });
+                      return next;
+                    });
+                    toast.success(
+                      `${selectedCount} creative${selectedCount === 1 ? '' : 's'} sent to review locally (publish wiring: Phase 1.2)`,
+                    );
+                  }}
                 >
                   Send to review
                 </Button>
@@ -241,6 +272,18 @@ export default function Page({ params }: PageProps): JSX.Element {
                   size="sm"
                   leftIcon={<Check size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() => {
+                    setStatusOverrides((prev) => {
+                      const next = { ...prev };
+                      selectedIds.forEach((id) => {
+                        next[id] = 'approved';
+                      });
+                      return next;
+                    });
+                    toast.success(
+                      `${selectedCount} creative${selectedCount === 1 ? '' : 's'} approved locally (publish wiring: Phase 1.2)`,
+                    );
+                  }}
                 >
                   Approve
                 </Button>
@@ -249,6 +292,11 @@ export default function Page({ params }: PageProps): JSX.Element {
                   size="sm"
                   leftIcon={<Download size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() =>
+                    toast.info(
+                      `Export ${selectedCount} creative${selectedCount === 1 ? '' : 's'} — wiring lands in Phase 1.2`,
+                    )
+                  }
                 >
                   Export
                 </Button>
@@ -326,11 +374,16 @@ export default function Page({ params }: PageProps): JSX.Element {
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <StatusPill tone={statusTone(c.status)}>{c.status}</StatusPill>
+                      <StatusPill tone={statusTone(statusOverrides[c.id] ?? c.status)}>
+                        {statusOverrides[c.id] ?? c.status}
+                      </StatusPill>
                       <div className="flex items-center gap-0.5">
                         <button
                           type="button"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approveCreative(c.id, c.headline);
+                          }}
                           className="w-5 h-5 rounded hover:bg-successSoft flex items-center justify-center text-success"
                           title="Approve"
                         >
@@ -338,7 +391,10 @@ export default function Page({ params }: PageProps): JSX.Element {
                         </button>
                         <button
                           type="button"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            rejectCreative(c.id, c.headline);
+                          }}
                           className="w-5 h-5 rounded hover:bg-dangerSoft flex items-center justify-center text-danger"
                           title="Reject"
                         >
@@ -428,13 +484,33 @@ export default function Page({ params }: PageProps): JSX.Element {
                 <Meta label="Live since" value={opened.liveAt ?? '—'} />
               </div>
               <div className="flex items-center gap-2 pt-3 border-t border-line2">
-                <Button variant="primary" size="sm" leftIcon={<Check size={12} />}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Check size={12} />}
+                  onClick={() => approveCreative(opened.id, opened.headline)}
+                >
                   Approve
                 </Button>
-                <Button variant="ghost" size="sm" leftIcon={<X size={12} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<X size={12} />}
+                  onClick={() => rejectCreative(opened.id, opened.headline)}
+                >
                   Reject
                 </Button>
-                <Button variant="ghost" size="sm" leftIcon={<Send size={12} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Send size={12} />}
+                  onClick={() => {
+                    setStatusOverrides((prev) => ({ ...prev, [opened.id]: 'review' }));
+                    toast.success(
+                      `"${opened.headline}" sent to review locally (publish wiring: Phase 1.2)`,
+                    );
+                  }}
+                >
                   Send to review
                 </Button>
               </div>

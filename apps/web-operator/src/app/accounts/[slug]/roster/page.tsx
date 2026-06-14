@@ -18,9 +18,34 @@ import {
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { RosterEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { toast } from '@/components/Toaster';
 import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
 import { buildRoster } from '@/lib/seed/roster';
 import { firstRunSnapshot } from '@/lib/first-run';
+
+// Live knocker + territory rows fetched from the per-account BFF. A real shift
+// must reference a real userId + territoryId so the iOS app's
+// GET /v1/roster/shifts/mine returns it.
+interface LiveKnocker {
+  id: string;
+  givenName: string;
+  familyName: string;
+  initials: string;
+  status: string;
+}
+interface LiveTerritory {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** Monday (UTC) of the roster week containing `base`, as "YYYY-MM-DD". */
+function weekStartIso(base: Date): string {
+  const d = new Date(Date.UTC(base.getFullYear(), base.getMonth(), base.getDate()));
+  const isoDow = (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  d.setUTCDate(d.getUTCDate() - isoDow);
+  return d.toISOString().slice(0, 10);
+}
 
 type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
@@ -140,6 +165,74 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
   const [addOpen, setAddOpen] = useState(false);
   const [quickAddKey, setQuickAddKey] = useState<string | null>(null);
   const [clockedOut, setClockedOut] = useState<Record<string, string>>({});
+
+  // Live knockers + territories for the "assign shift to a real rep" flow.
+  const [liveKnockers, setLiveKnockers] = useState<LiveKnocker[]>([]);
+  const [liveTerritories, setLiveTerritories] = useState<LiveTerritory[]>([]);
+
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      try {
+        const [kRes, tRes] = await Promise.all([
+          fetch(`/api/orgs/${encodeURIComponent(params.slug)}/knockers`, { credentials: 'include' }),
+          fetch(`/api/orgs/${encodeURIComponent(params.slug)}/territories`, {
+            credentials: 'include',
+          }),
+        ]);
+        if (!cancelled && kRes.ok) {
+          const data = (await kRes.json()) as { knockers: LiveKnocker[] };
+          setLiveKnockers(data.knockers.filter((k) => k.status !== 'archived'));
+        }
+        if (!cancelled && tRes.ok) {
+          const data = (await tRes.json()) as { territories: LiveTerritory[] };
+          setLiveTerritories(data.territories);
+        }
+      } catch {
+        // Non-fatal: the matrix still renders from the seed; the Add-shift modal
+        // simply won't offer live reps/territories until the fetch succeeds.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account, params.slug]);
+
+  // Persist a real shift to the iOS-reachable roster (userId + territoryId).
+  async function persistShift(input: {
+    userId: string;
+    territoryId: string;
+    day: number;
+    start: string;
+    end: string;
+  }): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/orgs/${encodeURIComponent(params.slug)}/roster/shifts`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: input.userId,
+          territoryId: input.territoryId,
+          weekStart: weekStartIso(dates[0] ?? new Date()),
+          day: input.day,
+          start: input.start,
+          end: input.end,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+        toast.error(body?.detail ?? 'Could not save the shift — please retry.');
+        return false;
+      }
+      toast.success('Shift sent to the knocker’s app');
+      return true;
+    } catch {
+      toast.error('Network error — please retry.');
+      return false;
+    }
+  }
 
   const dragId = useRef<string | null>(null);
   const justDraggedRef = useRef(false);
@@ -644,9 +737,24 @@ export default function AccountRosterPage({ params }: { params: { slug: string }
         <AddShiftModal
           reps={reps}
           territories={territories}
+          liveKnockers={liveKnockers}
+          liveTerritories={liveTerritories}
           onClose={() => setAddOpen(false)}
           onAdd={(s) => {
             addShift(s);
+            setAddOpen(false);
+          }}
+          onPersist={persistShift}
+          onPersisted={(s) => {
+            // Reflect the rostered shift in the matrix immediately.
+            addShift({
+              repInitials: s.repInitials,
+              day: s.day,
+              start: s.start,
+              end: s.end,
+              territory: s.territory,
+              status: 'scheduled',
+            });
             setAddOpen(false);
           }}
         />
@@ -833,43 +941,113 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function AddShiftModal({
   reps,
   territories,
+  liveKnockers,
+  liveTerritories,
   onClose,
   onAdd,
+  onPersist,
+  onPersisted,
 }: {
   reps: Rep[];
   territories: string[];
+  liveKnockers: LiveKnocker[];
+  liveTerritories: LiveTerritory[];
   onClose: () => void;
   onAdd: (s: Omit<Shift, 'id' | 'repName'>) => void;
+  onPersist: (input: {
+    userId: string;
+    territoryId: string;
+    day: number;
+    start: string;
+    end: string;
+  }) => Promise<boolean>;
+  onPersisted: (s: { repInitials: string; day: number; start: string; end: string; territory: string }) => void;
 }): JSX.Element {
-  const [repInitials, setRepInitials] = useState(reps[0]!.initials);
+  // When the account has real knockers AND territories, we roster a real shift
+  // (userId + territoryId) that reaches the rep's iOS app. Otherwise we fall
+  // back to the legacy local-only matrix add so the page never breaks.
+  const canRosterLive = liveKnockers.length > 0 && liveTerritories.length > 0;
+
   const [day, setDay] = useState(0);
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('17:00');
-  const [territory, setTerritory] = useState(territories[0]!);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Live mode state
+  const [userId, setUserId] = useState(liveKnockers[0]?.id ?? '');
+  const [territoryId, setTerritoryId] = useState(liveTerritories[0]?.id ?? '');
+
+  // Fallback (fixture) mode state
+  const [repInitials, setRepInitials] = useState(reps[0]?.initials ?? '');
+  const [territory, setTerritory] = useState(territories[0] ?? '');
+
+  async function submit(): Promise<void> {
+    if (submitting) return;
+    if (canRosterLive) {
+      setSubmitting(true);
+      const ok = await onPersist({ userId, territoryId, day, start, end });
+      setSubmitting(false);
+      if (!ok) return;
+      const k = liveKnockers.find((x) => x.id === userId);
+      const t = liveTerritories.find((x) => x.id === territoryId);
+      onPersisted({
+        repInitials: k?.initials ?? '??',
+        day,
+        start,
+        end,
+        territory: t?.name ?? '',
+      });
+    } else {
+      onAdd({ repInitials, day, start, end, territory, status: 'scheduled' });
+    }
+  }
 
   return (
     <div
       className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-6"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add shift"
     >
       <div
         className="bg-surface rounded-2xl shadow-2xl w-full max-w-md p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-[15px] font-semibold text-ink mb-4">Add shift</div>
+        <div className="text-[15px] font-semibold text-ink mb-1">Add shift</div>
+        <div className="text-[11px] text-muted mb-4">
+          {canRosterLive
+            ? 'Rosters a real knocker to a real territory — pushes to their Knocker iOS app.'
+            : 'No live knockers/territories for this account yet — adds to the planning matrix only.'}
+        </div>
         <div className="space-y-3 mb-4">
           <Field label="Knocker">
-            <select
-              value={repInitials}
-              onChange={(e) => setRepInitials(e.target.value)}
-              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
-            >
-              {reps.map((r) => (
-                <option key={r.initials} value={r.initials}>
-                  {r.initials} · {r.name}
-                </option>
-              ))}
-            </select>
+            {canRosterLive ? (
+              <select
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+              >
+                {liveKnockers.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.initials} · {k.givenName} {k.familyName}
+                    {k.status === 'invited' ? ' (invited)' : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={repInitials}
+                onChange={(e) => setRepInitials(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+              >
+                {reps.map((r) => (
+                  <option key={r.initials} value={r.initials}>
+                    {r.initials} · {r.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </Field>
           <Field label="Day">
             <select
@@ -903,15 +1081,29 @@ function AddShiftModal({
             </Field>
           </div>
           <Field label="Territory">
-            <select
-              value={territory}
-              onChange={(e) => setTerritory(e.target.value)}
-              className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
-            >
-              {territories.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
+            {canRosterLive ? (
+              <select
+                value={territoryId}
+                onChange={(e) => setTerritoryId(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+              >
+                {liveTerritories.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={territory}
+                onChange={(e) => setTerritory(e.target.value)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+              >
+                {territories.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            )}
           </Field>
         </div>
         <div className="flex items-center gap-2 justify-end">
@@ -921,9 +1113,11 @@ function AddShiftModal({
           <Button
             variant="primary"
             size="sm"
-            onClick={() => onAdd({ repInitials, day, start, end, territory, status: 'scheduled' })}
+            loading={submitting}
+            disabled={submitting || (canRosterLive && (!userId || !territoryId))}
+            onClick={() => void submit()}
           >
-            Add shift
+            {canRosterLive ? 'Roster shift' : 'Add shift'}
           </Button>
         </div>
       </div>

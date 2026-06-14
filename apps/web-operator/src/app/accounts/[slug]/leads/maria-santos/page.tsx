@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { Banner, Button, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 
 const LEAD = {
   name: 'Maria Santos',
@@ -164,7 +166,13 @@ export default function LeadDetailPage({ params }: { params: { slug: string } })
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            <h2 className="h-section">Lead journey timeline</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="h-section">Lead journey timeline</h2>
+              <DataSourceBadge source="fixture" />
+            </div>
+            <p className="text-[11px] text-muted -mt-2">
+              Demo data — live audit-chain wiring lands in Phase 1.2
+            </p>
             <div className="card">
               {TIMELINE.map((e, i) => {
                 const Icon = e.icon;
@@ -271,7 +279,14 @@ export default function LeadDetailPage({ params }: { params: { slug: string } })
                     $40/mo.
                   </div>
                 </div>
-                <Button variant="secondary" size="sm" className="w-full">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                  onClick={() =>
+                    toast.info('Suggested sequence — sequence builder lands in Phase 1.2')
+                  }
+                >
                   View suggested sequence
                 </Button>
               </div>

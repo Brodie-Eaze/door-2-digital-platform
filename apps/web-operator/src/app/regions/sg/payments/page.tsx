@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * SG payments dashboard.
@@ -355,6 +356,11 @@ export default function SgPaymentsPage(): JSX.Element {
           </span>
         </Banner>
 
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted">SG · Phase 3 demo data — live wiring lands in Phase 3.x</span>
+          <DataSourceBadge source="fixture" />
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <KpiCard
             label="Total MTD"
@@ -390,8 +396,8 @@ export default function SgPaymentsPage(): JSX.Element {
           paddedBody={false}
           action={
             <span className="text-[11px] text-muted flex items-center gap-1.5">
-              <RefreshCw size={11} className="text-success" />
-              Streaming · 9s lag
+              <RefreshCw size={11} className="text-soft" />
+              Demo stream · fixture
             </span>
           }
         >

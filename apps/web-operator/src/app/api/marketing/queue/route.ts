@@ -14,7 +14,7 @@
  */
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { forbidden, internal, ok, requireSession, validation } from '@/lib/api-helpers';
+import { canOperate, forbidden, internal, ok, requireSession, validation } from '@/lib/api-helpers';
 import { isCrossTenantOperator } from '@/lib/api-helpers';
 
 export const runtime = 'nodejs';
@@ -29,6 +29,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
+
+  // Authz: queuing creatives for review is an operator action.
+  if (!canOperate(session)) {
+    return forbidden('Insufficient role to queue marketing creatives');
+  }
 
   // Resolve the target org. Default to the caller's own org; only cross-tenant
   // operators may target another org via ?orgId=.

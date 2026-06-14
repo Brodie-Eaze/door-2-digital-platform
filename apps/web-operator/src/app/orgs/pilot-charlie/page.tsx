@@ -1,6 +1,7 @@
 import { Building2, Calendar, CreditCard, Globe, ShieldCheck } from 'lucide-react';
 import { KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { OperatorShell } from '@/components/OperatorShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { PILOT, STATE_CLEARANCE } from '@/lib/fixtures';
 
 export default function PilotCharliePage(): JSX.Element {
@@ -28,10 +29,13 @@ export default function PilotCharliePage(): JSX.Element {
                 </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-[11px] text-muted uppercase tracking-wider">Go-live</div>
-              <div className="text-[13px] font-semibold text-ink mt-0.5 numeric">2026-09-15</div>
-              <div className="text-[11px] text-muted mt-0.5">in 16 weeks</div>
+            <div className="text-right flex flex-col items-end gap-2">
+              <DataSourceBadge source="fixture" />
+              <div>
+                <div className="text-[11px] text-muted uppercase tracking-wider">Go-live</div>
+                <div className="text-[13px] font-semibold text-ink mt-0.5 numeric">2026-09-15</div>
+                <div className="text-[11px] text-muted mt-0.5">in 16 weeks</div>
+              </div>
             </div>
           </div>
         </div>

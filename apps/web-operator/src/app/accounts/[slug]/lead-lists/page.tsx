@@ -1,8 +1,12 @@
+'use client';
+
 import { ListChecks, Plus, Megaphone, MailPlus, Filter, Sparkles } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { SmartListsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 const LISTS = [
   {
@@ -92,9 +96,17 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
           title="All lists"
           subtitle="Rule-driven smart lists update on every lead create/update"
           action={
-            <Button leftIcon={<Plus size={14} />} variant="primary" size="sm">
-              New smart list
-            </Button>
+            <div className="flex items-center gap-2">
+              <DataSourceBadge source="fixture" />
+              <Button
+                leftIcon={<Plus size={14} />}
+                variant="primary"
+                size="sm"
+                onClick={() => toast.info('New smart list — builder wiring lands in Phase 1.2')}
+              >
+                New smart list
+              </Button>
+            </div>
           }
           paddedBody={false}
         >
@@ -183,17 +195,33 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" leftIcon={<Plus size={14} />}>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Plus size={14} />}
+                onClick={() => toast.info('Add condition — rule builder wiring lands in Phase 1.2')}
+              >
                 Add condition
               </Button>
-              <Button variant="secondary" size="sm" leftIcon={<Filter size={14} />}>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Filter size={14} />}
+                onClick={() =>
+                  toast.info('Preview members — live count query lands in Phase 1.2')
+                }
+              >
                 Preview members
               </Button>
               <div className="flex-1" />
               <span className="text-[12px] text-muted">
                 → <span className="text-ink font-semibold numeric">218</span> leads match
               </span>
-              <Button variant="primary" size="sm">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => toast.info('Save list — persistence lands in Phase 1.2')}
+              >
                 Save list
               </Button>
             </div>
@@ -222,9 +250,13 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
                 desc: 'Drop list into auto-dial work queue',
               },
             ].map((p) => (
-              <div
+              <button
                 key={p.title}
-                className="card card-pad flex items-start gap-3 hover:shadow-md transition cursor-pointer"
+                type="button"
+                onClick={() =>
+                  toast.info(`Push to ${p.title} — hand-off wiring lands in Phase 1.2`)
+                }
+                className="card card-pad flex items-start gap-3 hover:shadow-md transition cursor-pointer text-left w-full"
               >
                 <div className="w-10 h-10 rounded-lg bg-accentSoft text-accent flex items-center justify-center shrink-0">
                   <p.icon size={18} />
@@ -233,7 +265,7 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
                   <div className="text-[13px] font-semibold text-ink">{p.title}</div>
                   <div className="text-[11px] text-muted mt-0.5">{p.desc}</div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </Section>

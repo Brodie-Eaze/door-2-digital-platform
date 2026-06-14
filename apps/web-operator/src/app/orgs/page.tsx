@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronRight, Building2 } from 'lucide-react';
 import { Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { OperatorShell } from '@/components/OperatorShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { ORGS } from '@/lib/fixtures';
 
 export default function OrgsPage(): JSX.Element {
@@ -12,6 +13,7 @@ export default function OrgsPage(): JSX.Element {
           title={`${ORGS.length} client orgs`}
           subtitle="Pilot-Charlie launches Sept 15. Two adjacent trials onboarded for product validation."
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           <table className="tbl">
             <thead>

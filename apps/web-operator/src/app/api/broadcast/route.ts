@@ -19,6 +19,7 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@d2d/database';
 import {
+  canOperate,
   forbidden,
   internal,
   isCrossTenantOperator,
@@ -26,6 +27,7 @@ import {
   requireSession,
   validation,
 } from '@/lib/api-helpers';
+import { writeAudit } from '@/lib/db-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +50,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
+
+  // Authz: broadcasting to the fleet (and writing the audit row) is an operator
+  // action — not available to a viewer/knocker with a valid session.
+  if (!canOperate(session)) {
+    return forbidden('Insufficient role to broadcast to the field');
+  }
 
   // Org scope.
   const requestedOrgId = req.nextUrl.searchParams.get('orgId');
@@ -74,12 +82,39 @@ export async function POST(req: NextRequest): Promise<Response> {
   const { message, scope } = parsed.data;
 
   try {
-    // Recipients = open sessions in the target org. 'active' and the others
-    // all resolve to "reps currently in the field" for the demo dataset; the
-    // distinction is preserved for when the iOS presence service can split
-    // active vs idle. Empty DB → 0 recipients, still a 200 (honest).
-    const recipients = await db.knockSession.count({
-      where: { orgId: targetOrgId, endedAt: null },
+    const recipients = await db.$transaction(async (tx) => {
+      // Recipients = open sessions in the target org. 'active' and the others
+      // all resolve to "reps currently in the field" for the demo dataset; the
+      // distinction is preserved for when the iOS presence service can split
+      // active vs idle. Empty DB → 0 recipients, still a 200 (honest).
+      const count = await tx.knockSession.count({
+        where: { orgId: targetOrgId, endedAt: null },
+      });
+
+      // Region for the audit chain — derived from the target org (the chain is
+      // per-(orgId, regionCode); we never invent a region from the session).
+      const org = await tx.org.findUnique({
+        where: { id: targetOrgId },
+        select: { regionCode: true },
+      });
+
+      // Audit the broadcast intent. There is no push fan-out yet (see header):
+      // the recipient count + this audit row are the honest, auditable contract.
+      await writeAudit(tx, {
+        orgId: targetOrgId,
+        regionCode: org?.regionCode ?? 'US',
+        actorUserId: session.userId,
+        action: 'field.broadcast',
+        resourceType: 'KnockSession',
+        resourceId: targetOrgId,
+        metadata: {
+          scope,
+          recipients: count,
+          messageLength: message.length,
+        },
+      });
+
+      return count;
     });
 
     const body: BroadcastResult = { sent: true, recipients, scope };

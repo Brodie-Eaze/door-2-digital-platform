@@ -31,6 +31,20 @@ export interface AnomalyItem {
   actionLabel: string;
   /** Optional href — if absent, the action is a button-only click */
   actionHref?: string;
+  /**
+   * Optional signature-interaction wiring. When present on a 'critical'
+   * anomaly the Command Centre flies the map to the offline rep, highlights
+   * their pin, and opens the reassign drawer. Absent on non-reassign
+   * anomalies — they keep an honest queue toast.
+   */
+  /** Fleet rep id this anomaly is about (matches a FLEET_REPS entry). */
+  repId?: string;
+  /** Coordinates of that rep — the map flies here. */
+  repCoords?: { lat: number; lng: number };
+  /** Territory the offline rep was covering, if backed by a Territory row. */
+  territoryId?: string;
+  /** Human label of that territory, e.g. "Houston SE". */
+  territoryName?: string;
 }
 
 export type ActivityEventType =

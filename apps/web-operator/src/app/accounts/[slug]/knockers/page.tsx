@@ -1,6 +1,7 @@
 import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { REP_STATUS_LABEL, REP_STATUS_TONE } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { KnockersEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData } from '@/lib/account-fixtures';
 import { rollupFor } from '@/lib/seed/kpis';
@@ -83,6 +84,7 @@ export default function KnockersPage({ params }: { params: { slug: string } }): 
           title={`Today's roster · ${knockers.length} of ${rollup.rosterSize} shown`}
           subtitle="Sorted by conversions · varied tenure (1d–4yr) · conv rate spread 3-38%"
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           <div className="max-h-[800px] overflow-y-auto">
             <table className="tbl">

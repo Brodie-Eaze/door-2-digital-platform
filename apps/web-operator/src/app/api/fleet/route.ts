@@ -100,6 +100,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       },
       include: {
         territory: { select: { name: true } },
+        org: { select: { tradingName: true, legalName: true } },
         knocks: {
           orderBy: { capturedAt: 'desc' },
           take: 1,
@@ -139,7 +140,14 @@ export async function GET(req: NextRequest): Promise<Response> {
       const status: 'active' | 'idle' | 'offline' =
         lastKnockMin <= 20 ? 'active' : lastKnockMin <= 60 ? 'idle' : 'offline';
 
-      const geo = parseGeo(lastKnock?.geo ?? null);
+      // PII: the last-knock geo is a resident's doorstep. Never ship the exact
+      // coordinate — coarsen to a ~100m grid (3dp) so the live map still places
+      // the rep in the right block without pinpointing a household. Precise geo
+      // must go through the JIT unmask + audit path.
+      const rawGeo = parseGeo(lastKnock?.geo ?? null);
+      const geo = rawGeo
+        ? { lat: Math.round(rawGeo.lat * 1000) / 1000, lng: Math.round(rawGeo.lng * 1000) / 1000 }
+        : null;
 
       return {
         id: session.id,
@@ -147,7 +155,8 @@ export async function GET(req: NextRequest): Promise<Response> {
         initials: userIdToInitials(session.userId),
         name: `Knocker ${session.userId.slice(-4)}`,
         territory: session.territory.name,
-        account: session.orgId,
+        // Human-readable account name, never the internal org_* primary key.
+        account: session.org?.tradingName ?? session.org?.legalName ?? '—',
         status,
         lat: geo?.lat ?? null,
         lng: geo?.lng ?? null,

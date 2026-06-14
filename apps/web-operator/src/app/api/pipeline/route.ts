@@ -21,6 +21,7 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
 import {
+  canOperate,
   forbidden,
   internal,
   isCrossTenantOperator,
@@ -136,6 +137,11 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
+
+  // Authz: moving CRM leads across the pipeline is an operator action.
+  if (!canOperate(session)) {
+    return forbidden('Insufficient role to move pipeline leads');
+  }
 
   const orgId = resolveOrgId(req, session);
   if (!orgId) return forbidden('No org context');

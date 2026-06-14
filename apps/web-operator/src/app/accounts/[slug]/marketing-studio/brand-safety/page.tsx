@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -20,6 +23,8 @@ import {
   type ScopedBlock,
 } from '@/lib/account-marketing';
 import { pickCreativeImage } from '@/lib/creative-images';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account brand-safety control room — rule pack and recent blocks
@@ -57,6 +62,9 @@ function blockStatusTone(s: ScopedBlock['status']): 'success' | 'warn' | 'info' 
 export default function Page({ params }: PageProps): JSX.Element {
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
+
+  const [blockOverrides, setBlockOverrides] = useState<Record<string, ScopedBlock['status']>>({});
+  const [discardedIds, setDiscardedIds] = useState<Set<string>>(new Set());
 
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || !data || firstRun.isFirstRun) {
@@ -134,7 +142,7 @@ export default function Page({ params }: PageProps): JSX.Element {
 
         <Section
           title={`Rule packs · ${Object.keys(rulesByCategory).length} categories`}
-          subtitle={`Per-vertical + ${data.region} jurisdiction rules · click a card to edit`}
+          subtitle={`Per-vertical + ${data.region} jurisdiction rules · edit individual rules in the Custom rules table below`}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(rulesByCategory).map(([cat, rules]) => (
@@ -178,12 +186,20 @@ export default function Page({ params }: PageProps): JSX.Element {
 
         <Section
           title={`Recent safety blocks · ${data.recentBlocks.length}`}
-          subtitle="Scoped to this account · sorted by recency · click to inspect"
+          subtitle="Scoped to this account · sorted by recency · use the row actions to override, discard, or inspect"
           paddedBody={false}
           action={
-            <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
-              Filter
-            </Button>
+            <div className="flex items-center gap-2">
+              <DataSourceBadge source="fixture" />
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() => toast.info('Block filters — wiring lands in Phase 1.2')}
+              >
+                Filter
+              </Button>
+            </div>
           }
         >
           {data.recentBlocks.length === 0 ? (
@@ -206,10 +222,13 @@ export default function Page({ params }: PageProps): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {data.recentBlocks.map((b) => {
+                {data.recentBlocks
+                  .filter((b) => !discardedIds.has(b.id))
+                  .map((b) => {
                   const creative = data.creatives.find((c) => c.id === b.creativeId);
+                  const effectiveStatus = blockOverrides[b.id] ?? b.status;
                   return (
-                    <tr key={b.id} className="cursor-pointer hover:bg-paper">
+                    <tr key={b.id} className="hover:bg-paper">
                       <td className="!pr-0 w-[60px]">
                         <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
                           {creative && (
@@ -241,13 +260,21 @@ export default function Page({ params }: PageProps): JSX.Element {
                       </td>
                       <td className="text-[12px] text-ink">{b.reviewer}</td>
                       <td>
-                        <StatusPill tone={blockStatusTone(b.status)}>{b.status}</StatusPill>
+                        <StatusPill tone={blockStatusTone(effectiveStatus)}>
+                          {effectiveStatus}
+                        </StatusPill>
                       </td>
                       <td className="text-[11px] text-muted numeric">{b.blockedAt}</td>
                       <td>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
+                            onClick={() => {
+                              setBlockOverrides((prev) => ({ ...prev, [b.id]: 'released' }));
+                              toast.success(
+                                `Block ${b.id} overridden → released locally (audit wiring: Phase 1.2)`,
+                              );
+                            }}
                             className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-ink hover:bg-paper"
                             title="Override block"
                           >
@@ -255,6 +282,12 @@ export default function Page({ params }: PageProps): JSX.Element {
                           </button>
                           <button
                             type="button"
+                            onClick={() => {
+                              setDiscardedIds((prev) => new Set(prev).add(b.id));
+                              toast.success(
+                                `Block ${b.id} discarded locally (audit wiring: Phase 1.2)`,
+                              );
+                            }}
                             className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-danger hover:bg-paper"
                             title="Discard"
                           >
@@ -262,6 +295,9 @@ export default function Page({ params }: PageProps): JSX.Element {
                           </button>
                           <button
                             type="button"
+                            onClick={() =>
+                              toast.info(`Inspect block ${b.id} — wiring lands in Phase 1.2`)
+                            }
                             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                             title="Inspect"
                           >
@@ -282,7 +318,12 @@ export default function Page({ params }: PageProps): JSX.Element {
           subtitle="Editable rule library specific to this account · regex + LLM-as-judge"
           paddedBody={false}
           action={
-            <Button variant="primary" size="sm" leftIcon={<Edit3 size={13} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Edit3 size={13} />}
+              onClick={() => toast.info('Add custom rule — wiring lands in Phase 1.2')}
+            >
               Add rule
             </Button>
           }
@@ -317,6 +358,7 @@ export default function Page({ params }: PageProps): JSX.Element {
                   <td>
                     <button
                       type="button"
+                      onClick={() => toast.info(`Edit rule ${r.id} — wiring lands in Phase 1.2`)}
                       className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                       title="Edit"
                     >

@@ -20,6 +20,8 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { TasksEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
@@ -427,7 +429,13 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
               />
             </div>
             <div className="flex-1" />
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New task — composer lands in Phase 1.2')}
+            >
               New task
             </Button>
           </div>
@@ -462,7 +470,12 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
                       </div>
                       <span className="mono !w-5 !h-5 !text-[10px]">{colTasks.length}</span>
                     </div>
-                    <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center">
+                    <button
+                      onClick={() =>
+                        toast.info(`"${col.label}" column actions — menu lands in Phase 1.2`)
+                      }
+                      className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center"
+                    >
                       <MoreVertical size={13} className="text-soft" />
                     </button>
                   </div>
@@ -538,7 +551,12 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
                       </div>
                     )}
                   </div>
-                  <button className="px-3 py-2 border-t border-line2 text-[11px] text-soft hover:text-ink hover:bg-paper transition flex items-center gap-1.5 justify-center">
+                  <button
+                    onClick={() =>
+                      toast.info(`Add task to "${col.label}" — composer lands in Phase 1.2`)
+                    }
+                    className="px-3 py-2 border-t border-line2 text-[11px] text-soft hover:text-ink hover:bg-paper transition flex items-center gap-1.5 justify-center"
+                  >
                     <Plus size={12} /> Add task
                   </button>
                 </div>

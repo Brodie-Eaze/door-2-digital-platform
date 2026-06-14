@@ -1,3 +1,6 @@
+'use client';
+
+import Link from 'next/link';
 import {
   Sparkles,
   FileCheck2,
@@ -26,6 +29,8 @@ import {
   type AccountMarketing,
 } from '@/lib/account-marketing';
 import { pickCreativeImage } from '@/lib/creative-images';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account Marketing Studio overview — Brodie's mission-control view of a
@@ -141,6 +146,7 @@ export default function Page({ params }: PageProps): JSX.Element {
         <Section
           title="Pipeline · today"
           subtitle="Brief → Compose → Variation → Review → Publish → Measure (this account only)"
+          action={<DataSourceBadge source="fixture" />}
         >
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             {PIPELINE_STAGES.map((stage, idx) => {
@@ -181,7 +187,7 @@ export default function Page({ params }: PageProps): JSX.Element {
               {topCreatives.map((c) => (
                 <div
                   key={c.id}
-                  className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0"
+                  className="card hover:ring-1 hover:ring-accent transition overflow-hidden w-[260px] shrink-0"
                 >
                   <div className="aspect-square relative overflow-hidden bg-paper">
                     <img
@@ -236,6 +242,9 @@ export default function Page({ params }: PageProps): JSX.Element {
                       </StatusPill>
                       <button
                         type="button"
+                        onClick={() =>
+                          toast.info(`Inspect "${c.headline}" — full detail lands in Phase 1.2`)
+                        }
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                         title="Inspect"
                       >
@@ -395,17 +404,20 @@ export default function Page({ params }: PageProps): JSX.Element {
               title="Approval queue"
               subtitle={`${reviewQueue.length} creatives awaiting human review`}
               action={
-                <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
-                  Review all
-                </Button>
+                <Link href={`/accounts/${params.slug}/marketing-studio/review-queue`}>
+                  <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
+                    Review all
+                  </Button>
+                </Link>
               }
             >
               <ul className="space-y-2.5">
                 {reviewQueue.map((c) => (
-                  <li
-                    key={c.id}
+                  <li key={c.id}>
+                   <Link
+                    href={`/accounts/${params.slug}/marketing-studio/review-queue`}
                     className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
-                  >
+                   >
                     <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
                       <img
                         src={pickCreativeImage(c.theme, c.id)}
@@ -433,6 +445,7 @@ export default function Page({ params }: PageProps): JSX.Element {
                         <span className="text-[10px] text-soft mono">{c.id}</span>
                       </div>
                     </div>
+                   </Link>
                   </li>
                 ))}
                 {reviewQueue.length === 0 && (

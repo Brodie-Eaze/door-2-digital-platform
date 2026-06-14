@@ -15,6 +15,7 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
 import {
+  canOperate,
   forbidden,
   internal,
   isCrossTenantOperator,
@@ -35,6 +36,11 @@ export async function PATCH(
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
+
+  // Authz: moving a CRM lead is an operator action.
+  if (!canOperate(session)) {
+    return forbidden('Insufficient role to move pipeline leads');
+  }
 
   const id = params.id;
   if (!id) return validation('Lead id is required');

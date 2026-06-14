@@ -16,11 +16,13 @@ import {
   AnomaliesPanel,
   LiveActivityFeed,
   PushToFieldStrip,
+  ReassignDrawer,
   type AiZoneSuggestion,
   type AnomalyItem,
   type ActivityEvent,
   type PushToFieldAction,
 } from '@/components/field-ops';
+import type { FleetRep } from '@/lib/fleet-reps';
 
 const HQ_SCOPE_LABEL = 'All accounts · HQ';
 
@@ -62,6 +64,25 @@ const HQ_AI_SUGGESTIONS: AiZoneSuggestion[] = [
   },
 ];
 
+/**
+ * Resolve a real FLEET_REPS entry to anchor the critical "offline rep" anomaly,
+ * so the map flies to a real pin and the drawer lists real nearby reps. We
+ * prefer a genuinely-offline rep in a Houston territory (matches the seed
+ * narrative); else any offline rep; else the first Houston SE rep so the fly
+ * target + territory stay coherent. Resolved once at module load.
+ */
+function resolveCoverageGapRep(): FleetRep | undefined {
+  const offlineHouston = FLEET_REPS.find(
+    (r) => r.status === 'offline' && /houston/i.test(r.territory),
+  );
+  if (offlineHouston) return offlineHouston;
+  const houstonSE = FLEET_REPS.find((r) => r.territory === 'Houston SE');
+  if (houstonSE) return houstonSE;
+  return FLEET_REPS.find((r) => r.status === 'offline') ?? FLEET_REPS[0];
+}
+
+const COVERAGE_GAP_REP = resolveCoverageGapRep();
+
 const HQ_ANOMALIES: AnomalyItem[] = [
   {
     id: 'hq-anom-1',
@@ -69,6 +90,14 @@ const HQ_ANOMALIES: AnomalyItem[] = [
     title: 'Devon R offline since 09:00',
     detail: 'Houston SE shift uncovered. Auto-SMS + push sent. Backup: reassign to Marcus L.',
     actionLabel: 'Reassign',
+    // Signature-interaction wiring — the action flies the map here + opens the
+    // reassign drawer. Coords/territory come from a real fleet rep so the pin
+    // and the drawer's distance sort are honest.
+    repId: COVERAGE_GAP_REP?.id,
+    repCoords: COVERAGE_GAP_REP
+      ? { lat: COVERAGE_GAP_REP.lat, lng: COVERAGE_GAP_REP.lng }
+      : undefined,
+    territoryName: COVERAGE_GAP_REP?.territory ?? 'Houston SE',
   },
   {
     id: 'hq-anom-2',
@@ -160,6 +189,15 @@ export default function CommandCentrePage(): JSX.Element {
   const [activity, setActivity] = useState<ActivityEvent[]>(HQ_ACTIVITY);
   const activityFreshness = useDataFreshness('fixture');
   const activityInFlight = useRef(false);
+
+  // ── Signature interaction: anomaly → fly map → highlight rep → reassign ──
+  // flyTarget drives the imperative map fly; activeAnomaly opens the drawer.
+  // dismissedAnomalies greys out an anomaly after a successful reassignment.
+  const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(
+    null,
+  );
+  const [activeAnomaly, setActiveAnomaly] = useState<AnomalyItem | null>(null);
+  const [dismissedAnomalies, setDismissedAnomalies] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -366,9 +404,12 @@ export default function CommandCentrePage(): JSX.Element {
           />
         </Reveal>
 
-        {/* The main live map */}
+        {/* The main live map — flyTarget + highlightCoords drive the signature
+            interaction (fly to the offline rep + pulse an amber ring). Both key
+            off the anomaly's repCoords so they survive the fixture→live fleet
+            swap (a fixture rep id never matches a live /api/fleet id). */}
         <Reveal delay={80}>
-          <HQLiveMap />
+          <HQLiveMap flyTarget={flyTarget} highlightCoords={activeAnomaly?.repCoords ?? null} />
         </Reveal>
 
         {/* AI Insights + alerts row */}
@@ -386,10 +427,21 @@ export default function CommandCentrePage(): JSX.Element {
             }}
           />
           <AnomaliesPanel
-            anomalies={HQ_ANOMALIES}
+            anomalies={HQ_ANOMALIES.filter((a) => !dismissedAnomalies.has(a.id))}
             scopeLabel={HQ_SCOPE_LABEL}
             onAction={(anomaly) => {
-              // Resolution workflows land in Phase 1.2 — honest queue toast for now.
+              // Signature interaction: a critical anomaly carrying repCoords
+              // flies the map to those coords, pulses the amber ring there, and
+              // opens the reassign drawer. flyTarget + highlightCoords both
+              // derive from anomaly.repCoords so they stay internally consistent
+              // regardless of live/fixture fleet (a fixture rep id never matches
+              // a live /api/fleet id).
+              if (anomaly.severity === 'critical' && anomaly.repCoords) {
+                setFlyTarget({ ...anomaly.repCoords, zoom: 13 });
+                setActiveAnomaly(anomaly);
+                return;
+              }
+              // Non-reassign anomalies keep an honest queue toast.
               toast.info(`${anomaly.actionLabel} queued — ${anomaly.title}`);
             }}
           />
@@ -416,6 +468,20 @@ export default function CommandCentrePage(): JSX.Element {
           }}
         />
       </div>
+
+      {/* Reassign drawer — the back half of the signature interaction. Slides
+          in over everything when a critical offline-rep anomaly is actioned. */}
+      <ReassignDrawer
+        anomaly={activeAnomaly}
+        reps={FLEET_REPS}
+        onClose={() => {
+          setActiveAnomaly(null);
+          setFlyTarget(null);
+        }}
+        onAssigned={(anomalyId) => {
+          setDismissedAnomalies((d) => new Set(d).add(anomalyId));
+        }}
+      />
     </PlatformShell>
   );
 }

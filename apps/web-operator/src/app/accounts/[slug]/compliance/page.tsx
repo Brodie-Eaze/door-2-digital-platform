@@ -1,9 +1,39 @@
+'use client';
+
 import { ShieldCheck, AlertTriangle, FileText, KeyRound, RefreshCw } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { ComplianceEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { getAccount, type Account } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
+
+/**
+ * Stable FNV-1a 32-bit hex of a string. Deterministic per input — used to
+ * derive a fixed-looking Merkle root for the demo audit-chain surface so the
+ * integrity display never changes per render (never Math.random).
+ */
+function fnv1aHex(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/** Build a stable 64-hex-char pseudo Merkle root from the account slug. */
+function stableMerkleRoot(slug: string): string {
+  let out = '';
+  let seed = slug;
+  while (out.length < 64) {
+    const chunk = fnv1aHex(seed);
+    out += chunk;
+    seed = `${seed}:${chunk}`;
+  }
+  return `0x${out.slice(0, 64)}`;
+}
 
 interface RegistrationRow {
   jurisdiction: string;
@@ -225,13 +255,8 @@ export default function AccountCompliancePage({
   const cleared = regs.filter((r) => r.status === 'approved').length;
   const pending = regs.filter((r) => r.status !== 'approved').length;
 
-  // Deterministic-looking fake hash from slug
-  const fakeHash = `0x${account.slug
-    .split('')
-    .map((c) => c.charCodeAt(0).toString(16))
-    .join('')
-    .padEnd(64, '7f3a92')
-    .slice(0, 64)}`;
+  // Stable, deterministic pseudo Merkle root for the demo audit-chain surface.
+  const fakeHash = stableMerkleRoot(account.slug);
 
   const dncFreshness = account.health === 'attention' ? 18 : 4;
   const auditEvents7d = Math.round(account.knockers * 24 * 7 * 0.12);
@@ -285,9 +310,19 @@ export default function AccountCompliancePage({
           subtitle={`${regs.length} jurisdictions tracked · counsel: Bastion ${account.region}`}
           paddedBody={false}
           action={
-            <Button variant="primary" size="sm" leftIcon={<FileText size={13} />}>
-              File new
-            </Button>
+            <div className="flex items-center gap-2">
+              <DataSourceBadge source="fixture" />
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<FileText size={13} />}
+                onClick={() =>
+                  toast.info('File new registration — filing workflow wiring lands in Phase 1.2')
+                }
+              >
+                File new
+              </Button>
+            </div>
           }
         >
           <table className="tbl">
@@ -325,7 +360,16 @@ export default function AccountCompliancePage({
                     <td className="text-[12px] text-ink numeric">{r.bond}</td>
                     <td className="text-[11px] text-soft mono !text-[10px]">{r.regNumber}</td>
                     <td>
-                      <button className="text-[11px] text-accent hover:underline">View</button>
+                      <button
+                        className="text-[11px] text-accent hover:underline"
+                        onClick={() =>
+                          toast.info(
+                            `${r.jurisdiction} filing detail — document viewer wiring lands in Phase 1.2`,
+                          )
+                        }
+                      >
+                        View
+                      </button>
                     </td>
                   </tr>
                 );
@@ -381,7 +425,14 @@ export default function AccountCompliancePage({
                 }
               />
               <div className="pt-3">
-                <Button variant="ghost" size="sm" leftIcon={<RefreshCw size={13} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<RefreshCw size={13} />}
+                  onClick={() =>
+                    toast.info('Force DNC re-sync — registry sync wiring lands in Phase 1.2')
+                  }
+                >
                   Force DNC re-sync now
                 </Button>
               </div>
@@ -426,7 +477,16 @@ export default function AccountCompliancePage({
                 }
               />
               <div className="pt-3">
-                <Button variant="ghost" size="sm" leftIcon={<KeyRound size={13} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<KeyRound size={13} />}
+                  onClick={() =>
+                    toast.info(
+                      'Chain-proof export is a dual-control action — signed export wiring lands in Phase 1.2',
+                    )
+                  }
+                >
                   Download chain proof
                 </Button>
               </div>

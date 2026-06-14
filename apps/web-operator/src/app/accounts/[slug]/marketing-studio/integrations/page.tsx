@@ -30,6 +30,8 @@ import {
   PROVIDER_GRADIENT,
   type ScopedProvider,
 } from '@/lib/account-marketing';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account integrations — provider cards filtered to this account's
@@ -202,6 +204,7 @@ export default function Page({ params }: PageProps): JSX.Element {
           subtitle={`One card per adapter active for ${account.shortName}`}
           action={
             <div className="flex items-center gap-1.5 flex-wrap">
+              <DataSourceBadge source="fixture" className="mr-1" />
               {CATEGORIES.map((c) => (
                 <button
                   key={c}
@@ -444,6 +447,7 @@ function ConnectModal({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => toast.info(`${label}: mode switch needs a live adapter — Phase 1.2`)}
                 className={
                   provider.status === 'sandbox'
                     ? 'text-[11px] font-medium px-3 py-1.5 rounded-full bg-accent text-surface'
@@ -454,6 +458,7 @@ function ConnectModal({
               </button>
               <button
                 type="button"
+                onClick={() => toast.info(`${label}: mode switch needs a live adapter — Phase 1.2`)}
                 className={
                   provider.status === 'connected'
                     ? 'text-[11px] font-medium px-3 py-1.5 rounded-full bg-accent text-surface'
@@ -491,7 +496,16 @@ function ConnectModal({
             </div>
           </div>
           <div className="flex items-center gap-2 pt-2 border-t border-line2">
-            <Button size="sm" variant="primary" onClick={onClose}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                toast.info(
+                  `${label}: real OAuth/credential provisioning required — no live connection made yet (Phase 1.2).`,
+                );
+                onClose();
+              }}
+            >
               <CheckCircle2 size={11} />
               {provider.status === 'not_connected' ? 'Connect' : 'Save'}
             </Button>
@@ -502,7 +516,12 @@ function ConnectModal({
               <button
                 type="button"
                 className="text-[11px] text-danger ml-auto hover:underline"
-                onClick={onClose}
+                onClick={() => {
+                  toast.info(
+                    `${label}: disconnect needs a real credential-revocation call — not wired yet (Phase 1.2).`,
+                  );
+                  onClose();
+                }}
               >
                 Disconnect
               </button>

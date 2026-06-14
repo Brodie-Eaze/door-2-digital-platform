@@ -49,6 +49,9 @@ import {
 } from '@d2d/ui-web';
 import { PROVIDER_CONN_LABEL, PROVIDER_CONN_TONE } from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Provider catalogue — mirrors packages/integrations registry
@@ -594,6 +597,11 @@ export default function IntegrationsPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="AI Marketing Studio — Integrations">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="integrations" />
+          <DataSourceBadge source="fixture" />
+        </div>
+        <div className="text-[11px] text-muted">Demo data — live wiring lands in Phase 1.x</div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Plug size={14} className="text-accent" />
@@ -1011,12 +1019,22 @@ function ConnectModal({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() =>
+                  toast.info(
+                    `${provider.displayName} sandbox mode — mode switch wiring lands in Phase 1.2`,
+                  )
+                }
                 className="text-[11px] font-medium px-3 py-1.5 rounded-full bg-accent text-surface"
               >
                 Sandbox
               </button>
               <button
                 type="button"
+                onClick={() =>
+                  toast.info(
+                    `${provider.displayName} production mode — mode switch wiring lands in Phase 1.2`,
+                  )
+                }
                 className="text-[11px] font-medium px-3 py-1.5 rounded-full text-muted border border-line2 hover:text-ink"
               >
                 Production
@@ -1048,7 +1066,18 @@ function ConnectModal({
             </div>
           </div>
           <div className="flex items-center gap-2 pt-2 border-t border-line2">
-            <Button size="sm" variant="primary" onClick={onClose}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                toast.info(
+                  `${provider.displayName} ${
+                    provider.status === 'not_connected' ? 'connect' : 'save'
+                  } — not wired to a real OAuth/credential flow yet (Phase 1.2)`,
+                );
+                onClose();
+              }}
+            >
               <CheckCircle2 size={11} />
               {provider.status === 'not_connected' ? 'Connect' : 'Save'}
             </Button>
@@ -1059,7 +1088,12 @@ function ConnectModal({
               <button
                 type="button"
                 className="text-[11px] text-danger ml-auto hover:underline"
-                onClick={onClose}
+                onClick={() => {
+                  toast.info(
+                    `${provider.displayName} disconnect — not wired to a real credential-revoke flow yet (Phase 1.2)`,
+                  );
+                  onClose();
+                }}
               >
                 Disconnect
               </button>

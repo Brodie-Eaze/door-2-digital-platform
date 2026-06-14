@@ -1,8 +1,12 @@
+'use client';
+
 import { Plus, Play, Pause, ExternalLink, ListChecks } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { CampaignsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 const CAMPAIGNS = [
   {
@@ -127,9 +131,17 @@ export default function CampaignsPage({ params }: { params: { slug: string } }):
           title="All campaigns"
           subtitle="Linked to smart lead lists · multi-channel delivery"
           action={
-            <Button leftIcon={<Plus size={14} />} variant="primary" size="sm">
-              New campaign
-            </Button>
+            <div className="flex items-center gap-2">
+              <DataSourceBadge source="fixture" />
+              <Button
+                leftIcon={<Plus size={14} />}
+                variant="primary"
+                size="sm"
+                onClick={() => toast.info('New campaign — builder wiring lands in Phase 1.2')}
+              >
+                New campaign
+              </Button>
+            </div>
           }
           paddedBody={false}
         >
@@ -191,14 +203,30 @@ export default function CampaignsPage({ params }: { params: { slug: string } }):
                   </td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">
+                      <button
+                        className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+                        title={c.status === 'running' ? 'Pause campaign' : 'Resume campaign'}
+                        onClick={() =>
+                          toast.info(
+                            `${c.status === 'running' ? 'Pause' : 'Resume'} "${c.name}" — campaign control wiring lands in Phase 1.2`,
+                          )
+                        }
+                      >
                         {c.status === 'running' ? (
                           <Pause size={13} className="text-muted" />
                         ) : (
                           <Play size={13} className="text-success" />
                         )}
                       </button>
-                      <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">
+                      <button
+                        className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+                        title="Open in channel"
+                        onClick={() =>
+                          toast.info(
+                            `Open "${c.name}" in channel — deep-link wiring lands in Phase 1.2`,
+                          )
+                        }
+                      >
                         <ExternalLink size={12} className="text-soft" />
                       </button>
                     </div>
