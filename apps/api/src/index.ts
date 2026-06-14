@@ -66,6 +66,12 @@ import { startNotificationSendWorker } from './workers/notification-send.worker'
 import { startWebhookDeliverWorker } from './workers/webhook-deliver.worker';
 import { startCommissionCalcWorker } from './workers/commission-calc.worker';
 import { startPayoutPrepareWorker } from './workers/payout-prepare.worker';
+import { startKnockSyncWorker } from './workers/knock-sync.worker';
+import { startLeadRoutingWorker } from './workers/lead-routing.worker';
+import { startConversionFinaliseWorker } from './workers/conversion-finalise.worker';
+import { startContentGenerateWorker } from './workers/content-generate.worker';
+import { startAdDeliverWorker } from './workers/ad-deliver.worker';
+import { startGeoRefreshWorker } from './workers/geo-refresh.worker';
 
 async function buildServer() {
   const e = env();
@@ -230,8 +236,14 @@ async function main(): Promise<void> {
     startWebhookDeliverWorker();
     startCommissionCalcWorker();
     startPayoutPrepareWorker();
+    startKnockSyncWorker();
+    startLeadRoutingWorker();
+    startConversionFinaliseWorker();
+    startContentGenerateWorker();
+    startAdDeliverWorker();
+    startGeoRefreshWorker();
     logger().info(
-      'CRON_LEADER=true — audit-shipper + dnk-sync + lead-sequence + notification-send + webhook-deliver + commission-calc + payout-prepare workers started',
+      'CRON_LEADER=true — all 13 workers started: audit-shipper, dnk-sync, lead-sequence, notification-send, webhook-deliver, commission-calc, payout-prepare, knock-sync, lead-routing, conversion-finalise, content-generate, ad-deliver, geo-refresh',
     );
   }
 }

@@ -50,10 +50,10 @@ function priorMonthBounds(): { start: Date; end: Date; label: string } {
   return { start, end, label };
 }
 
-interface CommissionRow {
+type CommissionRow = {
   userId: string;
   _sum: { amountCents: bigint | null };
-}
+};
 
 function buildCsv(
   lines: Array<{
@@ -140,7 +140,7 @@ async function prepareMonthlyBatches(): Promise<void> {
           status: { in: ['accrued', 'included'] },
         },
         _sum: { amountCents: true },
-      })) as CommissionRow[];
+      })) as unknown as CommissionRow[];
 
       if (byUser.length === 0) continue;
 
