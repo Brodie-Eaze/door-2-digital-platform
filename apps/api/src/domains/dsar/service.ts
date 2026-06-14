@@ -13,11 +13,25 @@
  *
  * ADR-0013: soft-delete only — DSAR deletion = anonymise PII, not hard delete.
  */
-import type { RegionCode } from '@prisma/client';
+import type { RegionCode, Prisma } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
+import { PiiVaultService } from '../pii-vault/service';
 import type { DsarRequestBody } from '@d2d/shared-types';
+
+function maskEmail(email: string | null): string | null {
+  if (!email) return null;
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+function maskPhone(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '•••';
+  return `••• ••• ${digits.slice(-4)}`;
+}
 
 interface ActorContext {
   userId: string;
@@ -124,8 +138,22 @@ export async function fileDsar(
         regionCode: actor.regionCode,
         kind: body.kind,
         jurisdiction: body.jurisdiction,
-        subjectEmail: body.subjectEmail ?? null,
-        subjectPhone: body.subjectPhone ?? null,
+        subjectEmail: body.subjectEmail ? maskEmail(body.subjectEmail) : null,
+        subjectEmailVault: body.subjectEmail
+          ? (PiiVaultService.encryptForRow(
+              'DsarRequest',
+              id,
+              body.subjectEmail,
+            ) as Prisma.JsonObject)
+          : null,
+        subjectPhone: body.subjectPhone ? maskPhone(body.subjectPhone) : null,
+        subjectPhoneVault: body.subjectPhone
+          ? (PiiVaultService.encryptForRow(
+              'DsarRequest',
+              id,
+              body.subjectPhone,
+            ) as Prisma.JsonObject)
+          : null,
         subjectLeadId: body.subjectLeadId ?? null,
         proofOfIdentityKey: body.proofOfIdentityKey ?? null,
         note: body.note ?? null,

@@ -1390,8 +1390,10 @@ model DsarRequest {
   regionCode         RegionCode
   kind               String     // access | deletion | portability | restriction
   jurisdiction       String     // au_privacy_act | ccpa | cpra | pdpa_sg | gdpr | other
-  subjectEmail       String?    /// PII — subject's email
-  subjectPhone       String?    /// PII — subject's phone
+  subjectEmail       String?    /// PII — masked sentinel ('[vaulted]') when vault present
+  subjectEmailVault  Json?      // AES-256-GCM encrypted blob; AAD = 'DsarRequest:{id}'
+  subjectPhone       String?    /// PII — masked sentinel when vault present
+  subjectPhoneVault  Json?      // AES-256-GCM encrypted blob
   subjectLeadId      String?
   proofOfIdentityKey String?    // S3 key of uploaded identity proof
   note               String?    @db.Text
