@@ -217,6 +217,7 @@ model Org {
   propensityScores           PropensityScore[]
   analyticsEvents            AnalyticsEvent[]
   invoices                   Invoice[]
+  dsarRequests               DsarRequest[]
 
   @@index([regionCode, status])
   @@index([type, status])
@@ -1294,6 +1295,36 @@ model VoiceRecording {
 // export to a warehouse (BigQuery / Snowflake) + dbt without touching OLTP.
 // `shippedAt` is set by the export job. This is the "plug in data scientists"
 // backbone.
+// ───────────────────────────────────────────────────────────────────────────
+// DSAR — Data Subject Access Request lifecycle
+// ───────────────────────────────────────────────────────────────────────────
+
+model DsarRequest {
+  id                 String     @id // dsar_*
+  orgId              String
+  org                Org        @relation(fields: [orgId], references: [id])
+  regionCode         RegionCode
+  kind               String     // access | deletion | portability | restriction
+  jurisdiction       String     // au_privacy_act | ccpa | cpra | pdpa_sg | gdpr | other
+  subjectEmail       String?    /// PII — subject's email
+  subjectPhone       String?    /// PII — subject's phone
+  subjectLeadId      String?
+  proofOfIdentityKey String?    // S3 key of uploaded identity proof
+  note               String?    @db.Text
+  status             String     @default("pending") // pending | in_progress | fulfilled | rejected
+  requestedByUserId  String?
+  slaDueAt           DateTime   // per-jurisdiction deadline (30d or 45d from createdAt)
+  fulfilledAt        DateTime?
+  responsePackageKey String?    // S3 key of encrypted response package
+  rejectionReason    String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([slaDueAt, status])
+}
+
 model AnalyticsEvent {
   id         String     @id // aev_*
   orgId      String

@@ -62,16 +62,16 @@ Ordered by Priority for Pilot-Charlie launch readiness.
 
 ### P2 — Phase 1.4 / SOC 2 Hardening
 
-| ID      | Domain  | Gap                                                                                                        | Effort |
-| ------- | ------- | ---------------------------------------------------------------------------------------------------------- | ------ |
-| **C18** | Auth    | WebAuthn hardware-key enforcement for `super_admin` payout instruction not wired                           | M      |
-| **C19** | DSAR    | DSAR request lifecycle routes (GET/POST) are 501 stubs                                                     | M      |
-| **C20** | Consent | `POST /v1/consent`, `GET /v1/consent` are 501 stubs                                                        | S      |
-| **C21** | CRM     | Activity log routes (`POST /v1/crm/activities`, `GET /v1/crm/activities`) are 501 stubs                    | M      |
-| **C22** | User    | `DELETE /v1/users/:id` (soft-delete / RTBF) is a 501 stub                                                  | S      |
-| **C23** | Audit   | Audit S3 Object Lock COMPLIANCE sink — `audit-ship` BullMQ worker not built                                | L      |
-| **C24** | RLS     | `C2 · RLS belt for new tables` (Task #120) — deferred; PropensityScore + KnockerShift tables not under RLS | M      |
-| **C25** | SOC2    | `docs/soc2/controls.md` control matrix is an empty directory — needs CC1–CC9 mapped                        | L      |
+| ID          | Domain  | Gap                                                                                                                                                                                                            | Effort |
+| ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **C18**     | Auth    | WebAuthn hardware-key enforcement for `super_admin` payout instruction not wired                                                                                                                               | M      |
+| ~~**C19**~~ | DSAR    | ~~501 stubs~~ **CLOSED 2026-06-14** — full DSAR lifecycle: file/list/get/fulfil/reject; `DsarRequest` model + migration; per-jurisdiction SLAs (AU 30d, CCPA/CPRA 45d, GDPR 30d); audit row every state change | M      |
+| ~~**C20**~~ | Consent | ~~501 stubs~~ **ALREADY DONE** — `POST /v1/consent/capture`, `GET /v1/consent/lookup`, `POST /v1/consent/:id/withdraw` all wired to real service                                                               | S      |
+| ~~**C21**~~ | CRM     | ~~501 stubs~~ **PARTIALLY DONE** — `GET /v1/crm/activities` live (paginated, org-scoped); sequences remain 501 — require BullMQ step workers (Phase 1.3b)                                                      | M      |
+| ~~**C22**~~ | User    | ~~501 stub~~ **ALREADY DONE** — `DELETE /v1/users/:id` calls `archiveUser` (ADR-0013 soft-delete)                                                                                                              | S      |
+| **C23**     | Audit   | Audit S3 Object Lock COMPLIANCE sink — `audit-ship` BullMQ worker not built                                                                                                                                    | L      |
+| **C24**     | RLS     | `C2 · RLS belt for new tables` (Task #120) — deferred; PropensityScore + KnockerShift tables not under RLS                                                                                                     | M      |
+| **C25**     | SOC2    | `docs/soc2/controls.md` control matrix is an empty directory — needs CC1–CC9 mapped                                                                                                                            | L      |
 
 ---
 

@@ -40,8 +40,9 @@ function toPublic(row: {
   expiresAt: Date | null;
 }): ConsentRecordPublic {
   // scope is embedded in the text field as "scope:<value> — <wording>"
+  const parts = row.text.split(' — ');
   const scope = row.text.startsWith('scope:')
-    ? row.text.split(' — ')[0].replace('scope:', '')
+    ? (parts[0] ?? 'scope:marketing').replace('scope:', '')
     : 'marketing';
   return {
     id: row.id,
