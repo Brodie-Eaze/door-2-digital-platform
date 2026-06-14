@@ -468,8 +468,10 @@ export async function disputeConversion(
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
 
-/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org). */
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org).
+ * Returns '[encrypted]' for vault rows; JIT unmask via /v1/pii/unmask-request. */
 function maskDonorEmail(email: string): string {
+  if (email === 'redacted@vaulted') return '[encrypted]';
   const [user, domain] = email.split('@');
   if (!domain || !user) return '•••';
   return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;

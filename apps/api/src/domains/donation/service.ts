@@ -267,8 +267,11 @@ export async function generateDonationReceipt(
   return toReceiptPublic(updated);
 }
 
-/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org). */
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org).
+ * Returns '[encrypted]' for vault rows (sentinel value = 'redacted@vaulted');
+ * JIT unmask is via POST /v1/pii/unmask-request + /unmask-approve + /reveal. */
 function maskDonorEmail(email: string): string {
+  if (email === 'redacted@vaulted') return '[encrypted]';
   const [user, domain] = email.split('@');
   if (!domain || !user) return '•••';
   return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
