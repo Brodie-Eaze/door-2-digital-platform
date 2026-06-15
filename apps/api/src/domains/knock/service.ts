@@ -11,7 +11,7 @@
  * the *batch* call as a whole; the per-knock key dedupes individual rows
  * within a batch and across retries.
  */
-import type { RegionCode, Prisma, KnockDisposition } from '@prisma/client';
+import { Prisma, type RegionCode, type KnockDisposition } from '@prisma/client';
 import { newId, Problems, ProblemError, addressHash } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
@@ -266,8 +266,8 @@ export async function createKnock(
     }
 
     const notesVault = input.notes
-      ? (PiiVaultService.encryptForRow('Knock', id, input.notes) as Prisma.JsonObject)
-      : null;
+      ? (PiiVaultService.encryptForRow('Knock', id, input.notes) as unknown as Prisma.JsonObject)
+      : Prisma.DbNull;
 
     const row = await tx.knock.create({
       data: {
@@ -647,8 +647,12 @@ export async function createKnockBatch(
           signatureKey: c.k.signatureKey ?? null,
           notes: c.k.notes ? '[vaulted]' : null,
           notesVault: c.k.notes
-            ? (PiiVaultService.encryptForRow('Knock', id, c.k.notes) as Prisma.JsonObject)
-            : null,
+            ? (PiiVaultService.encryptForRow(
+                'Knock',
+                id,
+                c.k.notes,
+              ) as unknown as Prisma.JsonObject)
+            : Prisma.DbNull,
           idempotencyKey: c.k.idempotencyKey,
         });
       }

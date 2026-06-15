@@ -13,7 +13,7 @@
  *
  * ADR-0013: soft-delete only — DSAR deletion = anonymise PII, not hard delete.
  */
-import type { RegionCode, Prisma } from '@prisma/client';
+import { Prisma, type RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
@@ -144,16 +144,16 @@ export async function fileDsar(
               'DsarRequest',
               id,
               body.subjectEmail,
-            ) as Prisma.JsonObject)
-          : null,
+            ) as unknown as Prisma.JsonObject)
+          : Prisma.DbNull,
         subjectPhone: body.subjectPhone ? maskPhone(body.subjectPhone) : null,
         subjectPhoneVault: body.subjectPhone
           ? (PiiVaultService.encryptForRow(
               'DsarRequest',
               id,
               body.subjectPhone,
-            ) as Prisma.JsonObject)
-          : null,
+            ) as unknown as Prisma.JsonObject)
+          : Prisma.DbNull,
         subjectLeadId: body.subjectLeadId ?? null,
         proofOfIdentityKey: body.proofOfIdentityKey ?? null,
         note: body.note ?? null,

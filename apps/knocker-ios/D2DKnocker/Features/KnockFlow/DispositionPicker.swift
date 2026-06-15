@@ -7,6 +7,10 @@ import SwiftUI
 struct DispositionPicker: View {
     @Binding var selected: KnockDisposition?
     let onSelect: (KnockDisposition) -> Void
+    /// The headline conversion tile is org-configurable: a charity sees "DONOR"
+    /// (records a donation), a commercial org sees "SALE" (records a sale).
+    var saleLabel: String = "SALE"
+    var saleDisposition: KnockDisposition = .convertedSale
 
     // Fixed 6, in mockup order, with the exact label + fill.
     private struct Tile {
@@ -14,16 +18,19 @@ struct DispositionPicker: View {
         let label: String
         let fill: Color
         let fg: Color
+        var icon: String? = nil
     }
 
     private var tiles: [Tile] {
         [
-            Tile(disposition: .convertedSale, label: "SALE",      fill: D2DColor.accent,        fg: .white),
+            Tile(disposition: saleDisposition, label: saleLabel,  fill: D2DColor.accent,        fg: .white),
             Tile(disposition: .appointment,   label: "LEAD",      fill: Color(hex: 0x60A5FA),   fg: .white),
             Tile(disposition: .noAnswer,      label: "NOT\nHOME", fill: Color(hex: 0x64748B),   fg: .white),
             Tile(disposition: .callback,      label: "CALLBACK",  fill: D2DColor.hero,          fg: .white),
             Tile(disposition: .notInterested, label: "REFUSED",   fill: Color(hex: 0xE2E8F0),   fg: D2DColor.ink),
-            Tile(disposition: .doNotKnock,    label: "DNC",       fill: D2DColor.hero,          fg: .white),
+            // DNC = permanent legal "never knock here again": darkest tile + a
+            // nosign glyph so it can't be confused with the navy CALLBACK beside it.
+            Tile(disposition: .doNotKnock,    label: "DNC",       fill: Color(hex: 0x0B1220),   fg: .white, icon: "nosign"),
         ]
     }
 
@@ -47,9 +54,14 @@ struct DispositionPicker: View {
             selected = tile.disposition
             onSelect(tile.disposition)
         } label: {
-            Text(tile.label)
-                .font(.system(size: 15, weight: .bold))
-                .multilineTextAlignment(.center)
+            VStack(spacing: 4) {
+                if let icon = tile.icon {
+                    Image(systemName: icon).font(.system(size: 15, weight: .bold))
+                }
+                Text(tile.label)
+                    .font(.system(size: 15, weight: .bold))
+                    .multilineTextAlignment(.center)
+            }
                 .foregroundStyle(tile.fg)
                 .frame(maxWidth: .infinity)
                 .frame(height: 84)
@@ -69,6 +81,10 @@ struct DispositionPicker: View {
                 .scaleEffect(isSelected ? 0.97 : 1)
                 .animation(.spring(duration: 0.2), value: isSelected)
         }
+        // VoiceOver reads the disposition name ("Do not knock"), not the raw
+        // multi-line tile label ("NOT\nHOME").
+        .accessibilityLabel(tile.disposition.displayName)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

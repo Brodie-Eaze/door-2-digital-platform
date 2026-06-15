@@ -9,7 +9,7 @@
  *
  * Every mutation writes AuditEvent in the same TX.
  */
-import type { PlatformRole, RegionCode, Prisma } from '@prisma/client';
+import { Prisma, type PlatformRole, type RegionCode } from '@prisma/client';
 import { emailDigest, newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type {
   CreateUserRequest,
@@ -137,20 +137,24 @@ export async function inviteUser(
         emailDigest: digest,
         phone: input.phone ? maskPhone(input.phone) : null,
         phoneVault: input.phone
-          ? (PiiVaultService.encryptForRow('User', userId, input.phone) as Prisma.JsonObject)
-          : null,
+          ? (PiiVaultService.encryptForRow(
+              'User',
+              userId,
+              input.phone,
+            ) as unknown as Prisma.JsonObject)
+          : Prisma.DbNull,
         givenName: maskGivenName(input.givenName),
         givenNameVault: PiiVaultService.encryptForRow(
           'User',
           userId,
           input.givenName,
-        ) as Prisma.JsonObject,
+        ) as unknown as Prisma.JsonObject,
         familyName: maskFamilyName(input.familyName),
         familyNameVault: PiiVaultService.encryptForRow(
           'User',
           userId,
           input.familyName,
-        ) as Prisma.JsonObject,
+        ) as unknown as Prisma.JsonObject,
         role: input.role,
         managerId: input.managerId ?? null,
         regionCode: actor.regionCode,

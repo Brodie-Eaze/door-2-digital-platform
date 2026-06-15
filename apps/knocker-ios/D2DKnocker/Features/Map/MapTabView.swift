@@ -9,12 +9,17 @@ import MapKit
 struct MapTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncEngine.self) private var syncEngine
     @State private var viewModel = MapViewModel()
     @State private var location = LocationService()
     @State private var showingKnockSheet = false
     @State private var knockCoordinate: CLLocationCoordinate2D?
     @State private var knockAddress: String?
     @State private var dispositionFilter: Set<KnockDisposition> = []
+    // Live visible region, captured from the map camera so the +/- buttons can
+    // zoom relative to wherever the rep has panned/zoomed to.
+    @State private var currentRegion: MKCoordinateRegion?
+    @State private var showLocating = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -55,9 +60,18 @@ struct MapTabView: View {
                     }
                 }
             }
-            .mapStyle(.hybrid(elevation: .realistic))
+            // Flat satellite+labels (not .realistic 3D terrain): a canvassing map
+            // wants legibility + battery/cellular thrift over an 8-hour shift, not
+            // streamed 3D elevation tiles.
+            .mapStyle(.hybrid(elevation: .flat))
             .mapControls { MapUserLocationButton() }
             .ignoresSafeArea(edges: .all)
+            // Capture the region only when a gesture settles (not every frame) —
+            // the +/- buttons read the last settled region, so per-frame writes
+            // (which re-rendered the whole map + annotation filters) were pure waste.
+            .onMapCameraChange(frequency: .onEnd) { context in
+                currentRegion = context.region
+            }
 
             // Top floating chrome: territory pill + accuracy badge, then coverage bar
             VStack(spacing: 8) {
@@ -79,6 +93,8 @@ struct MapTabView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 6)
+            // Informational chrome only — must never intercept map pan/zoom gestures.
+            .allowsHitTesting(false)
 
             // Honest states: loading / no-assignment / fetch error — never fake homes.
             if viewModel.isLoadingTerritory {
@@ -95,20 +111,31 @@ struct MapTabView: View {
                                  showSpinner: false)
             }
 
-            // Bottom chrome: disposition legend/filter + Knock-here FAB
+            // Bottom chrome: zoom control + disposition legend/filter + Knock-here FAB
             VStack(spacing: 8) {
                 Spacer()
+                HStack {
+                    Spacer()
+                    MapZoomControl(onZoomIn: { zoom(by: 0.5) }, onZoomOut: { zoom(by: 2.0) })
+                }
+                .padding(.horizontal, 16)
                 if !viewModel.knockAnnotations.isEmpty {
                     MapLegendView(counts: viewModel.dispositionCounts, filter: $dispositionFilter)
                 }
                 HStack {
                     Spacer()
                     Button {
-                        openKnock(at: location.coordinate
-                                  ?? viewModel.territory?.centroid
-                                  ?? viewModel.territoryCircle?.center
-                                  ?? CLLocationCoordinate2D(latitude: MapViewModel.centerLat, longitude: MapViewModel.centerLon),
-                                  address: nil)
+                        // Never drop a real knock pin on a hardcoded fallback (was
+                        // Austin) when there's no GPS fix — that mislocates the door.
+                        // Use the live location, else the assigned-area centre; if
+                        // neither exists yet, ask the rep to wait for a fix.
+                        if let coord = location.coordinate
+                            ?? viewModel.territory?.centroid
+                            ?? viewModel.territoryCircle?.center {
+                            openKnock(at: coord, address: nil)
+                        } else {
+                            showLocating = true
+                        }
                     } label: {
                         Label("Knock here", systemImage: "plus")
                             .font(.system(size: 15, weight: .semibold))
@@ -117,6 +144,11 @@ struct MapTabView: View {
                             .padding(.vertical, 15)
                             .background(D2DColor.hero, in: Capsule())
                             .shadow(color: .black.opacity(0.3), radius: 12, y: 5)
+                    }
+                    .alert("Finding your location…", isPresented: $showLocating) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text("Wait for a GPS fix before knocking so the door is pinned to the right spot.")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -131,6 +163,7 @@ struct MapTabView: View {
                 presetAddress: knockAddress
             )
             .environment(appState)
+            .environment(syncEngine)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationBackgroundInteraction(.disabled)
@@ -151,6 +184,58 @@ struct MapTabView: View {
         knockCoordinate = coordinate
         knockAddress = address
         showingKnockSheet = true
+    }
+
+    /// Zoom the map by scaling the visible span. factor < 1 zooms in, > 1 zooms out.
+    /// Clamped so the rep can't zoom past street level or out past the metro.
+    private func zoom(by factor: Double) {
+        let fallback = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: MapViewModel.centerLat, longitude: MapViewModel.centerLon),
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+        let region = currentRegion ?? fallback
+        let lat = min(max(region.span.latitudeDelta * factor, 0.0006), 80)
+        let lon = min(max(region.span.longitudeDelta * factor, 0.0006), 80)
+        let target = MKCoordinateRegion(
+            center: region.center,
+            span: MKCoordinateSpan(latitudeDelta: lat, longitudeDelta: lon)
+        )
+        currentRegion = target
+        withAnimation(.easeInOut(duration: 0.25)) {
+            viewModel.cameraPosition = .region(target)
+        }
+    }
+}
+
+// MARK: - Map zoom control (+/-)
+
+struct MapZoomControl: View {
+    let onZoomIn: () -> Void
+    let onZoomOut: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            button("plus", action: onZoomIn)
+            Divider().frame(width: 28)
+            button("minus", action: onZoomOut)
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+    }
+
+    private func button(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(D2DColor.ink)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -337,6 +422,8 @@ struct MapStatusOverlay: View {
         .frame(maxWidth: 300)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: D2DRadius.lg))
         .shadow(color: .black.opacity(0.18), radius: 14, y: 4)
+        // Centered informational card — must not swallow the map's pinch/pan.
+        .allowsHitTesting(false)
     }
 }
 

@@ -8,6 +8,7 @@ import SwiftData
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
+    @Environment(SyncEngine.self) private var syncEngine
     @Query(sort: \Knock.capturedAt, order: .reverse) private var allKnocks: [Knock]
     @State private var viewModel = ProfileViewModel()
     @State private var authViewModel = AuthViewModel()
@@ -30,6 +31,9 @@ struct ProfileView: View {
                                   streakDays: appState.isOnShift ? 1 : 0)
                     DispositionBreakdownCard(knocks: todayKnocks)
                     leaderboard
+                    if syncEngine.pendingCount > 0 || syncEngine.deadLetterCount > 0 {
+                        syncSection
+                    }
                     appSection
                 }
                 .padding(.horizontal, 16)
@@ -39,12 +43,42 @@ struct ProfileView: View {
             .background(D2DColor.paper)
             .navigationTitle("Me")
             .navigationBarTitleDisplayMode(.large)
+            // Always-visible sign-out in the nav bar so logging out never
+            // requires scrolling to the bottom of the page.
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSignOutConfirm = true
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(D2DColor.ink)
+                    }
+                    .accessibilityLabel("Sign out")
+                }
+            }
             .sheet(isPresented: $showHistory) { KnocksHistoryView() }
             .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
-                Button("Sign out", role: .destructive) { authViewModel.signOut(appState: appState, context: modelContext) }
+                if syncEngine.pendingCount > 0 {
+                    // Don't let a rep silently destroy un-uploaded sales/knocks.
+                    Button("Sync \(syncEngine.pendingCount) item\(syncEngine.pendingCount == 1 ? "" : "s") first") {
+                        syncEngine.triggerSync(context: modelContext)
+                    }
+                    Button("Sign out anyway", role: .destructive) {
+                        authViewModel.signOut(appState: appState, context: modelContext)
+                    }
+                } else {
+                    Button("Sign out", role: .destructive) {
+                        authViewModel.signOut(appState: appState, context: modelContext)
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll need to sign in again to record knocks.")
+                if syncEngine.pendingCount > 0 {
+                    Text("\(syncEngine.pendingCount) item\(syncEngine.pendingCount == 1 ? " hasn't" : "s haven't") synced yet. Signing out now will lose \(syncEngine.pendingCount == 1 ? "it" : "them"). Sync first?")
+                } else {
+                    Text("You'll need to sign in again to record knocks.")
+                }
             }
         }
         .task { await viewModel.load(appState: appState) }
@@ -97,9 +131,9 @@ struct ProfileView: View {
             MeStatCard(label: "REVENUE TODAY",
                        value: viewModel.revenueFormatted,
                        sub: "donor GMV", subTone: .muted)
-            MeStatCard(label: "COMMISSION ACCRUED",
+            MeStatCard(label: "SIGNED TODAY",
                        value: viewModel.commissionFormatted,
-                       sub: "pre-payout", subTone: .muted)
+                       sub: "gross volume", subTone: .muted)
         }
     }
 
@@ -168,6 +202,54 @@ struct ProfileView: View {
                     Divider().padding(.leading, 52)
                     Button { showSignOutConfirm = true } label: {
                         rowLabel(icon: "rectangle.portrait.and.arrow.right", title: "Sign out", tint: D2DColor.ink)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Sync (manual "Sync now" + dead-letter surfacing)
+
+    private var syncSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("SYNC")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(D2DColor.soft)
+                .tracking(0.5)
+            D2DCard(padded: false) {
+                VStack(spacing: 0) {
+                    if syncEngine.pendingCount > 0 {
+                        Button { syncEngine.triggerSync(context: modelContext) } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "arrow.clockwise.icloud")
+                                    .font(.system(size: 16)).foregroundStyle(D2DColor.accent).frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Sync now").font(.system(size: 15, weight: .semibold)).foregroundStyle(D2DColor.ink)
+                                    Text("\(syncEngine.pendingCount) item\(syncEngine.pendingCount == 1 ? "" : "s") waiting to upload")
+                                        .font(.system(size: 12)).foregroundStyle(D2DColor.muted)
+                                }
+                                Spacer()
+                                if syncEngine.isSyncing { ProgressView() }
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 14).contentShape(Rectangle())
+                        }
+                    }
+                    if syncEngine.pendingCount > 0 && syncEngine.deadLetterCount > 0 {
+                        Divider().padding(.leading, 52)
+                    }
+                    if syncEngine.deadLetterCount > 0 {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 16)).foregroundStyle(D2DColor.warn).frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(syncEngine.deadLetterCount) item\(syncEngine.deadLetterCount == 1 ? "" : "s") couldn't sync")
+                                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(D2DColor.ink)
+                                Text("Tell your manager so these aren't lost")
+                                    .font(.system(size: 12)).foregroundStyle(D2DColor.muted)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 14)
                     }
                 }
             }
@@ -326,7 +408,7 @@ private struct LiveEarningsBanner: View {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(D2DColor.accent)
-                    Text("EARNED TODAY")
+                    Text("SIGNED TODAY")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.65))
                         .tracking(0.6)
@@ -341,7 +423,7 @@ private struct LiveEarningsBanner: View {
                     .contentTransition(.numericText(value: displayCents))
                     .scaleEffect(pulse ? 1.04 : 1.0)
 
-                Text(isOnShift ? "Accruing live · pre-payout" : "Commission accrued · pre-payout")
+                Text(isOnShift ? "Gross volume signed · paid at payout" : "Gross volume signed today · paid at payout")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -386,6 +468,6 @@ private struct LiveEarningsBanner: View {
             withAnimation(.easeIn(duration: 0.32).delay(0.18)) { pulse = false }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Earned today \(dollars), pre-payout.")
+        .accessibilityLabel("Signed today \(dollars) gross volume, paid at payout.")
     }
 }

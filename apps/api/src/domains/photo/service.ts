@@ -21,7 +21,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { RegionCode, Prisma } from '@prisma/client';
+import { Prisma, type RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
@@ -163,8 +163,8 @@ export async function capturePhoto(
               'KnockPhoto',
               id,
               input.addressLine,
-            ) as Prisma.JsonObject)
-          : null,
+            ) as unknown as Prisma.JsonObject)
+          : Prisma.DbNull,
         // mlLabels / mlProcessedAt are written by the ML pipeline, not capture.
       },
     });

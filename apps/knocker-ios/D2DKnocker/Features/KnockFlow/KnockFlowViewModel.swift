@@ -58,14 +58,23 @@ final class KnockFlowViewModel {
 
     // MARK: - Step transitions (never call save directly; always go through .saving)
 
-    /// Single-screen sheet: selecting a disposition only records it; the user
-    /// taps "Save knock" to commit (see `commit()`).
+    /// Single-screen sheet: selecting a disposition records it. A TERMINAL
+    /// disposition (not-home / refused / DNC / bad address — nothing to capture)
+    /// auto-commits on tap so the 80%-of-the-day case is a single tap → "record a
+    /// door in seconds". Lead/sale dispositions wait for the rep to fill the form.
     func selectDisposition(_ disposition: KnockDisposition) {
         selectedDisposition = disposition
+        if isTerminalDisposition { commit() }
     }
 
     /// Whether the chosen disposition is one where name/phone capture matters.
     var capturesLead: Bool { selectedDisposition?.requiresLeadForm ?? false }
+
+    /// A disposition with nothing to capture — saves immediately on tap.
+    var isTerminalDisposition: Bool {
+        guard let d = selectedDisposition else { return false }
+        return !d.requiresLeadForm && d != .convertedSale && d != .convertedDonation
+    }
 
     /// Commit the knock — triggers `.saving`, which fires `saveKnock`.
     func commit() {
@@ -134,6 +143,10 @@ final class KnockFlowViewModel {
         // Save lead and link via leadId + QUEUE it for sync
         var createdLeadId: UUID?
         if disposition.requiresLeadForm, !givenName.isEmpty || !phone.isEmpty {
+            // A signed sale IS written consent; a non-sale contactable lead carries
+            // the explicit consent toggle. Never store a contactable lead as
+            // consentGiven=false silently (TCPA/contactability record).
+            let effectiveConsent = isSale ? (consentGiven || hasSignature) : consentGiven
             let lead = Lead(
                 knockId:      knock.id,
                 orgId:        orgId,
@@ -141,7 +154,7 @@ final class KnockFlowViewModel {
                 familyName:   familyName,
                 phone:        phone,
                 email:        email,
-                consentGiven: consentGiven
+                consentGiven: effectiveConsent
             )
             lead.signatureLocalPath = signaturePath
             context.insert(lead)

@@ -48,6 +48,10 @@ struct ContentView: View {
                     .tag(Tab.me)
             }
             .tint(D2DColor.accent)
+            // Share the ONE app-owned sync engine with every tab + presented sheet
+            // (the knock sheet used to spin up a second engine that raced this one
+            // on the same queue, double-POSTing and burning the retry budget).
+            .environment(syncEngine)
             .task {
                 syncEngine.triggerSync(context: modelContext)
                 appState.pendingSyncCount = syncEngine.pendingCount
@@ -77,10 +81,14 @@ struct ContentView: View {
             // Keep the offline banner's queue count live from the real engine.
             .onChange(of: syncEngine.pendingCount) { _, c in appState.pendingSyncCount = c }
 
-            // Floating sync/offline banner — above all tabs, dismisses when synced
+            // Floating sync/offline banner — above all tabs, dismisses when synced.
+            // Purely visual: allowsHitTesting(false) guarantees the chip can NEVER
+            // intercept a swipe or tap, so it can't block scrolling on any tab even
+            // when a sync is stuck and the chip is pinned over the content.
             if appState.pendingSyncCount > 0 || !appState.isOnline {
                 SyncStatusBanner(count: appState.pendingSyncCount, isOnline: appState.isOnline)
                     .padding(.top, 8)
+                    .allowsHitTesting(false)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: appState.pendingSyncCount)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: appState.isOnline)

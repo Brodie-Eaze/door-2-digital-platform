@@ -15,7 +15,9 @@ struct KnockSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: KnockFlowViewModel
-    @State private var syncEngine = SyncEngine(keychain: KeychainService())
+    // The app-owned sync engine, injected from ContentView — NOT a second instance
+    // (two engines racing the same queue burned the retry budget on every save).
+    @Environment(SyncEngine.self) private var syncEngine
     @State private var showSignature = false
     @State private var photoItem: PhotosPickerItem?
     @State private var photoDialog = false
@@ -39,10 +41,14 @@ struct KnockSheetView: View {
                     errorView
                 case .done:
                     if let sale = viewModel.savedSale {
+                        // Honest: no per-rep commission rate exists client-side, so
+                        // we never present the customer's plan price as the rep's
+                        // earnings. The plan amount is echoed via amountLabel; the
+                        // "you earned" line is suppressed (commissionLabel: nil).
                         SaleWonView(customerName: sale.customerName,
                                     serviceName: sale.serviceName,
                                     amountLabel: sale.amountLabel,
-                                    commissionLabel: sale.amountLabel,
+                                    commissionLabel: nil,
                                     onDone: { dismiss() })
                     } else {
                         KnockSavedView(knock: viewModel.savedKnock, onDismiss: { dismiss() })
@@ -73,6 +79,13 @@ struct KnockSheetView: View {
         .task(id: viewModel.step) {
             if case .saving = viewModel.step {
                 await viewModel.saveKnock(context: modelContext, appState: appState, syncEngine: syncEngine)
+            }
+        }
+        .onChange(of: viewModel.step) { _, step in
+            // One-tap terminal dispositions: auto-dismiss after the brief "Knock
+            // saved" confirmation so the rep is back on the map in under a second.
+            if step == .done && viewModel.isTerminalDisposition {
+                Task { try? await Task.sleep(for: .seconds(0.7)); dismiss() }
             }
         }
         .sheet(isPresented: $showSignature) {
@@ -129,9 +142,9 @@ struct KnockSheetView: View {
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(D2DColor.ink)
                     } else {
-                        Text(viewModel.addressLine.isEmpty ? "Locating…" : viewModel.addressLine)
+                        Text(viewModel.addressLine.isEmpty ? "Address pending" : viewModel.addressLine)
                             .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(D2DColor.ink)
+                            .foregroundStyle(viewModel.addressLine.isEmpty ? D2DColor.muted : D2DColor.ink)
                     }
                 }
 
@@ -143,7 +156,9 @@ struct KnockSheetView: View {
                         .tracking(0.5)
                     DispositionPicker(
                         selected: $viewModel.selectedDisposition,
-                        onSelect: { viewModel.selectDisposition($0) }
+                        onSelect: { viewModel.selectDisposition($0) },
+                        saleLabel: saleLabel,
+                        saleDisposition: saleDisposition
                     )
                 }
 
@@ -186,6 +201,17 @@ struct KnockSheetView: View {
                                     .textContentType(.emailAddress)
                                     .autocapitalization(.none)
                             }
+                        }
+                        // Non-sale contactable lead: capture explicit consent (a
+                        // signed sale records consent via the signature instead).
+                        if !viewModel.isSale {
+                            Toggle(isOn: $viewModel.consentGiven) {
+                                Text("I have consent to contact this person")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(D2DColor.muted)
+                            }
+                            .tint(D2DColor.accent)
+                            .padding(.vertical, 2)
                         }
                         HStack(spacing: 12) {
                             Button {
@@ -324,8 +350,18 @@ struct KnockSheetView: View {
                 && !viewModel.givenName.trimmingCharacters(in: .whitespaces).isEmpty
                 && viewModel.hasSignature
         }
+        // A contactable lead that captured a phone number must carry consent.
+        if viewModel.capturesLead && !viewModel.phone.trimmingCharacters(in: .whitespaces).isEmpty {
+            return viewModel.consentGiven
+        }
         return true
     }
+
+    // MARK: - Org-configurable conversion tile (charity → DONOR, commercial → SALE)
+
+    private var isCharity: Bool { CatalogStore.shared.offerings.first?.vertical == "charity" }
+    private var saleLabel: String { isCharity ? "DONOR" : "SALE" }
+    private var saleDisposition: KnockDisposition { isCharity ? .convertedDonation : .convertedSale }
 
     /// Best-effort split of the geocoded address into a street line + city/state line.
     private var splitAddress: (String, String)? {
@@ -337,11 +373,24 @@ struct KnockSheetView: View {
     private func reverseGeocode() {
         let geocoder = CLGeocoder()
         let loc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let coordFallback = String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
+        // In a dead zone CLGeocoder never returns — never leave the header on a
+        // spinner. After 4s with no address, show the coordinates so the rep can
+        // still knock; the geocoder result replaces them if/when it lands.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            if viewModel.addressLine.isEmpty { viewModel.addressLine = coordFallback }
+        }
         geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
-            guard let pm = placemarks?.first else { return }
+            guard let pm = placemarks?.first else {
+                if viewModel.addressLine.isEmpty || viewModel.addressLine == coordFallback {
+                    viewModel.addressLine = coordFallback
+                }
+                return
+            }
             let street = [pm.subThoroughfare, pm.thoroughfare].compactMap { $0 }.joined(separator: " ")
             let region = [pm.locality, pm.administrativeArea, pm.postalCode].compactMap { $0 }.joined(separator: " ")
-            viewModel.addressLine = [street, region].filter { !$0.isEmpty }.joined(separator: ", ")
+            let joined = [street, region].filter { !$0.isEmpty }.joined(separator: ", ")
+            viewModel.addressLine = joined.isEmpty ? coordFallback : joined
         }
     }
 }

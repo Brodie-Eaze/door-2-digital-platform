@@ -61,7 +61,11 @@ struct D2DKnockerApp: App {
                 try await client.refresh()
                 appState.accessToken = keychain.accessToken
             } catch APIError.sessionExpired {
-                appState.signOut()
+                // Genuine session end → FULL PII wipe (DB rows + signature/photo
+                // files + keychain), not just clearing in-memory state. Previously
+                // this called appState.signOut() only, leaving the prior rep's
+                // leads/sales/signatures on a shared device for the next sign-in.
+                AuthViewModel().signOut(appState: appState, context: sharedModelContainer.mainContext)
             } catch {
                 // Transient (offline / timeout) — keep the restored session; the
                 // 401→refresh retry will recover once connectivity returns.
