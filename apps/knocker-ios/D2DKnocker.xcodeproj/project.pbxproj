@@ -653,9 +653,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATS_ALLOWS_ARBITRARY_LOADS = YES;
 				CODE_SIGN_ENTITLEMENTS = D2DKnocker/D2DKnocker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				"D2D_API_BASE_URL[sdk=iphoneos*]" = "http://192.168.20.41:3010/v1";
+				D2D_API_BASE_URL = "http://localhost:3010/v1";
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = D2DKnocker/Info.plist;
@@ -680,9 +683,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATS_ALLOWS_ARBITRARY_LOADS = NO;
 				CODE_SIGN_ENTITLEMENTS = D2DKnocker/D2DKnocker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				D2D_API_BASE_URL = "https://api.d2d.io/v1";
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = D2DKnocker/Info.plist;

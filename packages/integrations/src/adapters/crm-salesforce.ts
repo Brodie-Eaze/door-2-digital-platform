@@ -23,9 +23,10 @@ import type {
   PushLeadOutput,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing } from './stub';
 
 const SF_API_VERSION = 'v59.0' as const;
+const SF_TIMEOUT_MS = 10_000 as const;
 
 export function createCrmSalesforceAdapter(): ProviderAdapter {
   const kind = 'crm_salesforce' as const;
@@ -65,38 +66,43 @@ export function createCrmSalesforceAdapter(): ProviderAdapter {
     docsUrl: 'https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Salesforce', 'sf_stub') };
       }
       const c = requireCreds(config);
       if (!c.ok) return c;
-      try {
-        const res = await fetch(`${c.data.instanceUrl}/services/data/${SF_API_VERSION}/`, {
-          headers: authHeaders(c.data.accessToken),
-        });
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `Salesforce ping ${res.status}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
-        const host = new URL(c.data.instanceUrl).hostname;
+      const r = await fetchWithTimeout(
+        kind,
+        `${c.data.instanceUrl}/services/data/${SF_API_VERSION}/`,
+        { headers: authHeaders(c.data.accessToken) },
+        SF_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
+      if (!res.ok) {
         return {
-          ok: true,
-          data: { accountLabel: `Salesforce · ${host}`, accountId: host },
+          ok: false,
+          error: new ProviderError(
+            'PROVIDER_5XX',
+            `Salesforce ping ${res.status}`,
+            kind,
+            res.status,
+          ),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const host = new URL(c.data.instanceUrl).hostname;
+      return {
+        ok: true,
+        data: { accountLabel: `Salesforce · ${host}`, accountId: host },
+      };
     },
 
     async pushLead(input: PushLeadInput, config: ProviderConfig): Promise<Result<PushLeadOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const externalId = `sf_lead_stub_${shortHash(input.leadId)}`;
         return { ok: true, data: { externalId } };
       }
@@ -116,40 +122,45 @@ export function createCrmSalesforceAdapter(): ProviderAdapter {
         ...(input.phone && { Phone: input.phone }),
       };
 
-      try {
-        const res = await fetch(sfUrl(instanceUrl, 'Lead'), {
+      const r = await fetchWithTimeout(
+        kind,
+        sfUrl(instanceUrl, 'Lead'),
+        {
           method: 'POST',
           headers: authHeaders(accessToken),
           body: JSON.stringify(body),
-        });
+        },
+        SF_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `Salesforce Lead POST ${res.status}: ${errText}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
-
-        const json = (await res.json()) as { id: string };
-        const externalId = json.id;
-        const externalUrl = `${instanceUrl}/lightning/r/Lead/${externalId}/view`;
-        return { ok: true, data: { externalId, externalUrl } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        return {
+          ok: false,
+          error: new ProviderError(
+            'PROVIDER_5XX',
+            `Salesforce Lead POST ${res.status}: ${errText}`,
+            kind,
+            res.status,
+          ),
+        };
       }
+
+      const json = (await res.json()) as { id: string };
+      const externalId = json.id;
+      const externalUrl = `${instanceUrl}/lightning/r/Lead/${externalId}/view`;
+      return { ok: true, data: { externalId, externalUrl } };
     },
 
     async pushConversion(
       input: PushConversionInput,
       config: ProviderConfig,
     ): Promise<Result<PushConversionOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const externalId = `sf_opp_stub_${shortHash(input.conversionId)}`;
         return { ok: true, data: { externalId } };
       }
@@ -168,33 +179,36 @@ export function createCrmSalesforceAdapter(): ProviderAdapter {
         CloseDate: closeDate,
       };
 
-      try {
-        const res = await fetch(sfUrl(instanceUrl, 'Opportunity'), {
+      const r = await fetchWithTimeout(
+        kind,
+        sfUrl(instanceUrl, 'Opportunity'),
+        {
           method: 'POST',
           headers: authHeaders(accessToken),
           body: JSON.stringify(body),
-        });
+        },
+        SF_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `Salesforce Opportunity POST ${res.status}: ${errText}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
-
-        const json = (await res.json()) as { id: string };
-        const externalId = json.id;
-        const externalUrl = `${instanceUrl}/lightning/r/Opportunity/${externalId}/view`;
-        return { ok: true, data: { externalId, externalUrl } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        return {
+          ok: false,
+          error: new ProviderError(
+            'PROVIDER_5XX',
+            `Salesforce Opportunity POST ${res.status}: ${errText}`,
+            kind,
+            res.status,
+          ),
+        };
       }
+
+      const json = (await res.json()) as { id: string };
+      const externalId = json.id;
+      const externalUrl = `${instanceUrl}/lightning/r/Opportunity/${externalId}/view`;
+      return { ok: true, data: { externalId, externalUrl } };
     },
   };
 }

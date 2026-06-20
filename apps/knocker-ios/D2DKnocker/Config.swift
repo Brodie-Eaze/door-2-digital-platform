@@ -7,18 +7,31 @@ import Foundation
 enum Config {
     // MARK: - API
 
+    /// API base URL, resolved per build configuration. The value comes from the
+    /// `D2D_API_BASE_URL` Info.plist key, which is substituted at build time from
+    /// the like-named build setting (Debug = localhost / Mac LAN IP, Release =
+    /// https://api.d2d.io/v1; override the Release setting to a Railway https URL
+    /// for staging). See STAGING.md.
+    ///
+    /// Three tiers:
+    ///   - Local dev (DEBUG):  http://localhost:3010/v1 (simulator) or the Mac's
+    ///       LAN IP (real device). A stray https value is ignored in DEBUG so the
+    ///       simulator never accidentally talks to staging/prod.
+    ///   - Staging (RELEASE):  whatever https staging URL the build setting injects.
+    ///   - Production (RELEASE default): https://api.d2d.io/v1.
     static let apiBaseURL: URL = {
         let plistValue = Bundle.main.object(forInfoDictionaryKey: "D2D_API_BASE_URL") as? String
         #if DEBUG
-        // Local dev: the simulator must reach the Fastify API on the host. The
-        // committed plist default is the production https URL (for release), so
-        // in DEBUG we ignore it unless it's an explicit local/http override and
-        // otherwise fall through to localhost.
+        // DEBUG only honours a plaintext/LAN/localhost override so a misconfigured
+        // https value can't pull the simulator off the local dev API. Anything
+        // else falls back to localhost.
         if let s = plistValue, !s.isEmpty,
            (s.hasPrefix("http://") || s.contains("localhost") || s.contains("127.0.0.1")),
            let url = URL(string: s) { return url }
         return URL(string: "http://localhost:3010/v1")!
         #else
+        // RELEASE (staging or production): trust the injected value (an https URL
+        // under ATS), else fall back to production.
         if let s = plistValue, !s.isEmpty, let url = URL(string: s) { return url }
         return URL(string: "https://api.d2d.io/v1")!
         #endif

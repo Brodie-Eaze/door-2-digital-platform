@@ -21,9 +21,10 @@ import type {
   PushLeadOutput,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing } from './stub';
 
 const HS_BASE = 'https://api.hubapi.com' as const;
+const HS_TIMEOUT_MS = 10_000 as const;
 
 /** Map D2D lead status to a HubSpot hs_lead_status value. */
 function mapStatus(status: string): string {
@@ -71,37 +72,37 @@ export function createCrmHubSpotAdapter(): ProviderAdapter {
     docsUrl: 'https://developers.hubspot.com/docs/api/crm/contacts',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('HubSpot', 'hs_stub') };
       }
       const c = requireCreds(config);
       if (!c.ok) return c;
-      try {
-        const res = await fetch(`${HS_BASE}/crm/v3/objects/contacts?limit=1`, {
-          headers: authHeaders(c.data.accessToken),
-        });
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `HubSpot ping ${res.status}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
+      const r = await fetchWithTimeout(
+        kind,
+        `${HS_BASE}/crm/v3/objects/contacts?limit=1`,
+        { headers: authHeaders(c.data.accessToken) },
+        HS_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
+      if (!res.ok) {
         return {
-          ok: true,
-          data: { accountLabel: `HubSpot Portal ${c.data.portalId}`, accountId: c.data.portalId },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `HubSpot ping ${res.status}`, kind, res.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      return {
+        ok: true,
+        data: { accountLabel: `HubSpot Portal ${c.data.portalId}`, accountId: c.data.portalId },
+      };
     },
 
     async pushLead(input: PushLeadInput, config: ProviderConfig): Promise<Result<PushLeadOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const externalId = `hs_contact_stub_${shortHash(input.leadId)}`;
         return { ok: true, data: { externalId } };
       }
@@ -120,40 +121,45 @@ export function createCrmHubSpotAdapter(): ProviderAdapter {
         ...(input.phone && { phone: input.phone }),
       };
 
-      try {
-        const res = await fetch(`${HS_BASE}/crm/v3/objects/contacts`, {
+      const r = await fetchWithTimeout(
+        kind,
+        `${HS_BASE}/crm/v3/objects/contacts`,
+        {
           method: 'POST',
           headers: authHeaders(accessToken),
           body: JSON.stringify({ properties }),
-        });
+        },
+        HS_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `HubSpot contacts POST ${res.status}: ${errText}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
-
-        const json = (await res.json()) as { id: string };
-        const externalId = json.id;
-        const externalUrl = `https://app.hubspot.com/contacts/${portalId}/contact/${externalId}`;
-        return { ok: true, data: { externalId, externalUrl } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        return {
+          ok: false,
+          error: new ProviderError(
+            'PROVIDER_5XX',
+            `HubSpot contacts POST ${res.status}: ${errText}`,
+            kind,
+            res.status,
+          ),
+        };
       }
+
+      const json = (await res.json()) as { id: string };
+      const externalId = json.id;
+      const externalUrl = `https://app.hubspot.com/contacts/${portalId}/contact/${externalId}`;
+      return { ok: true, data: { externalId, externalUrl } };
     },
 
     async pushConversion(
       input: PushConversionInput,
       config: ProviderConfig,
     ): Promise<Result<PushConversionOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const externalId = `hs_deal_stub_${shortHash(input.conversionId)}`;
         return { ok: true, data: { externalId } };
       }
@@ -173,33 +179,36 @@ export function createCrmHubSpotAdapter(): ProviderAdapter {
         pipeline: 'default',
       };
 
-      try {
-        const res = await fetch(`${HS_BASE}/crm/v3/objects/deals`, {
+      const r = await fetchWithTimeout(
+        kind,
+        `${HS_BASE}/crm/v3/objects/deals`,
+        {
           method: 'POST',
           headers: authHeaders(accessToken),
           body: JSON.stringify({ properties }),
-        });
+        },
+        HS_TIMEOUT_MS,
+      );
+      if (!r.ok) return r;
+      const res = r.data;
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          return {
-            ok: false,
-            error: new ProviderError(
-              'PROVIDER_5XX',
-              `HubSpot deals POST ${res.status}: ${errText}`,
-              kind,
-              res.status,
-            ),
-          };
-        }
-
-        const json = (await res.json()) as { id: string };
-        const externalId = json.id;
-        const externalUrl = `https://app.hubspot.com/contacts/${portalId}/deal/${externalId}`;
-        return { ok: true, data: { externalId, externalUrl } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        return {
+          ok: false,
+          error: new ProviderError(
+            'PROVIDER_5XX',
+            `HubSpot deals POST ${res.status}: ${errText}`,
+            kind,
+            res.status,
+          ),
+        };
       }
+
+      const json = (await res.json()) as { id: string };
+      const externalId = json.id;
+      const externalUrl = `https://app.hubspot.com/contacts/${portalId}/deal/${externalId}`;
+      return { ok: true, data: { externalId, externalUrl } };
     },
   };
 }

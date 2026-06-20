@@ -21,9 +21,10 @@ import type {
   ProviderWebhookEvent,
   Result,
 } from '../types';
-import { isStubMode, stubJobStatus, stubPing, stubVideo } from './stub';
+import { fetchWithTimeout, guardProduction, stubJobStatus, stubPing, stubVideo } from './stub';
 
 const HIGGSFIELD_BASE = 'https://api.higgsfield.ai/v1' as const;
+const HIGGSFIELD_TIMEOUT_MS = 30_000 as const;
 
 export function createHiggsfieldAdapter(): ProviderAdapter {
   const kind = 'higgsfield' as const;
@@ -35,43 +36,47 @@ export function createHiggsfieldAdapter(): ProviderAdapter {
     docsUrl: 'https://docs.higgsfield.ai',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Higgsfield', 'hf_demo') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${HIGGSFIELD_BASE}/account`, {
-          headers: { 'x-api-key': apiKey },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Higgsfield ping ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string; email?: string };
+      const rr = await fetchWithTimeout(kind, `${HIGGSFIELD_BASE}/account`, {
+        headers: { 'x-api-key': apiKey },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: { accountLabel: json.email ?? json.id, accountId: json.id },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Higgsfield ping ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { id: string; email?: string };
+      return {
+        ok: true,
+        data: { accountLabel: json.email ?? json.id, accountId: json.id },
+      };
     },
 
     async generateVideo(input: GenerateVideoInput, config: ProviderConfig) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubVideo(input.prompt, 120) };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${HIGGSFIELD_BASE}/jobs`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${HIGGSFIELD_BASE}/jobs`,
+        {
           method: 'POST',
           headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -80,25 +85,25 @@ export function createHiggsfieldAdapter(): ProviderAdapter {
             aspect_ratio: input.aspectRatio,
             style_ref: input.styleRef,
           }),
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Higgsfield ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string; estimated_ready_at?: string };
+        },
+        HIGGSFIELD_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            jobId: json.id,
-            estimatedReadyAt:
-              json.estimated_ready_at ?? new Date(Date.now() + 120_000).toISOString(),
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Higgsfield ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { id: string; estimated_ready_at?: string };
+      return {
+        ok: true,
+        data: {
+          jobId: json.id,
+          estimatedReadyAt: json.estimated_ready_at ?? new Date(Date.now() + 120_000).toISOString(),
+        },
+      };
     },
 
     async pollJob(
@@ -106,7 +111,9 @@ export function createHiggsfieldAdapter(): ProviderAdapter {
       config: ProviderConfig,
       createdAtMs?: number,
     ): Promise<Result<JobStatus>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const s = stubJobStatus(jobId, createdAtMs);
         return { ok: true, data: s };
       }
@@ -114,28 +121,26 @@ export function createHiggsfieldAdapter(): ProviderAdapter {
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${HIGGSFIELD_BASE}/jobs/${jobId}`, {
-          headers: { 'x-api-key': apiKey },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Higgsfield ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { status: string; url?: string; error?: string };
-        // Higgsfield: queued | running | ready | failed
-        if (json.status === 'ready') {
-          return { ok: true, data: { status: 'ready', output: { url: json.url } } };
-        }
-        if (json.status === 'failed') {
-          return { ok: true, data: { status: 'failed', error: json.error ?? 'unknown' } };
-        }
-        return { ok: true, data: { status: 'running' } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      const rr = await fetchWithTimeout(kind, `${HIGGSFIELD_BASE}/jobs/${jobId}`, {
+        headers: { 'x-api-key': apiKey },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Higgsfield ${r.status}`, kind, r.status),
+        };
       }
+      const json = (await r.json()) as { status: string; url?: string; error?: string };
+      // Higgsfield: queued | running | ready | failed
+      if (json.status === 'ready') {
+        return { ok: true, data: { status: 'ready', output: { url: json.url } } };
+      }
+      if (json.status === 'failed') {
+        return { ok: true, data: { status: 'failed', error: json.error ?? 'unknown' } };
+      }
+      return { ok: true, data: { status: 'running' } };
     },
 
     async parseWebhook(rawBody, headers, config): Promise<Result<ProviderWebhookEvent>> {

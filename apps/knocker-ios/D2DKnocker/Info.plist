@@ -21,19 +21,35 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>D2D_API_BASE_URL</key>
-	<!-- DEMO: points DEBUG builds (sim + physical device on the same Wi-Fi) at the
-	     Mac's LAN IP so a real iPhone can reach the local API. Find your current IP
-	     with `ipconfig getifaddr en0` and update the host if it changes. RELEASE
-	     builds ignore this and use the production https URL fallback in Config. -->
-	<string>http://192.168.20.41:3010/v1</string>
+	<!-- Env-driven, substituted at build time from the D2D_API_BASE_URL build
+	     setting (see project.pbxproj / STAGING.md). Resolves per configuration:
+	       Debug   (iphoneos)  -> http://<Mac LAN IP>:3010/v1  (real device on same Wi-Fi)
+	       Debug   (simulator) -> http://localhost:3010/v1
+	       Release (default)   -> https://api.d2d.io/v1        (production)
+	       Release (staging)   -> override to https://STAGING-API-HOST/v1
+	     To repoint a real-device Debug build, edit the Debug
+	     "D2D_API_BASE_URL[sdk=iphoneos*]" build setting (current LAN IP via
+	     `ipconfig getifaddr en0`). Config.swift still guards DEBUG so a stray
+	     https value never overrides localhost in the simulator. -->
+	<string>$(D2D_API_BASE_URL)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- DEBUG: allows plaintext HTTP to any host so the simulator can reach
-		     the Fastify API on the Mac's LAN IP (192.168.x.x). ATS is re-enabled
-		     for production releases via scheme-conditional build settings. -->
+		<!-- ATS is build-config driven via the ATS_ALLOWS_ARBITRARY_LOADS build
+		     setting (Debug = YES, Release = NO; see project.pbxproj).
+		       Debug   -> NSAllowsArbitraryLoads = YES: plaintext HTTP to the local
+		                  Fastify API (localhost / Mac LAN IP) is permitted.
+		       Release -> NSAllowsArbitraryLoads = NO:  ATS is enforced, so only
+		                  https is allowed. Production (api.d2d.io) and a Railway
+		                  https staging host both satisfy ATS with NO exception.
+		     NSAllowsLocalNetworking stays YES so a local-network plaintext dev API
+		     keeps working even under an ATS-enforced (Release) build if someone
+		     manually points a Release build at a LAN host for testing; it never
+		     loosens ATS for public/internet hosts. -->
 		<key>NSAllowsArbitraryLoads</key>
+		<string>$(ATS_ALLOWS_ARBITRARY_LOADS)</string>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>LSRequiresIPhoneOS</key>

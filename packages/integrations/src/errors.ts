@@ -49,6 +49,36 @@ export class StubModeError extends ProviderError {
   }
 }
 
+/**
+ * Raised when a provider is configured for `mode: 'production'` but its
+ * credentials are missing or blank. This is the FAIL-CLOSED guard: in
+ * production we must NEVER silently fall through to stub data — the operator
+ * has to be told to supply real credentials. Distinct from `InvalidConfigError`
+ * (malformed creds) so dashboards can surface "needs production credentials"
+ * specifically.
+ */
+export class CredentialsRequiredError extends ProviderError {
+  constructor(kind: string, detail = 'production mode requires real credentials') {
+    super('CREDENTIALS_REQUIRED', `Provider ${kind}: ${detail}`, kind, 424);
+    this.name = 'CredentialsRequiredError';
+  }
+}
+
+/**
+ * Raised when an outbound provider call exceeds its timeout budget. Carries
+ * the elapsed budget so callers/dashboards can distinguish a slow partner from
+ * an outright failure.
+ */
+export class ProviderTimeoutError extends ProviderError {
+  constructor(
+    kind: string,
+    public timeoutMs: number,
+  ) {
+    super('TIMEOUT', `Provider ${kind} call timed out after ${timeoutMs}ms`, kind, 504);
+    this.name = 'ProviderTimeoutError';
+  }
+}
+
 export class UnsupportedOperationError extends ProviderError {
   constructor(kind: string, operation: string) {
     super('UNSUPPORTED', `Provider ${kind} does not implement ${operation}`, kind, 400);

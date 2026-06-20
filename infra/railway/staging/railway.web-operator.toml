@@ -1,0 +1,53 @@
+# =============================================================================
+# Railway service config — D2D Operator Console (Next.js standalone) — STAGING
+# =============================================================================
+# Service name on Railway:  d2d-web-operator-staging
+# Branch tracked:           staging
+# Port contract:            web-operator = 3000  (api = 3010)
+#
+# Link this file in Railway: Service → Settings → Config-as-Code → set path to
+#   infra/railway/staging/railway.web-operator.toml
+# Or deploy ad hoc:  railway up --service d2d-web-operator-staging --detach
+#
+# Next's standalone server.js reads PORT from the environment at runtime.
+# Railway injects PORT automatically — DO NOT set a PORT variable in the
+# dashboard. The Dockerfile default (PORT=3000) only governs local `docker run`
+# and guarantees the web surface never defaults onto the API's 3010 again.
+#
+# CRITICAL — NEXT_PUBLIC_* are BUILD-TIME, burned into the bundle:
+#   NEXT_PUBLIC_API_URL must be set as a Railway *build* variable BEFORE the
+#   image is built, pointing at the staging API public URL. The CSP connect-src
+#   and the /proxy/api/* rewrite both read it. Changing it requires a rebuild,
+#   not just a redeploy.
+# =============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.web-operator"
+
+[deploy]
+# Next standalone entrypoint. server.js honors PORT (Railway-injected).
+startCommand = "node apps/web-operator/server.js"
+healthcheckPath = "/login"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+numReplicas = 1
+
+# -----------------------------------------------------------------------------
+# Variables to set in Railway dashboard (NOT here):
+#
+#   BUILD-TIME (must exist before build; burned into the bundle):
+#     NEXT_PUBLIC_API_URL = https://${{ d2d-api-staging.RAILWAY_PUBLIC_DOMAIN }}
+#     NEXT_PUBLIC_WS_URL  = wss://${{ d2d-api-staging.RAILWAY_PUBLIC_DOMAIN }}
+#     NEXT_PUBLIC_ENV     = staging
+#
+#   RUNTIME (server-side route handlers read these):
+#     JWT_ACCESS_SECRET     = (same value as the API service — session verify)
+#     SESSION_COOKIE_SECRET = (fallback for JWT_ACCESS_SECRET; set one or both)
+#     AUDIT_CHAIN_SECRET    = (same value as the API service)
+#     PII_SEARCH_KEY        = (same value as the API service)
+#     DEMO_MODE_ENABLED     = false   (true only for a no-API demo build)
+#
+# Full required/optional variable list: .env.staging.example + docs/STAGING-DEPLOY.md
+# -----------------------------------------------------------------------------

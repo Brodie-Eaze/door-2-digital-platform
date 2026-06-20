@@ -31,6 +31,9 @@ FROM node:${NODE_VERSION}-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl tini
 WORKDIR /repo
 ENV NODE_ENV=production
+# PORT CONTRACT (see docs/STAGING-DEPLOY.md): api = 3010, web-operator = 3000.
+# The Fastify app reads PORT via Zod (apps/api/src/config/env.ts, default 3010).
+# Railway injects its own PORT at runtime, which overrides this ENV default.
 ENV PORT=3010
 ENV HOST=0.0.0.0
 # HARDENING-LOG P0-perf: expand libuv thread pool so scrypt password hashing

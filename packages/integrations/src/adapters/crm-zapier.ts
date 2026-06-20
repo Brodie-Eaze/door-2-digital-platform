@@ -24,7 +24,56 @@ import type {
   PushLeadOutput,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing } from './stub';
+
+const ZAPIER_TIMEOUT_MS = 10_000 as const;
+
+/**
+ * Validate an operator-supplied webhook URL before we POST PII to it.
+ * Zapier webhooks are caller-controlled, so this is an SSRF surface: we only
+ * allow https URLs to a real (non-loopback / non-internal) host. Returns the
+ * parsed URL or an error.
+ */
+function validateWebhookUrl(kind: string, raw: string | undefined): Result<URL> {
+  if (!raw || raw.length < 10) {
+    return { ok: false, error: new InvalidConfigError(kind, 'credentials.webhookUrl is required') };
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return {
+      ok: false,
+      error: new InvalidConfigError(kind, 'credentials.webhookUrl is malformed'),
+    };
+  }
+  if (url.protocol !== 'https:') {
+    return {
+      ok: false,
+      error: new InvalidConfigError(kind, 'credentials.webhookUrl must be https'),
+    };
+  }
+  const host = url.hostname.toLowerCase();
+  const blocked =
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.local') ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    host === '[::1]';
+  if (blocked) {
+    return {
+      ok: false,
+      error: new InvalidConfigError(kind, 'credentials.webhookUrl resolves to a blocked host'),
+    };
+  }
+  return { ok: true, data: url };
+}
 
 export function createCrmZapierAdapter(): ProviderAdapter {
   const kind = 'crm_zapier' as const;
@@ -36,17 +85,15 @@ export function createCrmZapierAdapter(): ProviderAdapter {
     payload: Record<string, unknown>,
     stubId: string,
   ): Promise<Result<T>> {
-    if (isStubMode(config)) {
+    const g = guardProduction(config, kind);
+    if (!g.ok) return g;
+    if (g.stub) {
       return { ok: true, data: { externalId: `zapier_stub_${shortHash(stubId)}` } as T };
     }
 
-    const webhookUrl = config.credentials.webhookUrl;
-    if (!webhookUrl || webhookUrl.length < 10) {
-      return {
-        ok: false,
-        error: new InvalidConfigError(kind, 'credentials.webhookUrl is required'),
-      };
-    }
+    const v = validateWebhookUrl(kind, config.credentials.webhookUrl);
+    if (!v.ok) return v;
+    const webhookUrl = v.data.toString();
 
     const body = JSON.stringify({ event: eventType, ...payload, _d2d_id: id });
 
@@ -60,26 +107,29 @@ export function createCrmZapierAdapter(): ProviderAdapter {
       headers['D2D-Signature'] = `sha256=${sig}`;
     }
 
-    try {
-      const res = await fetch(webhookUrl, { method: 'POST', headers, body });
-      if (!res.ok) {
-        return {
-          ok: false,
-          error: new ProviderError(
-            'PROVIDER_5XX',
-            `Zapier webhook returned ${res.status}`,
-            kind,
-            res.status,
-          ),
-        };
-      }
-      // Zapier returns {"status":"success","id":"<id>"} on success.
-      const json = (await res.json().catch(() => ({}))) as { id?: string; request_id?: string };
-      const externalId = json.id ?? json.request_id ?? `zapier_${shortHash(id + Date.now())}`;
-      return { ok: true, data: { externalId } as T };
-    } catch (e) {
-      return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+    const r = await fetchWithTimeout(
+      kind,
+      webhookUrl,
+      { method: 'POST', headers, body },
+      ZAPIER_TIMEOUT_MS,
+    );
+    if (!r.ok) return r;
+    const res = r.data;
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: new ProviderError(
+          'PROVIDER_5XX',
+          `Zapier webhook returned ${res.status}`,
+          kind,
+          res.status,
+        ),
+      };
     }
+    // Zapier returns {"status":"success","id":"<id>"} on success.
+    const json = (await res.json().catch(() => ({}))) as { id?: string; request_id?: string };
+    const externalId = json.id ?? json.request_id ?? `zapier_${shortHash(id + Date.now())}`;
+    return { ok: true, data: { externalId } as T };
   }
 
   return {
@@ -89,17 +139,16 @@ export function createCrmZapierAdapter(): ProviderAdapter {
     docsUrl: 'https://zapier.com/apps/webhook/integrations',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Zapier', 'zapier_stub') };
       }
-      const url = config.credentials.webhookUrl ?? '';
-      if (!url || url.length < 10) {
-        return {
-          ok: false,
-          error: new InvalidConfigError(kind, 'credentials.webhookUrl is required'),
-        };
-      }
-      const tail = url.slice(-12);
+      const v = validateWebhookUrl(kind, config.credentials.webhookUrl);
+      if (!v.ok) return v;
+      // We never GET a Zapier catch-hook (it would fire the Zap); validating the
+      // URL shape + host is the strongest non-destructive credential check.
+      const tail = v.data.toString().slice(-12);
       return { ok: true, data: { accountLabel: `Zapier Webhook · configured`, accountId: tail } };
     },
 

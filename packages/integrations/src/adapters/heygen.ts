@@ -23,10 +23,11 @@ import type {
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubAvatar, stubJobStatus, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, stubAvatar, stubJobStatus, stubPing } from './stub';
 
 const HEYGEN_BASE_V2 = 'https://api.heygen.com/v2' as const;
 const HEYGEN_BASE_V1 = 'https://api.heygen.com/v1' as const;
+const HEYGEN_TIMEOUT_MS = 30_000 as const;
 
 export function createHeyGenAdapter(): ProviderAdapter {
   const kind = 'heygen_avatar' as const;
@@ -38,47 +39,51 @@ export function createHeyGenAdapter(): ProviderAdapter {
     docsUrl: 'https://docs.heygen.com',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('HeyGen', 'hg_demo') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${HEYGEN_BASE_V1}/user/remaining_quota`, {
-          headers: { 'x-api-key': apiKey },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { data?: { remaining_quota?: number } };
-        const remaining = json.data?.remaining_quota ?? 0;
+      const rr = await fetchWithTimeout(kind, `${HEYGEN_BASE_V1}/user/remaining_quota`, {
+        headers: { 'x-api-key': apiKey },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: { accountLabel: `HeyGen (quota ${remaining})`, accountId: 'hg' },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { data?: { remaining_quota?: number } };
+      const remaining = json.data?.remaining_quota ?? 0;
+      return {
+        ok: true,
+        data: { accountLabel: `HeyGen (quota ${remaining})`, accountId: 'hg' },
+      };
     },
 
     async generateAvatar(
       input: GenerateAvatarInput,
       config: ProviderConfig,
     ): Promise<Result<GenerateAvatarOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubAvatar(input.script, 150) };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${HEYGEN_BASE_V2}/video/generate`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${HEYGEN_BASE_V2}/video/generate`,
+        {
           method: 'POST',
           headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -93,24 +98,25 @@ export function createHeyGenAdapter(): ProviderAdapter {
             ],
             dimension: { width: 1280, height: 720 },
           }),
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { data: { video_id: string } };
+        },
+        HEYGEN_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            jobId: json.data.video_id,
-            estimatedReadyAt: new Date(Date.now() + 150_000).toISOString(),
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { data: { video_id: string } };
+      return {
+        ok: true,
+        data: {
+          jobId: json.data.video_id,
+          estimatedReadyAt: new Date(Date.now() + 150_000).toISOString(),
+        },
+      };
     },
 
     async pollJob(
@@ -118,7 +124,9 @@ export function createHeyGenAdapter(): ProviderAdapter {
       config: ProviderConfig,
       createdAtMs?: number,
     ): Promise<Result<JobStatus>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const s = stubJobStatus(jobId, createdAtMs);
         return { ok: true, data: s };
       }
@@ -126,38 +134,37 @@ export function createHeyGenAdapter(): ProviderAdapter {
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(
-          `${HEYGEN_BASE_V1}/video_status.get?video_id=${encodeURIComponent(jobId)}`,
-          { headers: { 'x-api-key': apiKey } },
-        );
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as {
-          data?: { status?: string; video_url?: string; error?: { message?: string } };
+      const rr = await fetchWithTimeout(
+        kind,
+        `${HEYGEN_BASE_V1}/video_status.get?video_id=${encodeURIComponent(jobId)}`,
+        { headers: { 'x-api-key': apiKey } },
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `HeyGen ${r.status}`, kind, r.status),
         };
-        const st = json.data?.status;
-        // HeyGen: pending | processing | completed | failed
-        if (st === 'completed') {
-          return {
-            ok: true,
-            data: { status: 'ready', output: { url: json.data?.video_url } },
-          };
-        }
-        if (st === 'failed') {
-          return {
-            ok: true,
-            data: { status: 'failed', error: json.data?.error?.message ?? 'unknown' },
-          };
-        }
-        return { ok: true, data: { status: 'running' } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as {
+        data?: { status?: string; video_url?: string; error?: { message?: string } };
+      };
+      const st = json.data?.status;
+      // HeyGen: pending | processing | completed | failed
+      if (st === 'completed') {
+        return {
+          ok: true,
+          data: { status: 'ready', output: { url: json.data?.video_url } },
+        };
+      }
+      if (st === 'failed') {
+        return {
+          ok: true,
+          data: { status: 'failed', error: json.data?.error?.message ?? 'unknown' },
+        };
+      }
+      return { ok: true, data: { status: 'running' } };
     },
   };
 }

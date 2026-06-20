@@ -23,13 +23,59 @@ import { requireTenant } from '../../shared/middleware/tenant-guard';
 import { prisma } from '../../config/db';
 import { PiiVaultService, type EncryptedField } from '../pii-vault/service';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { buildDefaultRegistry } from '@d2d/integrations';
+import { buildDefaultRegistry, hasRealCredentials } from '@d2d/integrations';
 import { createSequence, enrollLeadsInSequence } from './service';
 
 const CRM_KINDS = new Set(['crm_salesforce', 'crm_hubspot', 'crm_zapier'] as const);
 type CrmKind = 'crm_salesforce' | 'crm_hubspot' | 'crm_zapier';
 
 const crmKindSchema = z.enum(['crm_salesforce', 'crm_hubspot', 'crm_zapier']);
+
+/**
+ * Per-kind credential fields the operator MUST supply for production. Used to
+ * surface exactly which fields are still missing — never the values, only the
+ * names + whether each is present. (Optional fields like Zapier signingSecret
+ * are excluded.)
+ */
+const REQUIRED_CRED_FIELDS: Record<CrmKind, string[]> = {
+  crm_salesforce: ['instanceUrl', 'accessToken'],
+  crm_hubspot: ['accessToken', 'portalId'],
+  crm_zapier: ['webhookUrl'],
+};
+
+/**
+ * Operator-facing readiness verdict for a CRM integration. Computed without
+ * exposing any secret — only the NAMES of missing fields are returned.
+ *
+ *   - `ready`           production mode + all required creds present → live
+ *   - `sandbox`         sandbox/dev mode → serving stub data by design
+ *   - `needs_credentials` production mode but creds missing/blank → FAIL CLOSED
+ *   - `unconfigured`    no connection row at all
+ */
+type CrmReadiness = 'ready' | 'sandbox' | 'needs_credentials' | 'unconfigured';
+
+function computeReadiness(
+  kind: CrmKind,
+  mode: string,
+  credentials: Record<string, string>,
+): { readiness: CrmReadiness; missingFields: string[]; usingRealCredentials: boolean } {
+  const required = REQUIRED_CRED_FIELDS[kind];
+  const missingFields = required.filter((f) => {
+    const v = credentials[f];
+    return typeof v !== 'string' || v.trim().length === 0;
+  });
+  // `hasRealCredentials` is the SAME predicate the adapters fail-closed on, so
+  // the surfaced verdict can never disagree with runtime behavior.
+  const usingRealCredentials = hasRealCredentials({ credentials, mode: 'production' });
+
+  if (mode !== 'production') {
+    return { readiness: 'sandbox', missingFields, usingRealCredentials };
+  }
+  if (missingFields.length > 0 || !usingRealCredentials) {
+    return { readiness: 'needs_credentials', missingFields, usingRealCredentials };
+  }
+  return { readiness: 'ready', missingFields, usingRealCredentials };
+}
 
 const saveCrmIntegrationSchema = z
   .object({
@@ -80,7 +126,11 @@ export async function registerCrm(app: FastifyInstance): Promise<void> {
 
   // ── CRM outbound integration config ──────────────────────────────────────
 
-  // GET /v1/crm/integrations — list all configured CRM integrations for this org
+  // GET /v1/crm/integrations — list all configured CRM integrations for this org.
+  // Each row carries a `readiness` verdict (ready | sandbox | needs_credentials)
+  // and the NAMES of any still-missing required credential fields, so the
+  // operator can see at a glance which integrations need real prod creds.
+  // Secret VALUES are never returned.
   app.get('/integrations', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const rows = await prisma().providerConnection.findMany({
@@ -95,17 +145,50 @@ export async function registerCrm(app: FastifyInstance): Promise<void> {
         accountId: true,
         lastPingAt: true,
         lastPingStatus: true,
+        lastPingError: true,
         connectedAt: true,
+        credentialsVault: true,
       },
       orderBy: { connectedAt: 'asc' },
     });
-    return reply.code(200).send({
-      integrations: rows.map((r) => ({
-        ...r,
+
+    const integrations = rows.map((r) => {
+      let credentials: Record<string, string> = {};
+      if (r.credentialsVault) {
+        try {
+          credentials = unsealCrmCredentials(r.id, r.credentialsVault as unknown as EncryptedField);
+        } catch {
+          // Vault decrypt failure — treat as no usable creds (fail closed, not crash).
+          credentials = {};
+        }
+      }
+      const verdict = computeReadiness(r.kind as CrmKind, r.mode, credentials);
+      // Strip the vault blob — never leak ciphertext or values to the client.
+      const { credentialsVault: _omit, ...safe } = r;
+      void _omit;
+      return {
+        ...safe,
         lastPingAt: r.lastPingAt?.toISOString() ?? null,
         connectedAt: r.connectedAt.toISOString(),
-      })),
+        readiness: verdict.readiness,
+        usingRealCredentials: verdict.usingRealCredentials,
+        missingCredentialFields: verdict.missingFields,
+        requiredCredentialFields: REQUIRED_CRED_FIELDS[r.kind as CrmKind],
+      };
     });
+
+    // Also report which configurable CRM kinds have NO connection row yet, so
+    // the operator sees the full surface of what still needs setup.
+    const configured = new Set(rows.map((r) => r.kind));
+    const unconfigured = Array.from(CRM_KINDS)
+      .filter((k) => !configured.has(k))
+      .map((k) => ({
+        kind: k,
+        readiness: 'unconfigured' as const,
+        requiredCredentialFields: REQUIRED_CRED_FIELDS[k],
+      }));
+
+    return reply.code(200).send({ integrations, unconfigured });
   });
 
   // POST /v1/crm/integrations — save or update a CRM integration config
@@ -212,6 +295,10 @@ export async function registerCrm(app: FastifyInstance): Promise<void> {
         mode: conn.mode === 'production' ? ('production' as const) : ('sandbox' as const),
       };
 
+      // Readiness verdict, surfaced regardless of ping outcome so the operator
+      // can distinguish "creds work" from "no production creds supplied yet".
+      const verdict = computeReadiness(kind, conn.mode, credentials);
+
       const result = await adapter.ping(config);
 
       // Persist ping result
@@ -229,13 +316,21 @@ export async function registerCrm(app: FastifyInstance): Promise<void> {
         },
       });
 
+      const readinessBlock = {
+        readiness: verdict.readiness,
+        usingRealCredentials: verdict.usingRealCredentials,
+        missingCredentialFields: verdict.missingFields,
+        requiredCredentialFields: REQUIRED_CRED_FIELDS[kind],
+      };
+
       if (!result.ok) {
         return reply.code(422).send({
           ok: false,
           error: { code: result.error.code, message: result.error.message },
+          ...readinessBlock,
         });
       }
-      return reply.code(200).send({ ok: true, account: result.data });
+      return reply.code(200).send({ ok: true, account: result.data, ...readinessBlock });
     },
   );
 
