@@ -16,31 +16,76 @@ vi.mock('../../../config/redis', () => ({
 
 // Mock prisma, env, writeAudit, issueTokens, buildSaml and relay-state so
 // consumeAcs can run without a real database or SAML library.
-vi.mock('../../../config/db', () => ({
-  prisma: () => ({
-    org: {
-      findUnique: vi.fn().mockResolvedValue({
-        id: 'org_1',
-        slug: 'acme',
-        regionCode: 'US',
-        brandCode: 'd2d',
-        ssoConfiguration: {
-          id: 'sso_1',
+// The prisma() accessor returns the client; consumeAcs reaches for
+// .org.findUnique, .user.findUnique, .$transaction (which provisions a new
+// user via tx.user.create) and .ssoConfiguration.updateMany. The mock must
+// expose all of them, otherwise consumeAcs throws
+// "Cannot read properties of undefined (reading 'findUnique')" the moment it
+// hits the JIT match-or-provision step.
+const prismaMock = {
+  org: {
+    findUnique: vi.fn().mockResolvedValue({
+      id: 'org_1',
+      slug: 'acme',
+      regionCode: 'US',
+      brandCode: 'd2d',
+      ssoConfiguration: {
+        id: 'sso_1',
+        orgId: 'org_1',
+        status: 'active',
+        provider: 'okta',
+        entityId: 'https://idp.example.com',
+        ssoUrl: 'https://idp.example.com/sso',
+        certificateKey: '{}',
+        attributeMappingJson: { email: 'email', givenName: 'firstName', familyName: 'lastName' },
+        lastValidatedAt: null,
+      },
+    }),
+  },
+  user: {
+    // No matching user → consumeAcs takes the JIT-provision branch and runs
+    // the $transaction below.
+    findUnique: vi.fn().mockResolvedValue(null),
+    create: vi.fn().mockResolvedValue({
+      id: 'usr_test',
+      orgId: 'org_1',
+      email: 'user@example.com',
+      emailDigest: 'digest_abc',
+      givenName: 'Alice',
+      familyName: 'Smith',
+      role: 'knocker',
+      regionCode: 'US',
+      brandCode: 'd2d',
+      status: 'active',
+    }),
+  },
+  ssoConfiguration: {
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+  },
+  // $transaction is invoked with a callback (tx) => ...; run it with a tx that
+  // exposes the same user.create the provisioning path calls.
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
+    fn({
+      user: {
+        create: vi.fn().mockResolvedValue({
+          id: 'usr_test',
           orgId: 'org_1',
+          email: 'user@example.com',
+          emailDigest: 'digest_abc',
+          givenName: 'Alice',
+          familyName: 'Smith',
+          role: 'knocker',
+          regionCode: 'US',
+          brandCode: 'd2d',
           status: 'active',
-          provider: 'okta',
-          entityId: 'https://idp.example.com',
-          ssoUrl: 'https://idp.example.com/sso',
-          certificateKey: '{}',
-          attributeMappingJson: { email: 'email', givenName: 'firstName', familyName: 'lastName' },
-          lastValidatedAt: null,
-        },
-      }),
-    },
-    ssoConfiguration: {
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-    },
-  }),
+        }),
+      },
+    }),
+  ),
+};
+
+vi.mock('../../../config/db', () => ({
+  prisma: () => prismaMock,
 }));
 
 vi.mock('../../../config/env', () => ({
@@ -103,10 +148,29 @@ import { consumeAcs, truncateIp } from './service';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeValidateDep(assertionId: string | undefined = 'assert_unique_001') {
+// IMPORTANT: a default-parameter value is substituted whenever the argument is
+// `undefined`, so `makeValidateDep(undefined)` would NOT yield a profile with
+// an absent ID — it would silently fall back to the default and emit the
+// 'assert_unique_001' key. To genuinely exercise consumeAcs's SHA-256 fallback
+// branch you must build a no-ID profile explicitly (see makeNoIdValidateDep).
+function makeValidateDep(assertionId: string = 'assert_unique_001') {
   return {
     validate: vi.fn().mockResolvedValue({
       ID: assertionId,
+      nameID: 'user@example.com',
+      email: 'user@example.com',
+      firstName: 'Alice',
+      lastName: 'Smith',
+      issuer: 'https://idp.example.com',
+      nameIDFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+    }),
+  };
+}
+
+/** A validate seam whose profile carries NO assertion ID (IdP omitted it). */
+function makeNoIdValidateDep() {
+  return {
+    validate: vi.fn().mockResolvedValue({
       nameID: 'user@example.com',
       email: 'user@example.com',
       firstName: 'Alice',
@@ -157,7 +221,7 @@ describe('consumeAcs — SEC-004 replay defence', () => {
 
   it('falls back to a SHA-256 of the raw response when profile has no ID', async () => {
     setMock.mockResolvedValue('OK');
-    const deps = makeValidateDep(undefined); // no ID in profile
+    const deps = makeNoIdValidateDep(); // no ID in profile
     await consumeAcs(BASE_INPUT, deps);
     const key = setMock.mock.calls[0]?.[0] as string;
     // The key should NOT be 'saml:used-assertion:undefined'; it should be a hex digest.
