@@ -13,7 +13,7 @@
  */
 import type { RegionCode, Prisma, Vertical } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import type {
   CreateTerritoryRequest,
@@ -569,14 +569,17 @@ export async function claimTerritory(
     where: { orgId, territoryId, userId },
   });
 
-  let row;
-  if (existing) {
-    row = await prisma().territoryClaim.update({
-      where: { id: existing.id },
-      data: { claimedAt: now, expiresAt },
-    });
-  } else {
-    row = await prisma().territoryClaim.create({
+  // SEC-005 (C2) — write inside a tenant-pinned tx so the app.current_org_id
+  // GUC is set and the territory_claims RLS policy enforces the orgId at the DB
+  // level (not just the explicit `orgId` stamp). Mirrors catalog/conversion.
+  const row = await tenantTx(orgId, async (tx) => {
+    if (existing) {
+      return tx.territoryClaim.update({
+        where: { id: existing.id },
+        data: { claimedAt: now, expiresAt },
+      });
+    }
+    return tx.territoryClaim.create({
       data: {
         orgId,
         territoryId,
@@ -586,7 +589,7 @@ export async function claimTerritory(
         expiresAt,
       },
     });
-  }
+  });
 
   return toClaimPublic(row);
 }
@@ -599,8 +602,12 @@ export async function releaseClaim(
   userId: string,
   orgId: string,
 ): Promise<void> {
-  await prisma().territoryClaim.deleteMany({
-    where: { orgId, territoryId, userId },
+  // SEC-005 (C2) — delete inside a tenant-pinned tx so the territory_claims RLS
+  // policy scopes the DELETE to this org at the DB level.
+  await tenantTx(orgId, async (tx) => {
+    await tx.territoryClaim.deleteMany({
+      where: { orgId, territoryId, userId },
+    });
   });
 }
 

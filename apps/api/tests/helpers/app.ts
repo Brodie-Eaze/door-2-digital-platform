@@ -73,6 +73,7 @@ export async function truncateAll(): Promise<void> {
     'RefreshToken',
     'UserCredential',
     'TerritoryAssignment',
+    'territory_claims', // mapped name (TerritoryClaim @@map); no FK, order-free
     'Knock',
     'KnockSession',
     'LeadActivity',
