@@ -26,8 +26,9 @@ export const revalidate = 0;
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { slug: string; id: string; aid: string } },
+  { params: paramsPromise }: { params: Promise<{ slug: string; id: string; aid: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;

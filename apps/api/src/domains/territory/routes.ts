@@ -30,10 +30,15 @@ import {
   addAssignment,
   removeAssignment,
   heatmap,
+  claimTerritory,
+  releaseClaim,
+  getActiveClaims,
 } from './service';
+import { getTerritoryIntel } from '../satellite/service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
+import { prisma } from '../../config/db';
 
 interface TerritoryIdParams {
   id: string;
@@ -49,6 +54,14 @@ export async function registerTerritory(app: FastifyInstance): Promise<void> {
     status: 'live',
     phase: '1.2',
   }));
+
+  // GET /claims — all active (non-expired) claims for this org.
+  // Declared before /:id so Fastify doesn't capture "claims" as a param.
+  app.get('/claims', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const claims = await getActiveClaims(ctx.orgId);
+    return reply.code(200).send({ data: claims });
+  });
 
   // GET /heatmap — must be declared before GET /:id so Fastify doesn't
   // capture the literal segment as a route parameter.
@@ -123,6 +136,26 @@ export async function registerTerritory(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /v1/territories/:id/satellite — Planet Labs intel for a territory.
+  // Returns construction counts, satellite score, and basemap tile URL.
+  // 404 if territory doesn't belong to the caller's org (cross-tenant guard
+  // is inside getTerritoryIntel — returns 404 not 403).
+  app.get<{ Params: TerritoryIdParams }>(
+    '/:id/satellite',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      try {
+        const intel = await getTerritoryIntel(req.params.id, ctx.orgId);
+        return reply.code(200).send({ intel });
+      } catch (err: unknown) {
+        const e = err as { statusCode?: number };
+        if (e?.statusCode === 404) return reply.code(404).send({ error: 'not_found' });
+        throw err;
+      }
+    },
+  );
+
   // PATCH /v1/territories/:id
   app.patch<{ Params: TerritoryIdParams }>(
     '/:id',
@@ -174,6 +207,41 @@ export async function registerTerritory(app: FastifyInstance): Promise<void> {
         regionCode: ctx.regionCode as never,
       });
       return reply.code(200).send({ assignment: result });
+    },
+  );
+
+  // POST /v1/territories/:id/claims — claim a territory (upsert, 4-hour TTL).
+  app.post<{ Params: TerritoryIdParams }>(
+    '/:id/claims',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          // Resolve display name from the User row (JWT has no name claims).
+          const user = await prisma().user.findUnique({
+            where: { id: ctx.userId },
+            select: { givenName: true, familyName: true },
+          });
+          const userName = user ? `${user.givenName} ${user.familyName}`.trim() : ctx.userId;
+          const claim = await claimTerritory(req.params.id, ctx.userId, userName, ctx.orgId);
+          return { status: 200, body: claim };
+        },
+      });
+    },
+  );
+
+  // DELETE /v1/territories/:id/claims — release the caller's claim.
+  app.delete<{ Params: TerritoryIdParams }>(
+    '/:id/claims',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await releaseClaim(req.params.id, ctx.userId, ctx.orgId);
+      return reply.code(204).send();
     },
   );
 

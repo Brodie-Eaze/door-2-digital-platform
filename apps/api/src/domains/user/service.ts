@@ -309,7 +309,7 @@ export async function updateUser(
             'User',
             userId,
             input.givenName,
-          ) as Prisma.JsonObject,
+          ) as unknown as Prisma.InputJsonValue,
         }),
         ...(input.familyName !== undefined && {
           familyName: maskFamilyName(input.familyName),
@@ -317,13 +317,17 @@ export async function updateUser(
             'User',
             userId,
             input.familyName,
-          ) as Prisma.JsonObject,
+          ) as unknown as Prisma.InputJsonValue,
         }),
         ...(input.phone !== undefined && {
           phone: input.phone ? maskPhone(input.phone) : null,
           phoneVault: input.phone
-            ? (PiiVaultService.encryptForRow('User', userId, input.phone) as Prisma.JsonObject)
-            : null,
+            ? (PiiVaultService.encryptForRow(
+                'User',
+                userId,
+                input.phone,
+              ) as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
         }),
         ...(input.managerId !== undefined && { managerId: input.managerId }),
       },

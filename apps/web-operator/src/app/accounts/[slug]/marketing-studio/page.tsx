@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import Link from 'next/link';
 import {
   Sparkles,
@@ -39,7 +41,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const PIPELINE_STAGES: Array<{
@@ -56,7 +58,8 @@ const PIPELINE_STAGES: Array<{
   { key: 'measure', label: 'Measure', detail: 'conv attributed', icon: TrendingUp },
 ];
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 
@@ -414,38 +417,38 @@ export default function Page({ params }: PageProps): JSX.Element {
               <ul className="space-y-2.5">
                 {reviewQueue.map((c) => (
                   <li key={c.id}>
-                   <Link
-                    href={`/accounts/${params.slug}/marketing-studio/review-queue`}
-                    className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
-                   >
-                    <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
-                      <img
-                        src={pickCreativeImage(c.theme, c.id)}
-                        alt={c.headline}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
-                        {c.headline}
+                    <Link
+                      href={`/accounts/${params.slug}/marketing-studio/review-queue`}
+                      className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
+                    >
+                      <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
+                        <img
+                          src={pickCreativeImage(c.theme, c.id)}
+                          alt={c.headline}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
                       </div>
-                      <div className="text-[10.5px] text-muted mt-0.5">
-                        {CHANNEL_LABEL[c.channel]} · {c.format}
-                      </div>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
-                            {c.reviewerInitials ?? 'B'}
-                          </span>
-                          <span className="text-[10.5px] text-muted">
-                            {c.reviewerInitials ?? 'Brodie'}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
+                          {c.headline}
                         </div>
-                        <span className="text-[10px] text-soft mono">{c.id}</span>
+                        <div className="text-[10.5px] text-muted mt-0.5">
+                          {CHANNEL_LABEL[c.channel]} · {c.format}
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
+                              {c.reviewerInitials ?? 'B'}
+                            </span>
+                            <span className="text-[10.5px] text-muted">
+                              {c.reviewerInitials ?? 'Brodie'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-soft mono">{c.id}</span>
+                        </div>
                       </div>
-                    </div>
-                   </Link>
+                    </Link>
                   </li>
                 ))}
                 {reviewQueue.length === 0 && (

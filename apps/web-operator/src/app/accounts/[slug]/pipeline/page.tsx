@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
+import { use, useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
 import {
   Phone,
   Mail,
@@ -171,7 +171,12 @@ function apiLeadToCard(l: ApiPipelineLead): PipelineLead | null {
   };
 }
 
-export default function PipelinePage({ params }: { params: { slug: string } }): JSX.Element {
+export default function PipelinePage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const { account, leads: initialLeads } = accountData(params.slug);
 
   const initialEnriched: PipelineLead[] = useMemo(

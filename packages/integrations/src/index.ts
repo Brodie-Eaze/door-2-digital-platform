@@ -14,3 +14,6 @@
 export * from './types';
 export * from './errors';
 export * from './registry';
+export { createCrmZapierAdapter } from './adapters/crm-zapier';
+export { createCrmHubSpotAdapter } from './adapters/crm-hubspot';
+export { createCrmSalesforceAdapter } from './adapters/crm-salesforce';

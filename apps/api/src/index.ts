@@ -72,6 +72,9 @@ import { startConversionFinaliseWorker } from './workers/conversion-finalise.wor
 import { startContentGenerateWorker } from './workers/content-generate.worker';
 import { startAdDeliverWorker } from './workers/ad-deliver.worker';
 import { startGeoRefreshWorker } from './workers/geo-refresh.worker';
+import { startAddressEnrichWorker } from './workers/address-enrich.worker';
+import { startPlanetIntelWorker } from './workers/planet-intel.worker';
+import { registerPlanetInbound } from './inbound/planet';
 
 async function buildServer() {
   const e = env();
@@ -202,6 +205,50 @@ async function buildServer() {
   // Privacy ops (Phase 1.4)
   await app.register(registerDsar, { prefix: '/v1/dsar/requests' });
 
+  // Data intelligence inbound webhook (Planet Labs push delivery)
+  await app.register(registerPlanetInbound, { prefix: '/v1/inbound' });
+
+  // GET /v1/addresses/:id/intel — Snowflake enrichment score + features for an address.
+  // Read-only: queries the PropensityScore table written by the address-enrich worker.
+  await app.register(
+    async (intelApp) => {
+      const { requireAuth } = await import('./shared/middleware/auth-guard');
+      const { requireTenant } = await import('./shared/middleware/tenant-guard');
+      intelApp.get<{ Params: { id: string } }>(
+        '/:id/intel',
+        { preHandler: requireAuth },
+        async (req, reply) => {
+          const ctx = requireTenant(req);
+          const { prisma: db } = await import('./config/db');
+          const row = await db().propensityScore.findFirst({
+            where: {
+              geoType: 'address',
+              geoKey: req.params.id,
+              OR: [{ orgId: ctx.orgId }, { orgId: null }],
+            },
+            orderBy: { computedAt: 'desc' },
+          });
+          if (!row) return reply.code(404).send({ error: 'not_found' });
+          const features = (row.features ?? {}) as Record<string, unknown>;
+          return reply.code(200).send({
+            intel: {
+              score: row.score,
+              prizmName: features.prizmName ?? null,
+              prizmCode: features.prizmCode ?? null,
+              medianHhIncomeUsd: features.medianHhIncomeUsd ?? null,
+              charitablePropensity: features.charitablePropensity ?? null,
+              estimatedHomeValueUsd: features.estimatedHomeValueUsd ?? null,
+              ownerOccupancyRate: features.ownerOccupancyRate ?? null,
+              modelName: row.modelName,
+              computedAt: row.computedAt.toISOString(),
+            },
+          });
+        },
+      );
+    },
+    { prefix: '/v1/addresses' },
+  );
+
   // Marketing + AI content (Phase 3) — registry first so route handlers can dispatch.
   await app.register(registerIntegrations);
   await app.register(registerMarketing, { prefix: '/v1/marketing' });
@@ -242,8 +289,10 @@ async function main(): Promise<void> {
     startContentGenerateWorker();
     startAdDeliverWorker();
     startGeoRefreshWorker();
+    startAddressEnrichWorker();
+    startPlanetIntelWorker();
     logger().info(
-      'CRON_LEADER=true — all 13 workers started: audit-shipper, dnk-sync, lead-sequence, notification-send, webhook-deliver, commission-calc, payout-prepare, knock-sync, lead-routing, conversion-finalise, content-generate, ad-deliver, geo-refresh',
+      'CRON_LEADER=true — all 15 workers started: audit-shipper, dnk-sync, lead-sequence, notification-send, webhook-deliver, commission-calc, payout-prepare, knock-sync, lead-routing, conversion-finalise, content-generate, ad-deliver, geo-refresh, address-enrich, planet-intel',
     );
   }
 }

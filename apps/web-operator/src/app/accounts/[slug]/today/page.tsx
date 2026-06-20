@@ -41,10 +41,11 @@ const PIPELINE_STAGES = [
 ] as const;
 
 export default async function TodayPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<JSX.Element> {
+  const params = await paramsPromise;
   // ── Resolve org ──────────────────────────────────────────────────────────
   const org = await db.org.findUnique({
     where: { slug: params.slug },

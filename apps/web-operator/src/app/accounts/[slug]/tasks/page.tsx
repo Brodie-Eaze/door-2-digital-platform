@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { use, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   CheckSquare,
   Plus,
@@ -271,7 +271,12 @@ function buildTasks(slug: string): Task[] {
   });
 }
 
-export default function TasksPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function TasksPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const initial = useMemo(() => buildTasks(params.slug), [params.slug]);
   const [tasks, setTasks] = useState<Task[]>(initial);

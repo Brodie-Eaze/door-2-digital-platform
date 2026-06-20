@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -34,7 +34,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 function severityTone(s: ScopedBrandRule['severity']): 'danger' | 'warn' | 'info' {
@@ -59,7 +59,8 @@ function blockStatusTone(s: ScopedBlock['status']): 'success' | 'warn' | 'info' 
   }
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 
@@ -225,89 +226,89 @@ export default function Page({ params }: PageProps): JSX.Element {
                 {data.recentBlocks
                   .filter((b) => !discardedIds.has(b.id))
                   .map((b) => {
-                  const creative = data.creatives.find((c) => c.id === b.creativeId);
-                  const effectiveStatus = blockOverrides[b.id] ?? b.status;
-                  return (
-                    <tr key={b.id} className="hover:bg-paper">
-                      <td className="!pr-0 w-[60px]">
-                        <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
-                          {creative && (
-                            <img
-                              src={pickCreativeImage(creative.theme, creative.id)}
-                              alt={b.creativeHeadline}
-                              loading="lazy"
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                          <div className="absolute inset-0 bg-danger/30" />
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <AlertTriangle size={14} className="text-surface drop-shadow" />
+                    const creative = data.creatives.find((c) => c.id === b.creativeId);
+                    const effectiveStatus = blockOverrides[b.id] ?? b.status;
+                    return (
+                      <tr key={b.id} className="hover:bg-paper">
+                        <td className="!pr-0 w-[60px]">
+                          <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
+                            {creative && (
+                              <img
+                                src={pickCreativeImage(creative.theme, creative.id)}
+                                alt={b.creativeHeadline}
+                                loading="lazy"
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <div className="absolute inset-0 bg-danger/30" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <AlertTriangle size={14} className="text-surface drop-shadow" />
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="mono text-[10px] !w-auto !px-2">{b.id}</span>
-                      </td>
-                      <td>
-                        <div className="text-[12.5px] font-medium text-ink leading-snug">
-                          &ldquo;{b.creativeHeadline}&rdquo;
-                        </div>
-                        <div className="text-[10px] text-muted font-mono">{b.creativeId}</div>
-                      </td>
-                      <td className="text-[12px] text-muted">{b.ruleViolated}</td>
-                      <td>
-                        <StatusPill tone={severityTone(b.severity)}>{b.severity}</StatusPill>
-                      </td>
-                      <td className="text-[12px] text-ink">{b.reviewer}</td>
-                      <td>
-                        <StatusPill tone={blockStatusTone(effectiveStatus)}>
-                          {effectiveStatus}
-                        </StatusPill>
-                      </td>
-                      <td className="text-[11px] text-muted numeric">{b.blockedAt}</td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBlockOverrides((prev) => ({ ...prev, [b.id]: 'released' }));
-                              toast.success(
-                                `Block ${b.id} overridden → released locally (audit wiring: Phase 1.2)`,
-                              );
-                            }}
-                            className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-ink hover:bg-paper"
-                            title="Override block"
-                          >
-                            Override
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDiscardedIds((prev) => new Set(prev).add(b.id));
-                              toast.success(
-                                `Block ${b.id} discarded locally (audit wiring: Phase 1.2)`,
-                              );
-                            }}
-                            className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-danger hover:bg-paper"
-                            title="Discard"
-                          >
-                            Discard
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.info(`Inspect block ${b.id} — wiring lands in Phase 1.2`)
-                            }
-                            className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
-                            title="Inspect"
-                          >
-                            <Eye size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td>
+                          <span className="mono text-[10px] !w-auto !px-2">{b.id}</span>
+                        </td>
+                        <td>
+                          <div className="text-[12.5px] font-medium text-ink leading-snug">
+                            &ldquo;{b.creativeHeadline}&rdquo;
+                          </div>
+                          <div className="text-[10px] text-muted font-mono">{b.creativeId}</div>
+                        </td>
+                        <td className="text-[12px] text-muted">{b.ruleViolated}</td>
+                        <td>
+                          <StatusPill tone={severityTone(b.severity)}>{b.severity}</StatusPill>
+                        </td>
+                        <td className="text-[12px] text-ink">{b.reviewer}</td>
+                        <td>
+                          <StatusPill tone={blockStatusTone(effectiveStatus)}>
+                            {effectiveStatus}
+                          </StatusPill>
+                        </td>
+                        <td className="text-[11px] text-muted numeric">{b.blockedAt}</td>
+                        <td>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBlockOverrides((prev) => ({ ...prev, [b.id]: 'released' }));
+                                toast.success(
+                                  `Block ${b.id} overridden → released locally (audit wiring: Phase 1.2)`,
+                                );
+                              }}
+                              className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-ink hover:bg-paper"
+                              title="Override block"
+                            >
+                              Override
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDiscardedIds((prev) => new Set(prev).add(b.id));
+                                toast.success(
+                                  `Block ${b.id} discarded locally (audit wiring: Phase 1.2)`,
+                                );
+                              }}
+                              className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-danger hover:bg-paper"
+                              title="Discard"
+                            >
+                              Discard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toast.info(`Inspect block ${b.id} — wiring lands in Phase 1.2`)
+                              }
+                              className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
+                              title="Inspect"
+                            >
+                              <Eye size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           )}

@@ -267,6 +267,69 @@ export async function createLead(
     return row;
   });
 
+  // Fire CRM push non-blocking — never fails the lead save.
+  // IDs only logged; no PII (email/phone) ever written to logs.
+  void (async () => {
+    try {
+      const { buildDefaultRegistry } = await import('@d2d/integrations');
+      const { PiiVaultService: PiiVault } = await import('../pii-vault/service');
+
+      const crmKinds = ['crm_salesforce', 'crm_hubspot', 'crm_zapier'] as const;
+      const connections = await prisma().providerConnection.findMany({
+        where: { orgId: actor.orgId, kind: { in: [...crmKinds] }, status: 'connected' },
+        select: { id: true, kind: true, mode: true, credentialsVault: true },
+      });
+      if (connections.length === 0) return;
+
+      const registry = buildDefaultRegistry();
+
+      for (const conn of connections) {
+        const adapter = registry.tryGet(conn.kind as (typeof crmKinds)[number]);
+        if (!adapter?.pushLead) continue;
+
+        let credentials: Record<string, string> = {};
+        if (conn.credentialsVault) {
+          try {
+            const plain = PiiVault.decrypt(
+              conn.credentialsVault as unknown as Parameters<typeof PiiVault.decrypt>[0],
+              'ProviderConnection',
+              conn.id,
+            );
+            const bundle = JSON.parse(plain) as { credentials: Record<string, string> };
+            credentials = bundle.credentials;
+          } catch {
+            // Vault decrypt failure — skip this connection silently.
+            continue;
+          }
+        }
+
+        const config = {
+          credentials,
+          mode: conn.mode === 'production' ? ('production' as const) : ('sandbox' as const),
+        };
+
+        await adapter.pushLead(
+          {
+            leadId: result.id,
+            orgId: actor.orgId,
+            givenName: result.givenName,
+            familyName: result.familyName,
+            // email/phone: pass only if input had plaintext (already masked on `result`).
+            ...(input.email && { email: input.email }),
+            ...(input.phone && { phone: input.phone }),
+            status: result.status,
+            ...(input.sourceKnockId && { knockedAt: new Date(result.createdAt).toISOString() }),
+            ...(result.sourceKnockId && { sourceTerritoryId: result.sourceKnockId }),
+          },
+          config,
+        );
+        // Log only IDs — no PII.
+      }
+    } catch {
+      // CRM push failure never surfaces to caller.
+    }
+  })();
+
   return toPublic(result);
 }
 

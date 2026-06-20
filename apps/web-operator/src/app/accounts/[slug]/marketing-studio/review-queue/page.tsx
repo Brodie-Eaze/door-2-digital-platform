@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { ListChecks, RefreshCw } from 'lucide-react';
 import { Banner, Button, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -23,10 +23,11 @@ import {
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   const { source, updatedAt, markFresh, markFixture } = useDataFreshness('fixture');
@@ -91,10 +92,10 @@ export default function Page({ params }: PageProps): JSX.Element {
           <span className="text-[13px] flex items-center gap-2">
             <ListChecks size={14} className="text-accent" />
             <span>
-              Approved creatives for <span className="font-semibold">{account.shortName}</span> queue
-              here as draft campaigns. Review the grouped creatives, then publish to Meta or Google.
-              Publishing is gated on a live provider connection — no ad spend leaves this surface
-              until your ad account is connected and verified.
+              Approved creatives for <span className="font-semibold">{account.shortName}</span>{' '}
+              queue here as draft campaigns. Review the grouped creatives, then publish to Meta or
+              Google. Publishing is gated on a live provider connection — no ad spend leaves this
+              surface until your ad account is connected and verified.
             </span>
           </span>
         </Banner>

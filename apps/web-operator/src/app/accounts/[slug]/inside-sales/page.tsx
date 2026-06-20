@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { PhoneCall, Mic, PhoneOff, Clock, FileText, Bookmark } from 'lucide-react';
 import { Banner, Button, KpiCard, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -58,7 +58,12 @@ const QUEUE: QueueLead[] = [
 const SOFTPHONE_DEFERRED =
   'Softphone integration (Twilio Voice / Telnyx WebRTC) is deferred — call controls require a real carrier session and are never simulated. Lands in Phase 1.x.';
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   const [activeIdx, setActiveIdx] = useState(0);
   const active = QUEUE[activeIdx] ?? QUEUE[0]!;
@@ -145,9 +150,9 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
                 <div className="h-section">Pitch script — Hope Forward Q3 2026</div>
                 <div className="card !shadow-none border border-line2 card-pad text-[13px] leading-relaxed space-y-3">
                   <p className="text-ink">
-                    &ldquo;Hi {active.name.split(' ')[0]}, this is Sarah from Hope Forward. Our knocker
-                    Jada visited your home yesterday and you mentioned you were interested in our
-                    clean-water programme. Do you have a moment to talk?&rdquo;
+                    &ldquo;Hi {active.name.split(' ')[0]}, this is Sarah from Hope Forward. Our
+                    knocker Jada visited your home yesterday and you mentioned you were interested
+                    in our clean-water programme. Do you have a moment to talk?&rdquo;
                   </p>
                   <div className="text-[11px] text-muted">
                     → If <span className="font-semibold">yes</span>: confirm donation amount, offer
@@ -219,7 +224,9 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
                 leftIcon={<FileText size={14} />}
                 className="!text-surface !border-surface/20 hover:!bg-surface/10"
                 onClick={() =>
-                  toast.info(`Mark ${active.name} converted — disposition wiring lands in Phase 1.x`)
+                  toast.info(
+                    `Mark ${active.name} converted — disposition wiring lands in Phase 1.x`,
+                  )
                 }
               >
                 Mark converted

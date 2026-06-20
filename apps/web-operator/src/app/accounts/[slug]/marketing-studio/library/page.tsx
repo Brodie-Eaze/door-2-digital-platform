@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import {
   Image as ImageIcon,
   Plus,
@@ -37,7 +37,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const STATUS_OPTS: Array<{ value: CreativeStatus | 'all'; label: string }> = [
@@ -64,7 +64,8 @@ function statusTone(s: CreativeStatus): 'success' | 'info' | 'warn' | 'danger' |
   }
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 

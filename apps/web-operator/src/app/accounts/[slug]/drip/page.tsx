@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { Mail, MessageSquare, Phone, Clock, ArrowRight, Plus, Split, Sparkles } from 'lucide-react';
 import { Banner, Button, EmptyState, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -66,7 +66,12 @@ const CH_COLOR = {
   call: 'bg-successSoft text-success',
 };
 
-export default function DripDesignerPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function DripDesignerPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const [aiDismissed, setAiDismissed] = useState(false);
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {

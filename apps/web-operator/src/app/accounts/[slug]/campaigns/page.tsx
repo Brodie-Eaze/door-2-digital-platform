@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { Plus, Play, Pause, ExternalLink, ListChecks } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -66,7 +68,12 @@ const CAMPAIGNS = [
   },
 ];
 
-export default function CampaignsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function CampaignsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (

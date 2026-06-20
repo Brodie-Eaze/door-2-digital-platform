@@ -48,6 +48,7 @@
 		D2D003000000000000000015 /* KnockSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000015 /* KnockSheetView.swift */; };
 		D2D003000000000000000016 /* KnockFlowViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000016 /* KnockFlowViewModel.swift */; };
 		D2D003000000000000000017 /* DispositionPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000017 /* DispositionPicker.swift */; };
+		D2D00300000000000000002A /* IntelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000002A /* IntelCardView.swift */; };
 		D2D003000000000000000018 /* LeadFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000018 /* LeadFormView.swift */; };
 		D2D003000000000000000019 /* SignaturePadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000019 /* SignaturePadView.swift */; };
 		D2D00300000000000000001A /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001A /* ScheduleView.swift */; };
@@ -116,6 +117,7 @@
 		D2D002000000000000000015 /* KnockSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnockSheetView.swift; sourceTree = "<group>"; };
 		D2D002000000000000000016 /* KnockFlowViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnockFlowViewModel.swift; sourceTree = "<group>"; };
 		D2D002000000000000000017 /* DispositionPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispositionPicker.swift; sourceTree = "<group>"; };
+		D2D00200000000000000002A /* IntelCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelCardView.swift; sourceTree = "<group>"; };
 		D2D002000000000000000018 /* LeadFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadFormView.swift; sourceTree = "<group>"; };
 		D2D002000000000000000019 /* SignaturePadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignaturePadView.swift; sourceTree = "<group>"; };
 		D2D00200000000000000001A /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
@@ -314,6 +316,7 @@
 				D2D002000000000000000015 /* KnockSheetView.swift */,
 				D2D002000000000000000016 /* KnockFlowViewModel.swift */,
 				D2D002000000000000000017 /* DispositionPicker.swift */,
+				D2D00200000000000000002A /* IntelCardView.swift */,
 				D2D002000000000000000018 /* LeadFormView.swift */,
 				D2D002000000000000000019 /* SignaturePadView.swift */,
 			);
@@ -477,6 +480,7 @@
 				D2D003000000000000000015 /* KnockSheetView.swift in Sources */,
 				D2D003000000000000000016 /* KnockFlowViewModel.swift in Sources */,
 				D2D003000000000000000017 /* DispositionPicker.swift in Sources */,
+				D2D00300000000000000002A /* IntelCardView.swift in Sources */,
 				D2D003000000000000000018 /* LeadFormView.swift in Sources */,
 				D2D003000000000000000019 /* SignaturePadView.swift in Sources */,
 				D2D00300000000000000001A /* ScheduleView.swift in Sources */,

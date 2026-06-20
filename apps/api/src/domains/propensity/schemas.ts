@@ -6,10 +6,12 @@
  * drive heatmaps (GET /heatmap) and the manager area-setting UI (GET /).
  *
  * `geoType` is the spatial key namespace the score is bucketed by:
- *   - "h3"      — Uber H3 cell id (the heatmap default; one score per cell)
- *   - "address" — a single street address hash
- *   - "bbox"    — a bounding-box bin key
- *   - "latlng"  — a raw rounded lat/lng bin
+ *   - "h3"        — Uber H3 cell id (the heatmap default; one score per cell)
+ *   - "address"   — a single street address hash
+ *   - "bbox"      — a bounding-box bin key
+ *   - "latlng"    — a raw rounded lat/lng bin
+ *   - "territory" — a canvass territory id (manager-level area scoring, e.g.
+ *                   the Planet satellite-intel model scores a whole territory)
  *
  * `score` is a calibrated 0..1 propensity-to-convert. `band` is the heatmap
  * bucket; if the ML team omits it the service derives it (>=0.66 high,
@@ -17,7 +19,7 @@
  */
 import { z } from 'zod';
 
-export const geoTypeSchema = z.enum(['h3', 'address', 'bbox', 'latlng']);
+export const geoTypeSchema = z.enum(['h3', 'address', 'bbox', 'latlng', 'territory']);
 export type GeoType = z.infer<typeof geoTypeSchema>;
 
 export const bandSchema = z.enum(['high', 'medium', 'low']);

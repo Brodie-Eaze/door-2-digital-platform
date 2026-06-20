@@ -38,8 +38,9 @@ export const revalidate = 0;
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { slug: string } },
+  { params: paramsPromise }: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;
@@ -143,8 +144,9 @@ const createBody = z.discriminatedUnion('areaType', [radiusBody, polygonBody]);
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { slug: string } },
+  { params: paramsPromise }: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;

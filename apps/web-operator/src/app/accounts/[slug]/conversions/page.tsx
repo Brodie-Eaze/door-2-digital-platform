@@ -8,7 +8,12 @@ import { rollupFor } from '@/lib/seed/kpis';
 import { firstRunSnapshot } from '@/lib/first-run';
 import { ConversionsLedger } from './ConversionsLedger';
 
-export default function ConversionsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default async function ConversionsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
@@ -102,11 +107,7 @@ export default function ConversionsPage({ params }: { params: { slug: string } }
           <KpiCard label="Retargeting" value={retargCount} hint="recent 60" />
         </div>
 
-        <ConversionsLedger
-          rows={seed.conversions}
-          region={region}
-          ledgerTotalCents={ledgerTotal}
-        />
+        <ConversionsLedger rows={seed.conversions} region={region} ledgerTotalCents={ledgerTotal} />
       </div>
     </AccountShell>
   );

@@ -6,8 +6,8 @@
  *       ownership-checked (findFirst where id + orgId) BEFORE the update so a
  *       cross-tenant id can never be mutated (defence-in-depth over RLS).
  *
- * Next 14.2 App Router: dynamic route params are SYNC — `{ params }` is a
- * plain object, NOT a Promise. Do NOT await it.
+ * Next 15 App Router: dynamic route params are ASYNC — `{ params }` is a
+ * Promise and must be awaited before reading.
  *
  * PII: returns the persisted status + a non-PII display label only. Names are
  * vaulted ciphertext and are never echoed.
@@ -31,8 +31,9 @@ export const revalidate = 0;
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params: paramsPromise }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;

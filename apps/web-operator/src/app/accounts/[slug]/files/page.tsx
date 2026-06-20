@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   FolderOpen,
   Folder,
@@ -244,7 +244,12 @@ const FILE_ICONS: Record<FileType, { icon: typeof FileIcon; color: string }> = {
   zip: { icon: Archive, color: 'text-slate-600' },
 };
 
-export default function FilesPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function FilesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const folders = buildFolders(params.slug);
   const [activeFolder, setActiveFolder] = useState(folders[0]?.name ?? 'Brand assets');
@@ -510,7 +515,9 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
                               </button>
                               <button
                                 onClick={() =>
-                                  toast.info(`Share ${f.name} — public-link wiring lands in Phase 1.2`)
+                                  toast.info(
+                                    `Share ${f.name} — public-link wiring lands in Phase 1.2`,
+                                  )
                                 }
                                 aria-label={`Share ${f.name}`}
                                 className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
@@ -519,7 +526,9 @@ export default function FilesPage({ params }: { params: { slug: string } }): JSX
                               </button>
                               <button
                                 onClick={() =>
-                                  toast.info(`More actions for ${f.name} — wiring lands in Phase 1.2`)
+                                  toast.info(
+                                    `More actions for ${f.name} — wiring lands in Phase 1.2`,
+                                  )
                                 }
                                 aria-label={`More actions for ${f.name}`}
                                 className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { Plus, X, Star, Pencil, Archive, PackageOpen } from 'lucide-react';
 import { Banner, Button, Input, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -45,10 +45,16 @@ function formatDollars(cents: number): string {
   });
 }
 
-export default function ServicesPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function ServicesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
-  const defaultVertical: OfferingVertical = account?.vertical === 'commercial' ? 'commercial' : 'charity';
+  const defaultVertical: OfferingVertical =
+    account?.vertical === 'commercial' ? 'commercial' : 'charity';
 
   const [offerings, setOfferings] = useState<Offering[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -119,14 +125,23 @@ export default function ServicesPage({ params }: { params: { slug: string } }): 
         <Banner tone="info">
           <span className="text-[13px]">
             These are the offerings a knocker signs a customer up to on the doorstep. The native
-            Knocker iOS app fetches this catalog live — add, edit or archive here and the app updates.
+            Knocker iOS app fetches this catalog live — add, edit or archive here and the app
+            updates.
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <KpiCard label="Active offerings" value={rows.length} />
-          <KpiCard label="Highlighted" value={rows.filter((o) => o.highlighted).length} hint="suggested tier" />
-          <KpiCard label="Recurring" value={rows.filter((o) => o.frequency !== 'once').length} hint="monthly / weekly" />
+          <KpiCard
+            label="Highlighted"
+            value={rows.filter((o) => o.highlighted).length}
+            hint="suggested tier"
+          />
+          <KpiCard
+            label="Recurring"
+            value={rows.filter((o) => o.frequency !== 'once').length}
+            hint="monthly / weekly"
+          />
         </div>
 
         <Section
@@ -166,8 +181,8 @@ export default function ServicesPage({ params }: { params: { slug: string } }): 
               <PackageOpen size={22} className="text-soft mx-auto mb-2" aria-hidden />
               <div className="text-[13px] font-semibold text-ink mb-1">No offerings yet</div>
               <div className="text-[12px] text-muted max-w-sm mx-auto">
-                Add the first giving tier or product plan. It appears in the Knocker iOS sign-up flow
-                as soon as you save.
+                Add the first giving tier or product plan. It appears in the Knocker iOS sign-up
+                flow as soon as you save.
               </div>
             </div>
           ) : (
@@ -190,7 +205,11 @@ export default function ServicesPage({ params }: { params: { slug: string } }): 
                       <td>
                         <div className="flex items-center gap-2">
                           {o.highlighted && (
-                            <Star size={12} className="text-amber-500 shrink-0" aria-label="Highlighted" />
+                            <Star
+                              size={12}
+                              className="text-amber-500 shrink-0"
+                              aria-label="Highlighted"
+                            />
                           )}
                           <div>
                             <div className="text-[13px] font-medium text-ink">{o.name}</div>
@@ -198,7 +217,9 @@ export default function ServicesPage({ params }: { params: { slug: string } }): 
                           </div>
                         </div>
                       </td>
-                      <td className="text-[13px] text-ink numeric">{formatDollars(o.amountCents)}</td>
+                      <td className="text-[13px] text-ink numeric">
+                        {formatDollars(o.amountCents)}
+                      </td>
                       <td className="text-[12px] text-muted">{FREQUENCY_LABEL[o.frequency]}</td>
                       <td>
                         <span className="tag capitalize">{o.vertical}</span>

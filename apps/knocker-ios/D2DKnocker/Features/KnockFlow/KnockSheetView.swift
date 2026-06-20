@@ -9,6 +9,7 @@ import PhotosUI
 struct KnockSheetView: View {
     let coordinate: CLLocationCoordinate2D
     let presetAddress: String?
+    let territoryId: String?
 
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
@@ -25,9 +26,10 @@ struct KnockSheetView: View {
     @State private var showCamera = false
     @State private var showServicePicker = false
 
-    init(coordinate: CLLocationCoordinate2D, presetAddress: String? = nil) {
+    init(coordinate: CLLocationCoordinate2D, presetAddress: String? = nil, territoryId: String? = nil) {
         self.coordinate = coordinate
         self.presetAddress = presetAddress
+        self.territoryId = territoryId
         self._viewModel = State(initialValue: KnockFlowViewModel(coordinate: coordinate))
     }
 
@@ -147,6 +149,11 @@ struct KnockSheetView: View {
                             .foregroundStyle(viewModel.addressLine.isEmpty ? D2DColor.muted : D2DColor.ink)
                     }
                 }
+
+                // Data intelligence — satellite + Snowflake enrichment for this territory.
+                // Rendered above the disposition grid so the rep sees intel before selecting.
+                // Gracefully absent when no data is available yet (card renders nothing).
+                IntelCardView(addressId: nil, territoryId: territoryId)
 
                 // Disposition grid
                 VStack(alignment: .leading, spacing: 10) {

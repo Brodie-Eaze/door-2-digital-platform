@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import { Phone, Mail, MessageSquare, Search } from 'lucide-react';
 import { Banner, EmptyState, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -55,7 +55,12 @@ const THREADS = [
 ];
 const ICON = { sms: MessageSquare, call: Phone, email: Mail };
 
-export default function ConversationsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function ConversationsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {

@@ -67,7 +67,12 @@ function buildInvoiceHistory(account: Account): Invoice[] {
   });
 }
 
-export default function AccountInvoicesPage({ params }: { params: { slug: string } }): JSX.Element {
+export default async function AccountInvoicesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {

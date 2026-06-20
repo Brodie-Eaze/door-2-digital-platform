@@ -17,8 +17,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { slug: string } },
+  { params: paramsPromise }: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;

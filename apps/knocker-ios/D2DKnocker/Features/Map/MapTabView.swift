@@ -59,6 +59,16 @@ struct MapTabView: View {
                         KnockPin(disposition: ann.disposition)
                     }
                 }
+
+                // Active territory claims — other reps working nearby
+                ForEach(viewModel.activeClaims.filter { $0.userId != appState.currentUser?.id }) { claim in
+                    if claim.territoryId == viewModel.territory?.id,
+                       let centroid = viewModel.territory?.centroid {
+                        Annotation("", coordinate: centroid) {
+                            ClaimBadgeView(userName: claim.userName)
+                        }
+                    }
+                }
             }
             // Flat satellite+labels (not .realistic 3D terrain): a canvassing map
             // wants legibility + battery/cellular thrift over an 8-hour shift, not
@@ -122,8 +132,43 @@ struct MapTabView: View {
                 if !viewModel.knockAnnotations.isEmpty {
                     MapLegendView(counts: viewModel.dispositionCounts, filter: $dispositionFilter)
                 }
-                HStack {
+                HStack(spacing: 10) {
                     Spacer()
+
+                    // Claim / release area button — only shown when rep has an assigned territory
+                    if viewModel.assignedTerritoryId != nil {
+                        Button {
+                            Task {
+                                let api = APIClient()
+                                api.accessToken = appState.accessToken
+                                if viewModel.myClaimIds.contains(viewModel.assignedTerritoryId ?? "") {
+                                    try? await api.releaseTerritoryClaim(
+                                        id: viewModel.assignedTerritoryId ?? "",
+                                        orgId: appState.orgId
+                                    )
+                                } else {
+                                    _ = try? await api.claimTerritory(
+                                        id: viewModel.assignedTerritoryId ?? "",
+                                        orgId: appState.orgId
+                                    )
+                                }
+                                await viewModel.refreshClaims(appState: appState)
+                            }
+                        } label: {
+                            let isClaimed = viewModel.myClaimIds.contains(viewModel.assignedTerritoryId ?? "")
+                            Label(
+                                isClaimed ? "Release Area" : "Claim Area",
+                                systemImage: isClaimed ? "flag.slash.fill" : "flag.fill"
+                            )
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(isClaimed ? D2DColor.muted : D2DColor.accent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(.regularMaterial, in: Capsule())
+                            .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                        }
+                    }
+
                     Button {
                         // Never drop a real knock pin on a hardcoded fallback (was
                         // Austin) when there's no GPS fix — that mislocates the door.
@@ -160,7 +205,8 @@ struct MapTabView: View {
         }) {
             KnockSheetView(
                 coordinate: knockCoordinate ?? CLLocationCoordinate2D(latitude: MapViewModel.centerLat, longitude: MapViewModel.centerLon),
-                presetAddress: knockAddress
+                presetAddress: knockAddress,
+                territoryId: viewModel.assignedTerritoryId
             )
             .environment(appState)
             .environment(syncEngine)
@@ -173,6 +219,7 @@ struct MapTabView: View {
             location.startUpdating()
             await viewModel.load(appState: appState)
             viewModel.refreshKnocks(context: modelContext)
+            await viewModel.refreshClaims(appState: appState)
         }
         .onChange(of: location.accuracy) { _, acc in viewModel.locationAccuracy = acc }
         .onReceive(NotificationCenter.default.publisher(for: .knockRecorded)) { _ in
@@ -431,4 +478,40 @@ struct MapStatusOverlay: View {
 
 extension Notification.Name {
     static let knockRecorded = Notification.Name("knockRecorded")
+}
+
+// MARK: - Claim badge (another rep working this territory)
+
+struct ClaimBadgeView: View {
+    let userName: String
+
+    private var initials: String {
+        let parts = userName.split(separator: " ").prefix(2)
+        return parts.compactMap { $0.first.map(String.init) }.joined().uppercased()
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(D2DColor.accent)
+                    .frame(width: 28, height: 28)
+                Text(initials)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(userName.components(separatedBy: " ").first ?? userName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(D2DColor.ink)
+                Text("Working here")
+                    .font(.system(size: 9))
+                    .foregroundStyle(D2DColor.muted)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+    }
 }

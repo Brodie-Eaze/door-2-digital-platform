@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { use, useState, useMemo } from 'react';
 import {
   ListChecks,
   Plus,
@@ -241,7 +241,12 @@ const FIELDS = [
  * Page
  * ───────────────────────────────────────────────────────────────────────── */
 
-export default function SmartListsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function SmartListsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const [selectedId, setSelectedId] = useState<string>('l1');
   const [aiPrompt, setAiPrompt] = useState('');
   const [showPushModal, setShowPushModal] = useState(false);
@@ -603,9 +608,7 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                   variant="ghost"
                   size="sm"
                   leftIcon={<Plus size={13} />}
-                  onClick={() =>
-                    toast.info('Add group — rule builder editing lands in Phase 1.2')
-                  }
+                  onClick={() => toast.info('Add group — rule builder editing lands in Phase 1.2')}
                 >
                   Add group
                 </Button>

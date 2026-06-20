@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { ListChecks, Plus, Megaphone, MailPlus, Filter, Sparkles } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -51,7 +53,12 @@ const LISTS = [
   },
 ];
 
-export default function LeadListsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function LeadListsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (
@@ -207,9 +214,7 @@ export default function LeadListsPage({ params }: { params: { slug: string } }):
                 variant="secondary"
                 size="sm"
                 leftIcon={<Filter size={14} />}
-                onClick={() =>
-                  toast.info('Preview members — live count query lands in Phase 1.2')
-                }
+                onClick={() => toast.info('Preview members — live count query lands in Phase 1.2')}
               >
                 Preview members
               </Button>

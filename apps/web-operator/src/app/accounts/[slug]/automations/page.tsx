@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import {
   ArrowRight,
   Mail,
@@ -122,7 +124,12 @@ const CHANNEL_COLOR = {
   call: 'bg-successSoft text-success',
 };
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
 
   if (firstRun.isFirstRun) {

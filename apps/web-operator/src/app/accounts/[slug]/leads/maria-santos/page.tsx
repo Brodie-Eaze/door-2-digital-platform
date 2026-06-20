@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import {
   MapPin,
   Phone,
@@ -114,7 +116,12 @@ const TIMELINE = [
   },
 ];
 
-export default function LeadDetailPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function LeadDetailPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Maria Santos">
       <div className="space-y-6 max-w-[1400px]">

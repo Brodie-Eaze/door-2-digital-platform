@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Plus,
   Filter,
@@ -479,15 +479,18 @@ const STATUS_ICONS: Record<WorkflowRun['status'], { icon: typeof CheckCircle2; c
   running: { icon: Play, color: 'text-accent' },
 };
 
-export default function WorkflowsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function WorkflowsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'active' | 'paused' | 'failing' | 'draft'
   >('all');
   const [query, setQuery] = useState('');
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, WorkflowDef['status']>>(
-    {},
-  );
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, WorkflowDef['status']>>({});
 
   function toggleWorkflow(w: WorkflowDef): void {
     const current = statusOverrides[w.id] ?? w.status;
@@ -695,9 +698,7 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
                         )}
                       </button>
                       <button
-                        onClick={() =>
-                          toast.info(`Clone "${w.name}" — wiring lands in Phase 1.2`)
-                        }
+                        onClick={() => toast.info(`Clone "${w.name}" — wiring lands in Phase 1.2`)}
                         className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
                       >
                         <Copy size={11} /> Clone

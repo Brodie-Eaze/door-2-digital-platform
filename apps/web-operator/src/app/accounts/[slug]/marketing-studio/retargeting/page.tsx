@@ -25,7 +25,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const STAGES: Array<{
@@ -79,7 +79,8 @@ const STAGES: Array<{
   },
 ];
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default async function Page({ params: paramsPromise }: PageProps): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 

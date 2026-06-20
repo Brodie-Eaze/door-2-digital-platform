@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, MapPin, Eye, Plus, Filter, Send, Check, X } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { toast } from '@/components/Toaster';
@@ -38,10 +38,11 @@ function formatIncomeShort(cents: number, currency: 'AUD' | 'USD'): string {
 }
 
 export default function AccountTerritoriesPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const territory = getAccountTerritory(params.slug);
 

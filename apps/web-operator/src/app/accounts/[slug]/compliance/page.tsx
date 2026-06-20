@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { ShieldCheck, AlertTriangle, FileText, KeyRound, RefreshCw } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -232,10 +234,11 @@ function sectionLabel(region: 'AU' | 'US' | 'SG', vertical: string): string {
 }
 
 export default function AccountCompliancePage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {

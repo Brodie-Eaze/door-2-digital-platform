@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { Plug, Settings as SettingsIcon } from 'lucide-react';
 import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -8,7 +10,12 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
-export default function SettingsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function SettingsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account) {

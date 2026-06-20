@@ -18,6 +18,8 @@ import { writeAudit } from '../../shared/audit/write';
 import { emitAnalyticsEvent } from '../analytics/service';
 import { accrueKnockCommission } from '../commission/service';
 import { PiiVaultService } from '../pii-vault/service';
+import { enqueueEnrichAddress } from '../../workers/address-enrich.worker';
+import { env } from '../../config/env';
 import type {
   StartSessionRequest,
   CreateKnockRequest,
@@ -328,6 +330,19 @@ export async function createKnock(
     return row;
   });
 
+  // Fire-and-forget: enrich the address with Snowflake data after knock saved.
+  // Only queues when SNOWFLAKE_ACCOUNT is configured — no-op in dev without keys.
+  if (env().SNOWFLAKE_ACCOUNT && result.addressId) {
+    void enqueueEnrichAddress({
+      addressId: result.addressId,
+      orgId: actor.orgId,
+      userId: actor.userId,
+      regionCode: actor.regionCode,
+    }).catch(() => {
+      // Non-fatal: enrichment is best-effort; log is emitted inside the worker.
+    });
+  }
+
   return { knock: toKnockPublic(result), deduped: false };
 }
 
@@ -610,7 +625,9 @@ export async function createKnockBatch(
         photoKey: string | null;
         signatureKey: string | null;
         notes: string | null;
-        notesVault: Prisma.JsonObject | null;
+        // Encrypted vault blob (InputJsonValue) or Prisma.DbNull when absent —
+        // matches the nullable `notesVault Json?` column and createMany's input.
+        notesVault: Prisma.InputJsonValue | typeof Prisma.DbNull;
         idempotencyKey: string;
       }> = [];
       const allocatedKnockIds: string[] = [];
@@ -651,7 +668,7 @@ export async function createKnockBatch(
                 'Knock',
                 id,
                 c.k.notes,
-              ) as unknown as Prisma.JsonObject)
+              ) as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
           idempotencyKey: c.k.idempotencyKey,
         });

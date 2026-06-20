@@ -13,7 +13,12 @@ function tenureLabel(days: number): string {
   return `${(days / 365).toFixed(1)}yr`;
 }
 
-export default function KnockersPage({ params }: { params: { slug: string } }): JSX.Element {
+export default async function KnockersPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (

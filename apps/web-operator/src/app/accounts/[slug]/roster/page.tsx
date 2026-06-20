@@ -5,7 +5,7 @@
 // migration lands.
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { use, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   Coffee,
   Clock,
@@ -153,7 +153,12 @@ function weekDates(offset: number): Date[] {
   });
 }
 
-export default function AccountRosterPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function AccountRosterPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const reps = useMemo<Rep[]>(() => (account ? buildReps(account) : []), [account]);
   const territories = useMemo<string[]>(

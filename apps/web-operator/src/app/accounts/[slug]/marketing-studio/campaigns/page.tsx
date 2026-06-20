@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { Megaphone, Eye, Play, Pause, ExternalLink, Filter, Plus, X, Activity } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -24,7 +24,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 function statusTone(s: ScopedCampaign['status']): 'success' | 'muted' | 'warn' | 'info' {
@@ -40,7 +40,8 @@ function statusTone(s: ScopedCampaign['status']): 'success' | 'muted' | 'warn' |
   }
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -437,7 +438,9 @@ export default function Page({ params }: PageProps): JSX.Element {
                     variant="primary"
                     size="sm"
                     leftIcon={<Play size={12} />}
-                    onClick={() => toast.info(`Resume "${opened.name}" — wiring lands in Phase 1.2`)}
+                    onClick={() =>
+                      toast.info(`Resume "${opened.name}" — wiring lands in Phase 1.2`)
+                    }
                   >
                     Resume campaign
                   </Button>
@@ -447,7 +450,9 @@ export default function Page({ params }: PageProps): JSX.Element {
                   size="sm"
                   leftIcon={<ExternalLink size={12} />}
                   onClick={() =>
-                    toast.info(`Open in ${CHANNEL_LABEL[opened.channel]} — wiring lands in Phase 1.2`)
+                    toast.info(
+                      `Open in ${CHANNEL_LABEL[opened.channel]} — wiring lands in Phase 1.2`,
+                    )
                   }
                 >
                   Open in {CHANNEL_LABEL[opened.channel]}

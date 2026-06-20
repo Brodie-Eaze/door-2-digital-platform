@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { use, useMemo, useRef, useState } from 'react';
 import {
   Wand2,
   Sparkles,
@@ -38,7 +38,7 @@ import { pickCreativeImage, type CreativeTheme } from '@/lib/creative-images';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 interface Variant {
@@ -266,7 +266,8 @@ function buildSeedVariants(slug: string, themes: CreativeTheme[]): Variant[] {
   });
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
   const briefDefaults =

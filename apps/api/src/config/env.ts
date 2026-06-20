@@ -100,6 +100,18 @@ const envSchema = z.object({
   S3_BUCKET_ASSETS: z.string(),
   S3_BUCKET_EXPORTS: z.string(),
 
+  // Data intelligence — Snowflake Data Marketplace
+  SNOWFLAKE_ACCOUNT: z.string().optional(), // e.g. "xy12345.us-east-1"
+  SNOWFLAKE_USERNAME: z.string().optional(),
+  SNOWFLAKE_PASSWORD: z.string().optional(),
+
+  // Data intelligence — Planet Labs satellite
+  PLANET_API_KEY: z.string().optional(),
+  PLANET_WEBHOOK_SECRET: z.string().optional(),
+
+  // Public origin of this API (used for Planet webhook callback URL)
+  API_BASE_URL: z.string().url().default('http://localhost:3010'),
+
   // Workers — exactly one replica per region sets this to 'true'
   CRON_LEADER: z
     .string()

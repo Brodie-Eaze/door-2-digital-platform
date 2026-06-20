@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Plus,
   Edit3,
@@ -346,7 +346,12 @@ function buildSubmissions(slug: string): Submission[] {
 
 const SOURCE_ICONS = { web: Globe, qr: QrCode, door: Smartphone, embedded: ExternalLink };
 
-export default function FormsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function FormsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'draft' | 'paused'>('all');
   const [query, setQuery] = useState('');
@@ -662,9 +667,7 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
                 </div>
               ))}
               <button
-                onClick={() =>
-                  toast.info('Wire new trigger — workflow builder lands in Phase 1.2')
-                }
+                onClick={() => toast.info('Wire new trigger — workflow builder lands in Phase 1.2')}
                 className="w-full text-[11px] text-accent font-medium hover:underline py-1"
               >
                 + Wire new trigger

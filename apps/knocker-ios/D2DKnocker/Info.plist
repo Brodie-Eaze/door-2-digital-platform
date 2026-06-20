@@ -25,15 +25,15 @@
 	     Mac's LAN IP so a real iPhone can reach the local API. Find your current IP
 	     with `ipconfig getifaddr en0` and update the host if it changes. RELEASE
 	     builds ignore this and use the production https URL fallback in Config. -->
-	<string>http://192.168.20.103:3010/v1</string>
+	<string>http://192.168.20.41:3010/v1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Permits plaintext HTTP to localhost / *.local only (DEBUG builds talk
-		     to the Fastify API at http://localhost:3010). Production traffic to
-		     https://api.d2d.io is still ATS-enforced; arbitrary loads stay off. -->
-		<key>NSAllowsLocalNetworking</key>
+		<!-- DEBUG: allows plaintext HTTP to any host so the simulator can reach
+		     the Fastify API on the Mac's LAN IP (192.168.x.x). ATS is re-enabled
+		     for production releases via scheme-conditional build settings. -->
+		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
 	<key>LSRequiresIPhoneOS</key>

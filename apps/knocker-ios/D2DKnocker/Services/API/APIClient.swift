@@ -183,11 +183,57 @@ final class APIClient {
         return try await get(path: "/leads/callbacks")
     }
 
+    // MARK: - Data intelligence
+
+    /// Snowflake enrichment score + PRIZM segment for a known address.
+    /// Returns nil gracefully when the address has no score yet (worker hasn't run
+    /// or SNOWFLAKE_ACCOUNT not configured) — IntelCardView renders nothing.
+    func fetchAddressIntel(id: String) async throws -> AddressIntelDTO {
+        let resp: AddressIntelResponse = try await get(path: "/addresses/\(id)/intel")
+        return resp.intel
+    }
+
+    /// Planet Labs satellite intelligence for a territory (construction count,
+    /// score, basemap tile URL). Returns nil when Planet hasn't delivered yet.
+    func fetchTerritoryIntel(id: String) async throws -> TerritoryIntelDTO {
+        let resp: TerritoryIntelResponse = try await get(path: "/territories/\(id)/satellite")
+        return resp.intel
+    }
+
+    // MARK: - Territory claims
+
+    func fetchTerritoryClaims(orgId: String) async throws -> [TerritoryClaimDTO] {
+        let resp: TerritoryClaimsResponse = try await get(path: "/territories/claims")
+        return resp.data
+    }
+
+    func claimTerritory(id: String, orgId: String) async throws -> TerritoryClaimDTO {
+        let empty: [String: String] = [:]
+        return try await post(
+            path: "/territories/\(id)/claims",
+            body: empty,
+            idempotencyKey: UUID().uuidString
+        )
+    }
+
+    func releaseTerritoryClaim(id: String, orgId: String) async throws {
+        try await delete(path: "/territories/\(id)/claims")
+    }
+
     // MARK: - Generic helpers
 
     private func get<R: Decodable>(path: String) async throws -> R {
         let req = try buildRequest(method: "GET", path: path, body: Optional<Data>.none)
         return try await execute(req)
+    }
+
+    /// DELETE with no request body and no decoded response body (expects 2xx).
+    func delete(path: String) async throws {
+        let req = try buildRequest(method: "DELETE", path: path, body: Optional<Data>.none)
+        let (_, response) = try await session.data(for: req)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw APIError.httpError(statusCode: http.statusCode, body: "")
+        }
     }
 
     private func post<B: Encodable, R: Decodable>(

@@ -301,6 +301,57 @@ struct InboxMessageDTO: Decodable, Identifiable {
     let priority: String  // "normal" | "high" | "urgent"
 }
 
+// MARK: - Address intel (Snowflake enrichment)
+// GET /v1/addresses/:id/intel — returned inside { "intel": {...} }
+
+struct AddressIntelResponse: Decodable {
+    let intel: AddressIntelDTO
+}
+
+struct AddressIntelDTO: Decodable {
+    let score: Double
+    let prizmName: String?
+    let prizmCode: String?
+    let medianHhIncomeUsd: Double?
+    let charitablePropensity: Double?
+    let estimatedHomeValueUsd: Double?
+    let ownerOccupancyRate: Double?
+    let modelName: String?
+    let computedAt: String?
+}
+
+// MARK: - Territory satellite intel (Planet Labs)
+// GET /v1/territories/:id/satellite — returned inside { "intel": {...} }
+
+struct TerritoryIntelResponse: Decodable {
+    let intel: TerritoryIntelDTO
+}
+
+struct TerritoryIntelDTO: Decodable {
+    let territoryId: String
+    let constructionCount: Int
+    let demolitionCount: Int
+    let totalChanges: Int
+    let lastCapture: String?
+    let score: Double
+    let basemapTileUrl: String?
+}
+
+// MARK: - Territory claims (area claiming — rep signals they're working a block)
+
+struct TerritoryClaimDTO: Codable, Identifiable {
+    let id: String
+    let territoryId: String
+    let userId: String
+    let userName: String
+    let claimedAt: String
+    let expiresAt: String
+}
+
+struct TerritoryClaimsResponse: Codable {
+    let data: [TerritoryClaimDTO]
+}
+
 // MARK: - Callbacks / schedule
 
 struct CallbackDTO: Decodable, Identifiable {

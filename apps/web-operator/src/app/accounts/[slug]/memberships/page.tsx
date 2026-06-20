@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Heart,
   TrendingUp,
@@ -336,7 +336,12 @@ const ACTION_STYLES: Record<
   renewed: { icon: TrendingUp, color: 'text-emerald-700 bg-emerald-50', label: 'Renewed' },
 };
 
-export default function MembershipsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function MembershipsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'at-risk' | 'champion'>(
     'all',

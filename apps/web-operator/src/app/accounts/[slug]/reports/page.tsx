@@ -9,7 +9,12 @@ import { rollupFor } from '@/lib/seed/kpis';
 import { firstRunSnapshot } from '@/lib/first-run';
 import { BuildReportButton, SavedReportCard } from './ReportActions';
 
-export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default async function ReportsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
@@ -270,12 +275,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
               { title: 'Pipeline velocity', schedule: 'Weekly · Fri 17:00', last: 'May 16' },
               { title: 'Cohort retention (donors)', schedule: 'Monthly · 1st', last: 'May 1' },
             ].map((r) => (
-              <SavedReportCard
-                key={r.title}
-                title={r.title}
-                schedule={r.schedule}
-                last={r.last}
-              />
+              <SavedReportCard key={r.title} title={r.title} schedule={r.schedule} last={r.last} />
             ))}
           </div>
         </Section>

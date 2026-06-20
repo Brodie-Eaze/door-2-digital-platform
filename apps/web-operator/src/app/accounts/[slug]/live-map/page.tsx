@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { Banner, KpiCard } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
@@ -24,7 +26,12 @@ const PUSH_ACTION_LABELS: Record<PushToFieldAction, string> = {
   end_shift_early: 'End-shift instruction',
 };
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   const fleet = getAccountFleet(params.slug);

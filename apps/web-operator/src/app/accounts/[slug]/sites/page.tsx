@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Globe,
   Plus,
@@ -348,7 +348,12 @@ function buildFunnelSteps(slug: string): FunnelStep[] {
   ];
 }
 
-export default function SitesPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function SitesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [filter, setFilter] = useState<'all' | 'site' | 'funnel'>('all');
 
@@ -500,9 +505,7 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
                     </span>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() =>
-                          toast.info(`Edit "${s.name}" — editor lands in Phase 1.2`)
-                        }
+                        onClick={() => toast.info(`Edit "${s.name}" — editor lands in Phase 1.2`)}
                         aria-label={`Edit ${s.name}`}
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft hover:text-ink"
                       >
@@ -619,9 +622,7 @@ export default function SitesPage({ params }: { params: { slug: string } }): JSX
               ))}
               <div className="px-5 py-2.5">
                 <button
-                  onClick={() =>
-                    toast.info('Add domain — DNS connect lands in Phase 1.2')
-                  }
+                  onClick={() => toast.info('Add domain — DNS connect lands in Phase 1.2')}
                   className="text-[11px] text-accent font-medium hover:underline"
                 >
                   + Add domain

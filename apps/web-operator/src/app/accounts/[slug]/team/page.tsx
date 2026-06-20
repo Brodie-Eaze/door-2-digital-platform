@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { Plus, X, Copy, Check, Mail, UserPlus } from 'lucide-react';
 import { Banner, Button, Input, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -44,7 +44,12 @@ function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export default function TeamPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function TeamPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   const [knockers, setKnockers] = useState<ApiKnocker[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -101,11 +106,7 @@ export default function TeamPage({ params }: { params: { slug: string } }): JSX.
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KpiCard
-            label="Knockers"
-            value={rows.length}
-            hint={`${activeCount} active`}
-          />
+          <KpiCard label="Knockers" value={rows.length} hint={`${activeCount} active`} />
           <KpiCard label="Active logins" value={activeCount} />
           <KpiCard
             label="Pending invites"
@@ -148,8 +149,8 @@ export default function TeamPage({ params }: { params: { slug: string } }): JSX.
               <UserPlus size={22} className="text-soft mx-auto mb-2" aria-hidden />
               <div className="text-[13px] font-semibold text-ink mb-1">No knockers yet</div>
               <div className="text-[12px] text-muted max-w-sm mx-auto">
-                Invite your first knocker to give them a Knocker iOS login. They&apos;ll show up here
-                once they accept.
+                Invite your first knocker to give them a Knocker iOS login. They&apos;ll show up
+                here once they accept.
               </div>
             </div>
           ) : (

@@ -21,6 +21,24 @@ final class MapViewModel {
     var isLoadingTerritory: Bool = false
     var selectedAnnotation: KnockAnnotation?
 
+    // MARK: - Territory claims
+    var activeClaims: [TerritoryClaimDTO] = []
+    /// Territory IDs this rep has actively claimed.
+    var myClaimIds: Set<String> = []
+
+    @MainActor
+    func refreshClaims(appState: AppState) async {
+        let orgId = appState.orgId
+        guard !orgId.isEmpty else { return }
+        apiClient.accessToken = appState.accessToken
+        if let claims = try? await apiClient.fetchTerritoryClaims(orgId: orgId) {
+            activeClaims = claims
+            myClaimIds = Set(
+                claims.filter { $0.userId == appState.currentUser?.id }.map(\.territoryId)
+            )
+        }
+    }
+
     /// True once a fetch completed with zero assigned territories — drives the
     /// honest "No territory assigned yet" overlay instead of fake homes.
     var hasNoTerritory: Bool = false

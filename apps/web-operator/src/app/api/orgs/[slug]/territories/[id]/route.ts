@@ -53,8 +53,9 @@ const patchBody = z.discriminatedUnion('areaType', [radiusBody, polygonBody]);
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { slug: string; id: string } },
+  { params: paramsPromise }: { params: Promise<{ slug: string; id: string }> },
 ): Promise<Response> {
+  const params = await paramsPromise;
   const sessionOrErr = await requireSession();
   if (sessionOrErr instanceof Response) return sessionOrErr;
   const session = sessionOrErr;

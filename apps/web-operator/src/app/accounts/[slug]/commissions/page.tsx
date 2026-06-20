@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import { DollarSign, Download, FileText, ListChecks, Layers } from 'lucide-react';
 import { Banner, Button, EmptyState, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
@@ -78,16 +78,34 @@ const ACCRUALS: AccrualRow[] = [
 ];
 
 const LEDGER: LedgerRow[] = [
-  { ts: '16:48', knocker: 'Elena Vargas', type: 'conversion', amountCents: 1000n, ref: 'CNV-90412' },
+  {
+    ts: '16:48',
+    knocker: 'Elena Vargas',
+    type: 'conversion',
+    amountCents: 1000n,
+    ref: 'CNV-90412',
+  },
   { ts: '16:41', knocker: 'Jada Brooks', type: 'lead-bonus', amountCents: 3000n, ref: 'LEAD-5521' },
   { ts: '16:22', knocker: 'Priya Nair', type: 'conversion', amountCents: 1000n, ref: 'CNV-90408' },
   { ts: '15:57', knocker: 'Marcus Reed', type: 'base', amountCents: 100n, ref: 'KNK-33180' },
-  { ts: '15:40', knocker: 'Team lead · D. Ortiz', type: 'override', amountCents: 500n, ref: 'OVR-0042' },
+  {
+    ts: '15:40',
+    knocker: 'Team lead · D. Ortiz',
+    type: 'override',
+    amountCents: 500n,
+    ref: 'OVR-0042',
+  },
   { ts: '14:18', knocker: 'Tyrone Hill', type: 'clawback', amountCents: -1000n, ref: 'CHB-2210' },
 ];
 
 const PAYOUTS: PayoutRow[] = [
-  { batch: 'PAY-2026-04B', period: '16–30 Apr', knockers: 14, amountCents: 612400n, status: 'paid' },
+  {
+    batch: 'PAY-2026-04B',
+    period: '16–30 Apr',
+    knockers: 14,
+    amountCents: 612400n,
+    status: 'paid',
+  },
   {
     batch: 'PAY-2026-05A',
     period: '01–15 May',
@@ -95,7 +113,13 @@ const PAYOUTS: PayoutRow[] = [
     amountCents: 80600n,
     status: 'instruction-ready',
   },
-  { batch: 'PAY-2026-05B', period: '16–31 May', knockers: 16, amountCents: 41200n, status: 'queued' },
+  {
+    batch: 'PAY-2026-05B',
+    period: '16–31 May',
+    knockers: 16,
+    amountCents: 41200n,
+    status: 'queued',
+  },
 ];
 
 const LADDER = [
@@ -119,7 +143,12 @@ const PAYOUT_TONE: Record<PayoutRow['status'], 'info' | 'success' | 'warn'> = {
   paid: 'success',
 };
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
   const [tab, setTab] = useState<'accruals' | 'ledger' | 'payouts'>('accruals');
 
@@ -265,7 +294,9 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
                       <StatusPill tone={LEDGER_TONE[l.type]}>{l.type}</StatusPill>
                     </td>
                     <td
-                      className={l.amountCents < 0n ? 'text-rose-600 font-semibold' : 'font-semibold'}
+                      className={
+                        l.amountCents < 0n ? 'text-rose-600 font-semibold' : 'font-semibold'
+                      }
                     >
                       <Money cents={l.amountCents} region="US" />
                     </td>

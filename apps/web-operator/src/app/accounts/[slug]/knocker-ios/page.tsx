@@ -16,11 +16,12 @@ function distLine(account: Account): string {
   return `TestFlight + Internal Track under D2D Inc · ${account.shortName} build`;
 }
 
-export default function KnockerIOSPreviewPage({
-  params,
+export default async function KnockerIOSPreviewPage({
+  params: paramsPromise,
 }: {
-  params: { slug: string };
-}): JSX.Element {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {

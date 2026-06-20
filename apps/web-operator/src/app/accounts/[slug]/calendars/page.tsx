@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -183,7 +183,12 @@ function buildAppointments(slug: string): Appointment[] {
   });
 }
 
-export default function CalendarsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function CalendarsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [typeFilter, setTypeFilter] = useState<ApptType | 'all'>('all');
@@ -516,9 +521,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                     </div>
                     <button
                       onClick={() =>
-                        toast.info(
-                          `Share "${b.name}" — booking-link copy lands in Phase 1.2`,
-                        )
+                        toast.info(`Share "${b.name}" — booking-link copy lands in Phase 1.2`)
                       }
                       className="text-[11px] text-accent font-medium hover:underline"
                     >
@@ -587,9 +590,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                 size="sm"
                 leftIcon={<Phone size={12} />}
                 onClick={() =>
-                  toast.info(
-                    `Call ${selected.contact} — dialer wiring lands in Phase 1.2`,
-                  )
+                  toast.info(`Call ${selected.contact} — dialer wiring lands in Phase 1.2`)
                 }
               >
                 Call
@@ -598,9 +599,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                 variant="secondary"
                 size="sm"
                 leftIcon={<MessageSquare size={12} />}
-                onClick={() =>
-                  toast.info(`SMS ${selected.contact} — wiring lands in Phase 1.2`)
-                }
+                onClick={() => toast.info(`SMS ${selected.contact} — wiring lands in Phase 1.2`)}
               >
                 SMS
               </Button>
@@ -608,9 +607,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                 variant="primary"
                 size="sm"
                 onClick={() =>
-                  toast.info(
-                    `Join ${selected.location} — video link wiring lands in Phase 1.2`,
-                  )
+                  toast.info(`Join ${selected.location} — video link wiring lands in Phase 1.2`)
                 }
               >
                 Join

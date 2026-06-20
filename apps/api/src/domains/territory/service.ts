@@ -216,6 +216,21 @@ export async function createTerritory(
     return row;
   });
 
+  // Fire-and-forget: subscribe to Planet Labs imagery for this territory.
+  void (async () => {
+    try {
+      const { env } = await import('../../config/env');
+      if (!input.polygonWkt || !env().PLANET_API_KEY) return;
+      const { wktToGeoJSON, createPlanetSubscription } = await import('../satellite/service');
+      const { enqueuePlanetIntel } = await import('../../workers/planet-intel.worker');
+      const geoPolygon = wktToGeoJSON(input.polygonWkt);
+      const subscriptionId = await createPlanetSubscription(created.id, geoPolygon);
+      await enqueuePlanetIntel({ territoryId: created.id, subscriptionId });
+    } catch {
+      // non-fatal: planet subscription is best-effort
+    }
+  })();
+
   return toPublic(created);
 }
 
@@ -513,6 +528,112 @@ export async function listAssignedTerritories(actor: ActorContext): Promise<Assi
     areaType: a.territory.areaType,
     radiusMeters: a.territory.radiusMeters,
   }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Territory claims — real-time area ownership signal (4-hour TTL)
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface TerritoryClaimPublic {
+  id: string;
+  orgId: string;
+  territoryId: string;
+  userId: string;
+  userName: string;
+  claimedAt: string;
+  expiresAt: string;
+}
+
+const CLAIM_TTL_HOURS = 4;
+
+/**
+ * Upsert a territory claim for this user (renew if one already exists).
+ * expiresAt = now + 4 hours.
+ */
+export async function claimTerritory(
+  territoryId: string,
+  userId: string,
+  userName: string,
+  orgId: string,
+): Promise<TerritoryClaimPublic> {
+  // Verify territory belongs to this org — 404 per project convention.
+  const ter = await prisma().territory.findUnique({ where: { id: territoryId } });
+  if (!ter) throw new ProblemError(Problems.notFound('Territory', territoryId));
+  if (ter.orgId !== orgId) throw new ProblemError(Problems.notFound('Territory', territoryId));
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + CLAIM_TTL_HOURS * 60 * 60 * 1000);
+
+  // Upsert: find any existing active claim by this user on this territory.
+  const existing = await prisma().territoryClaim.findFirst({
+    where: { orgId, territoryId, userId },
+  });
+
+  let row;
+  if (existing) {
+    row = await prisma().territoryClaim.update({
+      where: { id: existing.id },
+      data: { claimedAt: now, expiresAt },
+    });
+  } else {
+    row = await prisma().territoryClaim.create({
+      data: {
+        orgId,
+        territoryId,
+        userId,
+        userName,
+        claimedAt: now,
+        expiresAt,
+      },
+    });
+  }
+
+  return toClaimPublic(row);
+}
+
+/**
+ * Delete any active claim by this user on this territory.
+ */
+export async function releaseClaim(
+  territoryId: string,
+  userId: string,
+  orgId: string,
+): Promise<void> {
+  await prisma().territoryClaim.deleteMany({
+    where: { orgId, territoryId, userId },
+  });
+}
+
+/**
+ * Return all non-expired claims for this org.
+ */
+export async function getActiveClaims(orgId: string): Promise<TerritoryClaimPublic[]> {
+  const now = new Date();
+  const rows = await prisma().territoryClaim.findMany({
+    where: { orgId, expiresAt: { gt: now } },
+    orderBy: { claimedAt: 'asc' },
+  });
+  return rows.map(toClaimPublic);
+}
+
+function toClaimPublic(r: {
+  id: string;
+  orgId: string;
+  territoryId: string;
+  userId: string;
+  userName: string;
+  claimedAt: Date;
+  expiresAt: Date;
+}): TerritoryClaimPublic {
+  return {
+    id: r.id,
+    orgId: r.orgId,
+    territoryId: r.territoryId,
+    userId: r.userId,
+    userName: r.userName,
+    claimedAt: r.claimedAt.toISOString(),
+    expiresAt: r.expiresAt.toISOString(),
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────

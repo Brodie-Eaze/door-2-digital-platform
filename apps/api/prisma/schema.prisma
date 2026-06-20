@@ -1416,6 +1416,27 @@ model DsarRequest {
   @@index([slaDueAt, status])
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// TerritoryClaim — real-time area ownership signal for the Knocker iOS map.
+// A rep claims a territory when they start working it; the claim auto-expires
+// after 4 hours. Other reps on the same org see the claimant's initials as a
+// badge overlay on the map. Claims are ephemeral — no soft-delete, just expire.
+// ───────────────────────────────────────────────────────────────────────────
+
+model TerritoryClaim {
+  id          String   @id @default(cuid())
+  orgId       String
+  territoryId String
+  userId      String
+  userName    String // denormalized display name — avoids join on hot path
+  claimedAt   DateTime @default(now())
+  expiresAt   DateTime // claims auto-expire; default 4 hours from claim
+
+  @@index([orgId, territoryId])
+  @@index([orgId, expiresAt])
+  @@map("territory_claims")
+}
+
 model AnalyticsEvent {
   id         String     @id // aev_*
   orgId      String

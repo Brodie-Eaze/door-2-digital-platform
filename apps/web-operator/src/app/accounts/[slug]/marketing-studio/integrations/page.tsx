@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import {
   Plug,
   Sparkles,
@@ -41,7 +41,7 @@ import { DataSourceBadge } from '@/components/DataSourceBadge';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 type Category = 'All' | 'Ads' | 'Copy' | 'Image' | 'Video' | 'Avatar' | 'Safety';
@@ -121,7 +121,8 @@ function categoryIcon(c: Exclude<Category, 'All'>): typeof Sparkles {
   }
 }
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
   const [filter, setFilter] = useState<Category>('All');

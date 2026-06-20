@@ -145,10 +145,11 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
 }
 
 export default async function LeadsInboxPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const session = await getSession();
   if (!session) redirect(`/login?next=/accounts/${params.slug}/leads`);
 
