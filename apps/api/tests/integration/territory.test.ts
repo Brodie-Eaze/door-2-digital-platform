@@ -240,7 +240,7 @@ describe('GET /v1/territories', () => {
 });
 
 describe('GET /v1/territories/:id', () => {
-  it('returns 403 cross-tenant (RFC 7807 tenant-mismatch)', async () => {
+  it('returns 404 cross-tenant (RFC 7807 not-found, no info leak)', async () => {
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const created = await app.inject({
@@ -255,8 +255,10 @@ describe('GET /v1/territories/:id', () => {
       url: `/v1/territories/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
-    expect(peek.statusCode).toBe(403);
-    expect(peek.json().type).toBe('https://docs.d2d.io/problems/tenant-mismatch');
+    // cross-tenant → 404, NOT 403: Problems.tenantMismatch renders as a generic
+    // not-found so a foreign id is indistinguishable from a non-existent one.
+    expect(peek.statusCode).toBe(404);
+    expect(peek.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 });
 
@@ -428,6 +430,10 @@ describe('GET /v1/territories/assigned', () => {
       centroid: expect.any(String),
       campaignId: null,
       status: 'active',
+      // areaType + radiusMeters were added so the Knocker iOS map can render a
+      // radius circle. A polygon-created territory defaults to areaType='polygon'.
+      areaType: 'polygon',
+      radiusMeters: null,
     });
   });
 
@@ -474,7 +480,7 @@ describe('GET /v1/territories/assigned', () => {
     expect(res.json()).toEqual([]);
   });
 
-  it('is tenant-scoped — a knocker never sees another org\'s assignments', async () => {
+  it("is tenant-scoped — a knocker never sees another org's assignments", async () => {
     await makeKnocker();
     // Assign an orgA territory to the orgA knocker.
     await createAndAssign('Org A Ward', { assign: true });
@@ -536,14 +542,16 @@ describe('GET /v1/territories/heatmap', () => {
 });
 
 describe('POST /v1/territories/:id/draft', () => {
-  it('returns 501 — draft workflow still pending', async () => {
+  // draft is now IMPLEMENTED (creates a draft copy with a new polygon), not a
+  // 501 stub. A well-formed call against an unknown id resolves to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/territories/ter_anything/draft',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {},
+      url: '/v1/territories/ter_does_not_exist/draft',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'ter-draft-404' },
+      payload: { polygonWkt: samplePolygon, reason: 'boundary correction' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

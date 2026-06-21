@@ -222,9 +222,11 @@ describe('SEC-002 — PATCH /v1/users/:id update guard', () => {
     });
     expect(res.statusCode).toBe(403);
 
-    // Victim's name must be unchanged.
+    // Victim's name must be unchanged. PII-first: the stored value is masked at
+    // create ('Vic' → 'V••'); asserting it stays 'V••' still proves the attacker's
+    // PATCH ('Hacked') never landed.
     const after = await prisma().user.findUniqueOrThrow({ where: { id: victimId } });
-    expect(after.givenName).toBe('Vic');
+    expect(after.givenName).toBe('V••');
   });
 
   it('a viewer PATCHing ANOTHER user → 403', async () => {
@@ -269,7 +271,11 @@ describe('SEC-002 — PATCH /v1/users/:id update guard', () => {
       payload: { givenName: 'Renamed' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().user.givenName).toBe('Renamed');
+    // PII-first: the read boundary returns the MASKED name. 'Renamed' (7 chars) →
+    // 'R' + 6 dots. Real value is encrypted in givenNameVault.
+    expect(res.json().user.givenName).toBe('R••••••');
+    const row = await prisma().user.findUniqueOrThrow({ where: { id: 'usr_SEC002_SELF' } });
+    expect(row.givenNameVault).not.toBeNull();
   });
 });
 
@@ -315,8 +321,10 @@ describe('lockout + admin unlock', () => {
 
     const cred = await prisma().userCredential.findUniqueOrThrow({ where: { userId: targetId } });
     expect(cred.lockedUntil).not.toBeNull();
-    // After a lockout the counter resets to 0 in the DB (auth service behaviour).
-    expect(cred.failedLoginCount).toBe(0);
+    // SEC-007: the cumulative failure counter is NOT reset on lock — resetting it
+    // would hand an attacker a fresh 10 attempts each window. The count only
+    // resets on a SUCCESSFUL login. After the 10th failure it therefore reads 10.
+    expect(cred.failedLoginCount).toBe(10);
   });
 
   it('admin POST /:id/unlock clears lockedUntil + failedLoginCount and the user can log in again', async () => {
@@ -427,7 +435,7 @@ describe('lockout + admin unlock', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('cross-tenant unlock attempt → 403 (same-org guard)', async () => {
+  it('cross-tenant unlock attempt → 404 (same-org guard)', async () => {
     // A second org with its own admin cannot unlock a user in orgId.
     const foreignOrgId = 'org_SEC_FOREIGN';
     const foreignAdminId = 'usr_SEC_FOREIGN_ADMIN';
@@ -475,6 +483,8 @@ describe('lockout + admin unlock', () => {
         'idempotency-key': 'unlock-xtenant-001', // gitleaks:allow
       },
     });
-    expect(res.statusCode).toBe(403);
+    // The foreign admin passes the role gate but the target lives in another org →
+    // 404 (Problems.tenantMismatch), NOT 403: no cross-tenant existence leak.
+    expect(res.statusCode).toBe(404);
   });
 });

@@ -25,7 +25,10 @@ interface ActorContext {
 export interface DonationPublic {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  // F-004: the plaintext-named `donorEmail` field is NOT exposed on the read
+  // path — the real value lives in donorEmailVault (JIT-unmask only). We surface
+  // the deterministic search digest so callers can correlate without revealing PII.
+  donorEmailDigest: string | null;
   amountCents: string;
   currency: string;
   frequency: string | null;
@@ -42,7 +45,7 @@ async function loadDonationAndAssertTenant(
   row: {
     id: string;
     conversionId: string;
-    donorEmail: string;
+    donorEmailDigest: string | null;
     amountCents: bigint;
     currency: string;
     frequency: string | null;
@@ -267,16 +270,6 @@ export async function generateDonationReceipt(
   return toReceiptPublic(updated);
 }
 
-/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org).
- * Returns '[encrypted]' for vault rows (sentinel value = 'redacted@vaulted');
- * JIT unmask is via POST /v1/pii/unmask-request + /unmask-approve + /reveal. */
-function maskDonorEmail(email: string): string {
-  if (email === 'redacted@vaulted') return '[encrypted]';
-  const [user, domain] = email.split('@');
-  if (!domain || !user) return '•••';
-  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
-}
-
 function toReceiptPublic(r: {
   id: string;
   amountCents: bigint;
@@ -301,7 +294,7 @@ function toReceiptPublic(r: {
 function toPublic(r: {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  donorEmailDigest: string | null;
   amountCents: bigint;
   currency: string;
   frequency: string | null;
@@ -313,8 +306,9 @@ function toPublic(r: {
   return {
     id: r.id,
     conversionId: r.conversionId,
-    // PII-first: donor email masked at the read boundary (m•••@example.org).
-    donorEmail: maskDonorEmail(r.donorEmail),
+    // F-004: never surface the plaintext-named email field; expose the search
+    // digest only. Real value is JIT-unmask via /v1/pii/* against donorEmailVault.
+    donorEmailDigest: r.donorEmailDigest,
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,

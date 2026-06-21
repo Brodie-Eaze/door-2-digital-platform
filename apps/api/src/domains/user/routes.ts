@@ -22,6 +22,7 @@ import {
   archiveUser,
   resendInvite,
   resetMfa,
+  unlockUser,
 } from './service';
 import { getDailyStats } from './daily-stats.service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
@@ -189,6 +190,33 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
         orgId: ctx.orgId,
         handler: async () => {
           const user = await changeUserRole(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
+  );
+
+  // POST /v1/users/:id/unlock — clear a login lockout (lockedUntil +
+  // failedLoginCount). org_admin/super_admin only (enforced in the service via
+  // ROLE_GRANT_ROLES — tighter than archive). Idempotent: replays via the
+  // Idempotency-Key, and re-unlocking an unlocked account is a no-op that still
+  // audits. Same-org guard → cross-tenant target is a tenant mismatch (404).
+  app.post<{ Params: UserIdParams }>(
+    '/:id/unlock',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await unlockUser(req.params.id, {
             userId: ctx.userId,
             orgId: ctx.orgId,
             regionCode: ctx.regionCode as never,

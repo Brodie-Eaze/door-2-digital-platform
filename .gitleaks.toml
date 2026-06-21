@@ -17,6 +17,8 @@ regexes = [
   '''d2d_test_[A-Za-z0-9]{4,}''',           # test API keys in docs
   '''sk_test_[A-Za-z0-9_-]{4,}''',           # Stripe test keys
   '''AKIA(IOSFODNN7EXAMPLE|XXXX)''',         # AWS example access keys
+  '''test-secret-at-least-32-chars-long''',  # Jest/vitest IRON_SESSION_SECRET fixture
+  '''[a-z]+-[a-z]+-404''',                  # Test idempotency-key strings (e.g. don-receipt-404)
 ]
 stopwords = [
   "EXAMPLE",

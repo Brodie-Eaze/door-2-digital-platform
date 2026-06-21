@@ -277,8 +277,10 @@ describe('Registration status state-machine', () => {
         regionCode: 'US',
       },
     });
+    // cross-tenant campaign → 404 (Problems.tenantMismatch), NOT 403: a foreign
+    // campaign id must be indistinguishable from a non-existent one.
     await expect(
       fileRegistration({ campaignId, state: 'CA' }, { ...actor, orgId: otherOrg }),
-    ).rejects.toMatchObject({ problem: { status: 403 } });
+    ).rejects.toMatchObject({ problem: { status: 404 } });
   });
 });

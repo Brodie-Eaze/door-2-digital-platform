@@ -679,7 +679,10 @@ model Donation {
   // PII-vault pattern: real email stored AES-256-GCM encrypted; plaintext column holds sentinel.
   // Write path: donorEmail = 'redacted@vaulted', donorEmailVault = encrypted blob.
   donorEmail                String             @default("redacted@vaulted") /// PII sentinel
-  donorEmailVault           String?            /// PII — AES-256-GCM(email, AAD=Donation:id)
+  // F-004: stores the EncryptedField envelope object (matches User.*Vault). The
+  // unmask resolver reads this as a structured EncryptedField; declaring it
+  // String? broke the vault write path. Json? matches the proven User pattern.
+  donorEmailVault           Json?              /// PII — AES-256-GCM(email, AAD=Donation:id)
   donorEmailDigest          String?            /// deterministic SIV digest for indexed search
   amountCents               BigInt
   currency                  String

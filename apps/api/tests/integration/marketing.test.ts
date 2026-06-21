@@ -138,7 +138,7 @@ beforeEach(async () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('GET /v1/marketing/providers', () => {
-  it('lists all 11 adapters', async () => {
+  it('lists all 14 adapters', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'GET',
@@ -147,7 +147,9 @@ describe('GET /v1/marketing/providers', () => {
     });
     expect(res.statusCode).toBe(200);
     const providers = res.json().providers as Array<{ kind: string; connected: boolean }>;
-    expect(providers).toHaveLength(11);
+    // Registry grew from 11 → 14 (added meta_mcp + crm_hubspot + crm_salesforce).
+    // The named-kind assertions below keep the test's teeth on the originals.
+    expect(providers).toHaveLength(14);
     const kinds = providers.map((p) => p.kind).sort();
     expect(kinds).toContain('claude_copy');
     expect(kinds).toContain('runway_video');
@@ -608,7 +610,7 @@ describe('GET /v1/marketing/creatives/jobs', () => {
     expect(none.json().data).toEqual([]);
   });
 
-  it('cross-tenant 403 on read by id', async () => {
+  it('cross-tenant 404 on read by id', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     await connect(tA, 'claude_copy', 'mkt-iso-conn-1');
@@ -628,7 +630,8 @@ describe('GET /v1/marketing/creatives/jobs', () => {
       url: `/v1/marketing/creatives/jobs/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
+    expect(res.statusCode).toBe(404);
   });
 });
 

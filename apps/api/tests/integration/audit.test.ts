@@ -315,13 +315,15 @@ describe('POST /v1/audit/events/verify', () => {
 });
 
 describe('GET /v1/audit/events/export', () => {
-  it('returns 501 — Phase 1.4', async () => {
+  // Phase 1.4: export is now IMPLEMENTED as an NDJSON stream (was a 501 stub).
+  it('streams audit events as NDJSON (200)', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'GET',
       url: '/v1/audit/events/export',
       headers: { authorization: `Bearer ${tA}` },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/x-ndjson');
   });
 });
