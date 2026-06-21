@@ -121,12 +121,12 @@ export async function createFieldSignup(
         vertical: 'charity',
         givenName,
         familyName,
-        // Legacy plaintext columns kept for backwards compatibility — the
-        // canonical PII lives in *Vault and is read via PiiVaultService.
-        email: input.customerEmail ?? null,
+        // Plaintext columns hold masked sentinels — real PII lives in *Vault only.
+        // F-002 fix: never co-locate plaintext with the vault column (blast-radius).
+        email: input.customerEmail ? maskEmailPii(input.customerEmail) : null,
         emailDigest: emailDig,
         emailVault: emailVault ? (emailVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-        phone: input.customerPhone ?? null,
+        phone: input.customerPhone ? maskPhonePii(input.customerPhone) : null,
         phoneDigest: phoneDig,
         phoneVault: phoneVault ? (phoneVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       },
@@ -241,4 +241,16 @@ export async function createFieldSignup(
   });
 
   return { id: result.conversionId, leadId: result.leadId };
+}
+
+function maskEmailPii(email: string): string {
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+
+function maskPhonePii(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '•••';
+  return `••• ••• ${digits.slice(-4)}`;
 }

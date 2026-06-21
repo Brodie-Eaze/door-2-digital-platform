@@ -162,25 +162,29 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   );
 
   // POST /v1/auth/refresh — accept refresh token from JSON body OR d2d_rt cookie.
-  app.post('/refresh', async (req, reply) => {
-    let refreshToken: string | undefined;
-    // Prefer cookie if present.
-    const cookies = (req as unknown as { cookies?: Record<string, string | undefined> }).cookies;
-    if (cookies && typeof cookies.d2d_rt === 'string') {
-      refreshToken = cookies.d2d_rt;
-    } else {
-      const body = refreshRequestSchema.parse(req.body);
-      refreshToken = body.refreshToken;
-    }
-    const result = await refresh({
-      refreshToken,
-      ip: req.ip,
-      userAgent:
-        typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
-    });
-    setAuthCookies(reply, result.accessToken, result.refreshToken);
-    return reply.code(200).send(result);
-  });
+  app.post(
+    '/refresh',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      let refreshToken: string | undefined;
+      // Prefer cookie if present.
+      const cookies = (req as unknown as { cookies?: Record<string, string | undefined> }).cookies;
+      if (cookies && typeof cookies.d2d_rt === 'string') {
+        refreshToken = cookies.d2d_rt;
+      } else {
+        const body = refreshRequestSchema.parse(req.body);
+        refreshToken = body.refreshToken;
+      }
+      const result = await refresh({
+        refreshToken,
+        ip: req.ip,
+        userAgent:
+          typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
+      });
+      setAuthCookies(reply, result.accessToken, result.refreshToken);
+      return reply.code(200).send(result);
+    },
+  );
 
   // POST /v1/auth/logout — works with cookie OR Authorization header. Auth
   // is OPTIONAL so a stale cookie still gets cleared cleanly without 401.

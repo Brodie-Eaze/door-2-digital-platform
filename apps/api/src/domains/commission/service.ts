@@ -26,12 +26,14 @@ import { Prisma } from '@prisma/client';
 import type { RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
+import { AuditService } from '../audit/service';
 import type { ListCommissionsQuery } from './schemas';
 
 interface ActorContext {
   userId: string;
   orgId: string;
   regionCode: RegionCode;
+  role: string;
 }
 
 // ── DSL types ──────────────────────────────────────────────────────────────
@@ -325,11 +327,17 @@ export async function getProjection(actor: ActorContext): Promise<{
   };
 }
 
+const ADJUST_ROLES = new Set(['manager', 'org_admin', 'super_admin'] as const);
+
 export async function adjustCommission(
   id: string,
   adjustment: { amountCents: bigint; reason: string },
   actor: ActorContext,
 ): Promise<CommissionPublic> {
+  if (!ADJUST_ROLES.has(actor.role as never)) {
+    throw new ProblemError(Problems.forbidden('Role not permitted to adjust commissions'));
+  }
+
   const row = await prisma().commission.findUnique({ where: { id } });
   if (!row) throw new ProblemError(Problems.notFound('Commission', id));
   if (row.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(row.orgId));
@@ -337,9 +345,22 @@ export async function adjustCommission(
     throw new ProblemError(Problems.conflict(`Commission ${id} is ${row.status} — cannot adjust`));
   }
 
-  const updated = await prisma().commission.update({
-    where: { id },
-    data: { amountCents: adjustment.amountCents },
+  const updated = await prisma().$transaction(async (tx) => {
+    const commission = await tx.commission.update({
+      where: { id },
+      data: { amountCents: adjustment.amountCents },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'commission.adjusted',
+      resourceType: 'Commission',
+      resourceId: id,
+      beforeJson: { amountCents: row.amountCents.toString() },
+      afterJson: { amountCents: adjustment.amountCents.toString(), reason: adjustment.reason },
+    });
+    return commission;
   });
   return toPublic(updated);
 }

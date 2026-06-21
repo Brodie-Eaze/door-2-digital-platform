@@ -27,6 +27,7 @@ export async function registerCommission(app: FastifyInstance): Promise<void> {
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
     return reply.code(200).send(result);
   });
@@ -38,6 +39,7 @@ export async function registerCommission(app: FastifyInstance): Promise<void> {
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
     return reply.code(200).send({ projection });
   });
@@ -49,18 +51,19 @@ export async function registerCommission(app: FastifyInstance): Promise<void> {
       userId: ctx.userId,
       orgId: ctx.orgId,
       regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
     return reply.code(200).send({ commission });
   });
 
-  // POST /v1/commissions/:id/adjust
+  // POST /v1/commissions/:id/adjust — manager+ only (enforced in service)
   app.post<{ Params: IdParams }>('/:id/adjust', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = adjustCommissionBodySchema.parse(req.body);
     const commission = await adjustCommission(
       req.params.id,
       { amountCents: body.amountCents, reason: body.reason },
-      { userId: ctx.userId, orgId: ctx.orgId, regionCode: ctx.regionCode as never },
+      { userId: ctx.userId, orgId: ctx.orgId, regionCode: ctx.regionCode as never, role: ctx.role },
     );
     return reply.code(200).send({ commission });
   });
