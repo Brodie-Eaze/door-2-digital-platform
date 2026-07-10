@@ -602,7 +602,7 @@ resource "aws_cloudfront_distribution" "this" {
     acm_certificate_arn            = var.route53_zone_id != null ? aws_acm_certificate_validation.this[0].certificate_arn : null
     cloudfront_default_certificate = var.route53_zone_id == null ? true : false
     ssl_support_method             = var.route53_zone_id != null ? "sni-only" : null
-    minimum_protocol_version       = var.route53_zone_id != null ? "TLSv1.2_2021" : "TLSv1"
+    minimum_protocol_version       = "TLSv1.2_2021"
   }
 
   tags = local.tags

@@ -24,7 +24,6 @@ function sharePct(part: bigint, whole: bigint): number {
 }
 
 export default function AttributionPage(): JSX.Element {
-  const _rake = bucketRake(CURRENT_PERIOD);
   const totalGross = grossCents(CURRENT_PERIOD);
 
   return (
