@@ -11,9 +11,16 @@
  * the *batch* call as a whole; the per-knock key dedupes individual rows
  * within a batch and across retries.
  */
-import type { RegionCode, Prisma, KnockDisposition } from '@prisma/client';
+// `Prisma` is a VALUE import (not `import type`) — createKnock needs
+// `instanceof Prisma.PrismaClientKnownRequestError` to map the global-unique
+// idempotencyKey collision (P2002) to a clean 409 under the RLS belt, where the
+// owner-role dedup pre-check is invisible across tenants and the unique index is
+// the real arbiter. The namespace still provides the type members it had before
+// (`Prisma.KnockWhereInput`, `Prisma.TransactionClient`, `Prisma.DateTimeFilter`).
+import { Prisma } from '@prisma/client';
+import type { RegionCode, KnockDisposition } from '@prisma/client';
 import { newId, Problems, ProblemError, addressHash } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx, tenantPrismaTx } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import type {
   StartSessionRequest,
@@ -76,50 +83,54 @@ export async function startSession(
   input: StartSessionRequest,
   actor: ActorContext,
 ): Promise<SessionPublic> {
-  // Territory must belong to actor's org.
-  const ter = await prisma().territory.findUnique({
+  // Territory must belong to actor's org. Read through the belt: under d2d_app a
+  // foreign-tenant territory is invisible (RLS) → null → 404, which is the right
+  // answer (withhold existence). No explicit tenantMismatch 403 — that would leak
+  // the row's existence across tenants.
+  const ter = await tenantPrismaTx(actor.orgId).territory.findUnique({
     where: { id: input.territoryId },
-    select: { orgId: true, status: true },
+    select: { status: true },
   });
   if (!ter) throw new ProblemError(Problems.notFound('Territory', input.territoryId));
-  if (ter.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(ter.orgId));
-  }
   if (ter.status !== 'active') {
     throw new ProblemError(Problems.conflict('Territory is not active'));
   }
 
   const id = newId('sess');
-  const created = await prisma().knockSession.create({
-    data: {
-      id,
-      orgId: actor.orgId,
-      userId: actor.userId,
-      territoryId: input.territoryId,
-      regionCode: actor.regionCode,
-      startedAt: new Date(),
-      startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
-      deviceId: input.deviceId,
-      appVersion: input.appVersion ?? null,
-      osVersion: input.osVersion ?? null,
-    },
-  });
+  const created = await tenantTx(actor.orgId, (tx) =>
+    tx.knockSession.create({
+      data: {
+        id,
+        orgId: actor.orgId,
+        userId: actor.userId,
+        territoryId: input.territoryId,
+        regionCode: actor.regionCode,
+        startedAt: new Date(),
+        startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
+        deviceId: input.deviceId,
+        appVersion: input.appVersion ?? null,
+        osVersion: input.osVersion ?? null,
+      },
+    }),
+  );
   return toSessionPublic(created);
 }
 
 export async function endSession(sessionId: string, actor: ActorContext): Promise<SessionPublic> {
-  const existing = await prisma().knockSession.findUnique({ where: { id: sessionId } });
+  // Read through the belt: a foreign-tenant session is invisible → null → 404.
+  const existing = await tenantPrismaTx(actor.orgId).knockSession.findUnique({
+    where: { id: sessionId },
+  });
   if (!existing) throw new ProblemError(Problems.notFound('KnockSession', sessionId));
-  if (existing.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-  }
   if (existing.endedAt) {
     return toSessionPublic(existing); // idempotent
   }
-  const updated = await prisma().knockSession.update({
-    where: { id: sessionId },
-    data: { endedAt: new Date() },
-  });
+  const updated = await tenantTx(actor.orgId, (tx) =>
+    tx.knockSession.update({
+      where: { id: sessionId },
+      data: { endedAt: new Date() },
+    }),
+  );
   return toSessionPublic(updated);
 }
 
@@ -183,35 +194,37 @@ export async function createKnock(
   input: CreateKnockRequest,
   actor: ActorContext,
 ): Promise<CreateKnockResult> {
-  // Dedupe by idempotencyKey (unique column).
-  const dup = await prisma().knock.findUnique({
+  // Dedupe by idempotencyKey (globally @unique). Under the belt this read only
+  // ever sees the caller's own tenant; a key reused by ANOTHER org is invisible
+  // here, so we fall through to the write where the global unique index is the
+  // real arbiter — the `.catch` on the tenantTx below maps that P2002 to
+  // idempotencyKeyReused. (Same pattern as user.emailDigest under §4b.)
+  const db = tenantPrismaTx(actor.orgId);
+  const dup = await db.knock.findUnique({
     where: { idempotencyKey: input.idempotencyKey },
   });
   if (dup) {
-    if (dup.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.idempotencyKeyReused());
-    }
     return { knock: toKnockPublic(dup), deduped: true };
   }
 
-  // Session must exist + belong to actor's org.
-  const sess = await prisma().knockSession.findUnique({
+  // Session must exist + belong to actor's org. Belt: a foreign session is
+  // invisible → null → 404. Only `territoryId` is consumed below (userId /
+  // regionCode come from the actor), so the select narrows to it.
+  const sess = await db.knockSession.findUnique({
     where: { id: input.sessionId },
-    select: { orgId: true, userId: true, territoryId: true, regionCode: true },
+    select: { territoryId: true },
   });
   if (!sess) throw new ProblemError(Problems.notFound('KnockSession', input.sessionId));
-  if (sess.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(sess.orgId));
-  }
 
   const territoryId = input.territoryId ?? sess.territoryId;
   if (input.territoryId && input.territoryId !== sess.territoryId) {
-    // Verify the override still belongs to this org.
-    const ter = await prisma().territory.findUnique({
+    // Verify the override still belongs to this org. Belt: a foreign territory is
+    // invisible → null → 404 (same answer the old cross-org orgId check produced).
+    const ter = await db.territory.findUnique({
       where: { id: input.territoryId },
-      select: { orgId: true },
+      select: { id: true },
     });
-    if (!ter || ter.orgId !== actor.orgId) {
+    if (!ter) {
       throw new ProblemError(Problems.notFound('Territory', input.territoryId));
     }
   }
@@ -221,7 +234,7 @@ export async function createKnock(
   const clientOffsetMs = serverNow.getTime() - capturedAt.getTime();
   const id = newId('knk');
 
-  const result = await prisma().$transaction(async (tx) => {
+  const result = await tenantTx(actor.orgId, async (tx) => {
     let addressId = input.addressId;
     if (!addressId && input.rawAddress) {
       const a = await upsertAddress(tx, input.rawAddress, actor.regionCode);
@@ -270,6 +283,14 @@ export async function createKnock(
       metadata: { clientOffsetMs },
     });
     return row;
+  }).catch((e: unknown) => {
+    // Global-unique idempotencyKey collision: under the belt the dedup pre-check
+    // above can't see another tenant's row, so a cross-org reuse only trips here,
+    // on the unique index. Map it to the same 409 the old cross-org branch threw.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new ProblemError(Problems.idempotencyKeyReused());
+    }
+    throw e;
   });
 
   return { knock: toKnockPublic(result), deduped: false };
@@ -287,8 +308,11 @@ export async function createKnock(
  * pool, ≈ 6s p99 for 500 knocks) to a SINGLE prisma.$transaction that:
  *
  *   1. De-duplicates the incoming batch by `idempotencyKey` in-memory.
- *   2. Pre-resolves existing knocks (cross-org reuse → error; same-org →
- *      counted as deduped, no insert).
+ *   2. Pre-resolves existing knocks through the tenant belt (only the caller's
+ *      own tenant is visible). A same-org repeat is counted as deduped (no
+ *      insert); a key already used by ANOTHER org is invisible to this read and
+ *      gets absorbed by the createMany unique-index `skipDuplicates` below —
+ *      counted as deduped, never inserted, never errored.
  *   3. For raw-address knocks, computes `hashKey` per row, fetches
  *      already-known Address rows in ONE query, batch-inserts only the
  *      new ones, then maps every knock to its Address id.
@@ -328,13 +352,17 @@ export async function createKnockBatch(
   }
 
   // ── Pre-fetch existing knocks (whole-batch DB short-circuit) ─────────
-  const existingRows = await prisma().knock.findMany({
+  // Belt: this read only ever sees the caller's own tenant. A key already used
+  // by ANOTHER org is invisible here → not in this set → the row is treated as a
+  // fresh candidate and absorbed by createMany's unique-index skipDuplicates
+  // (counted as deduped, never inserted). So we only need the keys, not orgId.
+  const existingRows = await tenantPrismaTx(actor.orgId).knock.findMany({
     where: { idempotencyKey: { in: Array.from(allKeys) } },
-    select: { idempotencyKey: true, orgId: true },
+    select: { idempotencyKey: true },
   });
-  const existingByKey = new Map<string, { orgId: string }>();
+  const existingByKey = new Set<string>();
   for (const r of existingRows) {
-    existingByKey.set(r.idempotencyKey, { orgId: r.orgId });
+    existingByKey.add(r.idempotencyKey);
   }
 
   // ── Compute address hashKeys and decide which Address rows to insert
@@ -352,17 +380,10 @@ export async function createKnockBatch(
       deduped += 1;
       continue;
     }
-    const hit = existingByKey.get(k.idempotencyKey);
-    if (hit) {
-      if (hit.orgId !== actor.orgId) {
-        errors.push({
-          index: i,
-          idempotencyKey: k.idempotencyKey,
-          message: 'idempotency key reused by another org',
-        });
-      } else {
-        deduped += 1;
-      }
+    if (existingByKey.has(k.idempotencyKey)) {
+      // Same-org repeat (cross-org reuse is invisible under the belt and handled
+      // by skipDuplicates at insert time).
+      deduped += 1;
       continue;
     }
     if (!k.addressId && !k.rawAddress) {
@@ -393,10 +414,15 @@ export async function createKnockBatch(
 
   // ── Validate session(s) up front: all candidates must reference a
   // session that belongs to this org. We fetch them in one query.
+  // Belt-scoped reads: a session/territory in another org is simply absent from
+  // these results → the validation loop's `!sess` / `!ter` "not found" branch
+  // covers it (no separate cross-org orgId check needed). Address has no orgId so
+  // it stays on the owner `prisma()` connection (RLS disabled on that table).
+  const db = tenantPrismaTx(actor.orgId);
   const sessionIds = Array.from(new Set(candidates.map((c) => c.k.sessionId)));
-  const sessions = await prisma().knockSession.findMany({
+  const sessions = await db.knockSession.findMany({
     where: { id: { in: sessionIds } },
-    select: { id: true, orgId: true, territoryId: true },
+    select: { id: true, territoryId: true },
   });
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
 
@@ -408,9 +434,9 @@ export async function createKnockBatch(
   );
   const overrideTerritories =
     overrideTerritoryIds.length > 0
-      ? await prisma().territory.findMany({
+      ? await db.territory.findMany({
           where: { id: { in: overrideTerritoryIds } },
-          select: { id: true, orgId: true },
+          select: { id: true },
         })
       : [];
   const territoryById = new Map(overrideTerritories.map((t) => [t.id, t]));
@@ -441,17 +467,9 @@ export async function createKnockBatch(
       });
       continue;
     }
-    if (sess.orgId !== actor.orgId) {
-      errors.push({
-        index: c.index,
-        idempotencyKey: c.k.idempotencyKey,
-        message: 'KnockSession belongs to a different org',
-      });
-      continue;
-    }
     if (c.k.territoryId && c.k.territoryId !== sess.territoryId) {
       const ter = territoryById.get(c.k.territoryId);
-      if (!ter || ter.orgId !== actor.orgId) {
+      if (!ter) {
         errors.push({
           index: c.index,
           idempotencyKey: c.k.idempotencyKey,
@@ -478,7 +496,8 @@ export async function createKnockBatch(
   // ── Single transaction: address upsert + knock batch insert + audit. ─
   // Increased transaction timeout: 500-knock payloads need a bit more
   // than the default 5s slot when running on a cold connection pool.
-  const inserted = await prisma().$transaction(
+  const inserted = await tenantTx(
+    actor.orgId,
     async (tx) => {
       // Resolve address ids for raw-address candidates.
       const rawHashKeys = Array.from(
@@ -660,7 +679,9 @@ export async function listKnocks(
   query: ListKnocksQuery,
   actor: ActorContext,
 ): Promise<{ data: KnockPublic[]; nextCursor: string | null }> {
-  const where: Prisma.KnockWhereInput = { orgId: actor.orgId };
+  // orgId comes from the GUC belt now, not an injected filter — tenantPrismaTx
+  // pins `app.current_org_id` so the DB returns only this tenant's rows.
+  const where: Prisma.KnockWhereInput = {};
   if (query.sessionId) where.sessionId = query.sessionId;
   if (query.territoryId) where.territoryId = query.territoryId;
   if (query.disposition) where.disposition = query.disposition;
@@ -672,7 +693,7 @@ export async function listKnocks(
       (where.capturedAt as Prisma.DateTimeFilter).lte = new Date(query.capturedTo);
   }
 
-  const rows = await prisma().knock.findMany({
+  const rows = await tenantPrismaTx(actor.orgId).knock.findMany({
     where,
     take: query.limit + 1,
     ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -685,11 +706,10 @@ export async function listKnocks(
 }
 
 export async function getKnock(id: string, actor: ActorContext): Promise<KnockPublic> {
-  const row = await prisma().knock.findUnique({ where: { id } });
+  // Belt: a foreign-tenant knock is invisible → null → 404 (withhold existence;
+  // no tenantMismatch 403, which would leak that the row exists in another org).
+  const row = await tenantPrismaTx(actor.orgId).knock.findUnique({ where: { id } });
   if (!row) throw new ProblemError(Problems.notFound('Knock', id));
-  if (row.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(row.orgId));
-  }
   return toKnockPublic(row);
 }
 

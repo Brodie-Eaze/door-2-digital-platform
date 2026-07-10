@@ -608,7 +608,7 @@ describe('GET /v1/marketing/creatives/jobs', () => {
     expect(none.json().data).toEqual([]);
   });
 
-  it('cross-tenant 403 on read by id', async () => {
+  it('cross-tenant 404 on read by id (foreign job invisible)', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     await connect(tA, 'claude_copy', 'mkt-iso-conn-1');
@@ -628,7 +628,12 @@ describe('GET /v1/marketing/creatives/jobs', () => {
       url: `/v1/marketing/creatives/jobs/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    // getJob reads through tenantPrismaTx(actor.orgId): org A's job is invisible
+    // to org B (orgId filter at the app layer + RLS belt under d2d_app), so the
+    // read resolves to null → notFound, not the pre-belt 403 tenantMismatch. The
+    // existence oracle closes — org B can't tell "forbidden" from "doesn't exist".
+    // See docs/runbooks/rls-cutover.md §4b.1.
+    expect(res.statusCode).toBe(404);
   });
 });
 

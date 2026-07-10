@@ -22,3 +22,8 @@ output "database_name" {
   value       = aws_rds_cluster.this.database_name
   description = "Initial database name."
 }
+
+output "cluster_resource_id" {
+  value       = aws_rds_cluster.this.cluster_resource_id
+  description = "Cluster resource id (db-XXXXXXXXXX) — required to scope iam:GenerateDbAuthToken policies."
+}

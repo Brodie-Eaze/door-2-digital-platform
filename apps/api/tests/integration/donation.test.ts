@@ -164,7 +164,12 @@ describe('GET /v1/donations/:id', () => {
     expect(res.json().donation.frequency).toBe('monthly');
   });
 
-  it('returns 403 cross-tenant', async () => {
+  it("returns 404 cross-tenant — the donation's parent conversion is invisible (not 403)", async () => {
+    // RLS belt (SEC-005): a Donation has no orgId of its own; tenancy lives on its
+    // parent Conversion. Org B's read pins the belt to org B, so org A's parent
+    // conversion is RLS-invisible → null → 404. We deliberately do NOT return 403:
+    // surfacing "this donation exists in another org" is the cross-tenant existence
+    // disclosure tenant isolation must withhold.
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createRecurringDonation(tA, 'iso-1');
@@ -173,7 +178,7 @@ describe('GET /v1/donations/:id', () => {
       url: `/v1/donations/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
   });
 
   it('returns 404 unknown id', async () => {

@@ -73,6 +73,7 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /v1/leads/:id — state machine guarded
+  // PATCH is idempotent by HTTP definition (RFC 5789); no Idempotency-Key required.
   app.patch<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateLeadRequestSchema.parse(req.body);

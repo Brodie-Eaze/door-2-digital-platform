@@ -1,6 +1,6 @@
 import { Download, ExternalLink } from 'lucide-react';
 import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 
 const INVOICES = [
   {
@@ -54,7 +54,7 @@ const RESIDUALS = [
 
 export default function BillingPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Billing & invoices">
+    <PlatformShell pageTitle="Billing & invoices">
       <div className="space-y-6 max-w-[1280px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
@@ -183,6 +183,6 @@ export default function BillingPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

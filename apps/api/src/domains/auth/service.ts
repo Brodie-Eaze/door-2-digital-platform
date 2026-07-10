@@ -7,7 +7,7 @@
  */
 import type { PlatformRole, RegionCode } from '@prisma/client';
 import { Problems, ProblemError, emailDigest, newId } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx, tenantPrismaTx } from '../../config/db';
 import { env } from '../../config/env';
 import { hashPassword, verifyPassword } from './password';
 import {
@@ -37,6 +37,41 @@ export interface AuthSuccess {
 }
 
 /**
+ * Flat row shapes returned by the §4b SECURITY DEFINER pre-auth resolvers
+ * (apps/api/prisma/migrations/.../preauth_resolvers). These run as the table
+ * owner so they bypass the non-FORCE RLS belt for a single keyed identity
+ * lookup BEFORE any org context exists — the caller re-enters the belt with the
+ * resolved orgId. Enum columns arrive as raw text and are re-narrowed below.
+ */
+interface PreAuthUserRow {
+  id: string;
+  orgId: string;
+  role: string;
+  regionCode: string;
+  brandCode: string;
+  email: string;
+  givenName: string;
+  familyName: string;
+  status: string;
+  passwordHash: string | null;
+}
+
+interface PreAuthRefreshRow {
+  rtId: string;
+  userId: string;
+  orgId: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  role: string;
+  status: string;
+  regionCode: string;
+  brandCode: string;
+  email: string;
+  givenName: string;
+  familyName: string;
+}
+
+/**
  * Look up a user by email digest + verify password. Creates access JWT +
  * refresh row.
  */
@@ -49,18 +84,33 @@ export async function login(args: {
   const e = env();
   const digest = emailDigest(args.email, e.PII_SEARCH_KEY);
 
-  const user = await prisma().user.findUnique({
-    where: { emailDigest: digest },
-    include: { credential: true },
-  });
-  if (!user || !user.credential || user.status !== 'active') {
+  // §4b: pre-auth identity resolution via the SECURITY DEFINER resolver. No org
+  // context exists yet, so a direct table read under d2d_app would deny-by-default
+  // (orgId compared against a NULL GUC). The resolver runs as the table owner for
+  // this one keyed lookup; we re-enter the belt with the resolved orgId for every
+  // write below.
+  const rows = await prisma().$queryRaw<PreAuthUserRow[]>`
+    SELECT * FROM app_resolve_user_by_email_digest(${digest})
+  `;
+  const row = rows[0];
+  if (!row || row.passwordHash === null || row.status !== 'active') {
     // Constant-time-ish: still hash a dummy password to avoid email enumeration.
     await verifyPassword(args.password, 'dummy:00');
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
-  const ok = await verifyPassword(args.password, user.credential.passwordHash);
+  const user: IssueUser = {
+    id: row.id,
+    email: row.email,
+    role: row.role as PlatformRole,
+    orgId: row.orgId,
+    regionCode: row.regionCode as RegionCode,
+    brandCode: row.brandCode,
+    givenName: row.givenName,
+    familyName: row.familyName,
+  };
+  const ok = await verifyPassword(args.password, row.passwordHash);
   if (!ok) {
-    await prisma().$transaction(async (tx) => {
+    await tenantTx(user.orgId, async (tx) => {
       await writeAudit(tx, {
         orgId: user.orgId,
         regionCode: user.regionCode,
@@ -88,16 +138,39 @@ export async function refresh(args: {
   userAgent?: string;
 }): Promise<AuthSuccess> {
   const presentedHash = hashRefreshToken(args.refreshToken);
-  const stored = await prisma().refreshToken.findUnique({
-    where: { tokenHash: presentedHash },
-    include: { user: { include: { credential: true } } },
-  });
-  if (!stored) {
+  // §4b: pre-auth resolver — same belt-bypass rationale as login(). Resolves the
+  // refresh-token row + owning user identity by tokenHash before any org context.
+  const rows = await prisma().$queryRaw<PreAuthRefreshRow[]>`
+    SELECT * FROM app_resolve_refresh_token(${presentedHash})
+  `;
+  const r = rows[0];
+  if (!r) {
     throw new ProblemError(Problems.unauthorized('Invalid refresh token'));
   }
+  // Reshape the flat resolver row into the nested shape the rest of this function
+  // and issueTokens expect, so the reuse / expiry / active checks below are unchanged.
+  const user: IssueUser & { status: string } = {
+    id: r.userId,
+    email: r.email,
+    role: r.role as PlatformRole,
+    orgId: r.orgId,
+    regionCode: r.regionCode as RegionCode,
+    brandCode: r.brandCode,
+    givenName: r.givenName,
+    familyName: r.familyName,
+    status: r.status,
+  };
+  const stored = {
+    id: r.rtId,
+    userId: r.userId,
+    orgId: r.orgId,
+    expiresAt: r.expiresAt,
+    revokedAt: r.revokedAt,
+    user,
+  };
   if (stored.revokedAt) {
     // Token reuse — revoke all outstanding tokens for this user.
-    await prisma().$transaction(async (tx) => {
+    await tenantTx(stored.orgId, async (tx) => {
       await tx.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -146,17 +219,41 @@ export async function logout(args: {
   regionCode?: RegionCode;
 }): Promise<void> {
   if (!args.refreshToken && !args.userId) return;
-  await prisma().$transaction(async (tx) => {
-    if (args.refreshToken) {
-      const hash = hashRefreshToken(args.refreshToken);
+
+  // RefreshToken is RLS-enabled, so the revoke must run with the owning org's GUC
+  // pinned — an un-GUC'd updateMany matches ZERO rows under d2d_app post-cutover
+  // and silently fails to revoke the token. An authenticated logout already
+  // carries orgId; a logout-by-token-only (optionalAuth: stale cookie / no live
+  // session) resolves the owning orgId from the token row via the §4b SECURITY
+  // DEFINER resolver first (the same indexed point-lookup login/refresh use).
+  let orgId = args.orgId;
+  let tokenHash: string | undefined;
+  if (args.refreshToken) {
+    tokenHash = hashRefreshToken(args.refreshToken);
+    if (!orgId) {
+      const rows = await prisma().$queryRaw<{ orgId: string }[]>`
+        SELECT "orgId" FROM app_resolve_refresh_token(${tokenHash})
+      `;
+      orgId = rows[0]?.orgId;
+    }
+  }
+
+  // Unknown/garbage token and no session → no org context, nothing to revoke.
+  if (!orgId) return;
+  const scopedOrgId = orgId;
+
+  await tenantTx(scopedOrgId, async (tx) => {
+    if (tokenHash) {
+      // tokenHash is globally unique, so the GUC (belt) + the unique hash both
+      // pin exactly the presented row; idempotent via the revokedAt: null guard.
       await tx.refreshToken.updateMany({
-        where: { tokenHash: hash, revokedAt: null },
+        where: { tokenHash, revokedAt: null },
         data: { revokedAt: new Date() },
       });
     }
-    if (args.userId && args.orgId && args.regionCode) {
+    if (args.userId && args.regionCode) {
       await writeAudit(tx, {
-        orgId: args.orgId,
+        orgId: scopedOrgId,
         regionCode: args.regionCode,
         actorUserId: args.userId,
         action: 'auth.logout',
@@ -170,7 +267,10 @@ export async function logout(args: {
 /**
  * Get the user identified by the auth context.
  */
-export async function getCurrentUser(userId: string): Promise<{
+export async function getCurrentUser(
+  userId: string,
+  orgId: string,
+): Promise<{
   id: string;
   email: string;
   role: PlatformRole;
@@ -180,7 +280,10 @@ export async function getCurrentUser(userId: string): Promise<{
   givenName: string;
   familyName: string;
 } | null> {
-  const u = await prisma().user.findUnique({
+  // RLS belt: scope the lookup to the principal's org. The reshaper ANDs orgId
+  // into the where and runs findFirst inside a GUC-pinned tx, so a forged userId
+  // from another tenant resolves to null rather than leaking the row.
+  const u = await tenantPrismaTx(orgId).user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -262,7 +365,7 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
   const refreshId = newId('rft');
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
 
-  await prisma().$transaction(async (tx) => {
+  await tenantTx(user.orgId, async (tx) => {
     if (args.rotateFromId) {
       await tx.refreshToken.update({
         where: { id: args.rotateFromId },

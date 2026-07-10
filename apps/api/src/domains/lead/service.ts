@@ -18,7 +18,7 @@
 import type { LeadStatus, RegionCode, Vertical } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx, tenantPrismaTx } from '../../config/db';
 import { PiiVaultService } from '../pii-vault/service';
 import { writeAudit } from '../../shared/audit/write';
 import type {
@@ -103,8 +103,12 @@ function rejectInvalidTransition(from: LeadStatus, to: LeadStatus): never {
 // ───────────────────────────────────────────────────────────────────────────
 
 async function pickInsideSalesRep(orgId: string): Promise<string | null> {
-  const candidates = await prisma().user.findMany({
-    where: { orgId, role: 'inside_sales', status: 'active' },
+  // Read through the RLS belt (SEC-005 §4b): tenantPrismaTx GUC-pins each op so
+  // these org-scoped reads return the caller's rows once the app connects as the
+  // non-owner d2d_app role. where:{orgId} is the app-layer suspenders underneath.
+  const db = tenantPrismaTx(orgId);
+  const candidates = await db.user.findMany({
+    where: { role: 'inside_sales', status: 'active' },
     select: { id: true },
     orderBy: { id: 'asc' },
   });
@@ -114,10 +118,9 @@ async function pickInsideSalesRep(orgId: string): Promise<string | null> {
   // most-recent assignment. If a rep has never been assigned, they come
   // first. Implemented as: count leads per rep, take the lowest count,
   // tie-break by id.
-  const counts = await prisma().lead.groupBy({
+  const counts = await db.lead.groupBy({
     by: ['assignedToId'],
     where: {
-      orgId,
       assignedToId: { in: candidates.map((c) => c.id) },
     },
     _count: { _all: true },
@@ -144,36 +147,36 @@ export async function createLead(
   input: CreateLeadRequest,
   actor: ActorContext,
 ): Promise<LeadPublic> {
+  // Validation reads go through the RLS belt (tenantPrismaTx): each org-scoped
+  // lookup is AND-scoped to actor.orgId + GUC-pinned, so a reference that belongs
+  // to another tenant resolves to null → 404/validation here (no cross-tenant
+  // existence disclosure). Address carries no orgId (shared, hash-deduplicated),
+  // so it stays on the plain client — it has no RLS policy to satisfy.
+  const db = tenantPrismaTx(actor.orgId);
   if (input.campaignId) {
-    const c = await prisma().campaign.findUnique({
+    const c = await db.campaign.findUnique({
       where: { id: input.campaignId },
-      select: { orgId: true },
+      select: { id: true },
     });
     if (!c) throw new ProblemError(Problems.notFound('Campaign', input.campaignId));
-    if (c.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(c.orgId));
-    }
   }
   if (input.addressId) {
     const a = await prisma().address.findUnique({ where: { id: input.addressId } });
     if (!a) throw new ProblemError(Problems.notFound('Address', input.addressId));
   }
   if (input.sourceKnockId) {
-    const k = await prisma().knock.findUnique({
+    const k = await db.knock.findUnique({
       where: { id: input.sourceKnockId },
-      select: { orgId: true },
+      select: { id: true },
     });
     if (!k) throw new ProblemError(Problems.notFound('Knock', input.sourceKnockId));
-    if (k.orgId !== actor.orgId) {
-      throw new ProblemError(Problems.tenantMismatch(k.orgId));
-    }
   }
   if (input.assignedToId) {
-    const u = await prisma().user.findUnique({
+    const u = await db.user.findUnique({
       where: { id: input.assignedToId },
-      select: { orgId: true },
+      select: { id: true },
     });
-    if (!u || u.orgId !== actor.orgId) {
+    if (!u) {
       throw new ProblemError(Problems.validation('assignedToId is not in this org'));
     }
   }
@@ -192,7 +195,7 @@ export async function createLead(
   const phoneDig = input.phone ? PiiVaultService.digest(input.phone) : null;
   const notesVault = input.notes ? PiiVaultService.encryptForRow('Lead', id, input.notes) : null;
 
-  const result = await prisma().$transaction(async (tx) => {
+  const result = await tenantTx(actor.orgId, async (tx) => {
     const row = await tx.lead.create({
       data: {
         id,
@@ -273,13 +276,15 @@ export async function listLeads(
   query: ListLeadsQuery,
   actor: ActorContext,
 ): Promise<{ data: LeadPublic[]; nextCursor: string | null }> {
-  const where: Prisma.LeadWhereInput = { orgId: actor.orgId };
+  // orgId is injected + GUC-pinned by tenantPrismaTx (the RLS belt); we only add
+  // the caller's optional filters here.
+  const where: Prisma.LeadWhereInput = {};
   if (query.status) where.status = query.status;
   if (query.assignedToId) where.assignedToId = query.assignedToId;
   if (query.vertical) where.vertical = query.vertical;
   if (query.campaignId) where.campaignId = query.campaignId;
 
-  const rows = await prisma().lead.findMany({
+  const rows = await tenantPrismaTx(actor.orgId).lead.findMany({
     where,
     take: query.limit + 1,
     ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -292,16 +297,18 @@ export async function listLeads(
 }
 
 export async function getLead(id: string, actor: ActorContext): Promise<LeadWithActivities> {
-  const row = await prisma().lead.findUnique({
+  // RLS belt: tenantPrismaTx AND-scopes orgId + GUC-pins the read, so a lead in
+  // another tenant resolves to null → 404. We deliberately do NOT distinguish
+  // "exists in another org" (would be a 403) — that disclosure is exactly what
+  // tenant isolation must withhold. Included activities ride the parent Lead's
+  // visibility (LeadActivity has no orgId of its own).
+  const row = await tenantPrismaTx(actor.orgId).lead.findUnique({
     where: { id },
     include: {
       activities: { orderBy: { createdAt: 'desc' }, take: 20 },
     },
   });
   if (!row) throw new ProblemError(Problems.notFound('Lead', id));
-  if (row.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(row.orgId));
-  }
   return {
     ...toPublic(row),
     activities: row.activities.map(toActivityPublic),
@@ -317,25 +324,25 @@ export async function updateLead(
   input: UpdateLeadRequest,
   actor: ActorContext,
 ): Promise<LeadPublic> {
-  const existing = await prisma().lead.findUnique({ where: { id } });
+  // RLS belt: a lead in another tenant resolves to null → 404, never 403 (see getLead).
+  const db = tenantPrismaTx(actor.orgId);
+  const existing = await db.lead.findUnique({ where: { id } });
   if (!existing) throw new ProblemError(Problems.notFound('Lead', id));
-  if (existing.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-  }
   if (input.status && !isValidTransition(existing.status, input.status)) {
     rejectInvalidTransition(existing.status, input.status);
   }
   if (input.assignedToId && input.assignedToId !== existing.assignedToId) {
-    const u = await prisma().user.findUnique({
+    // org-scoped read: a user outside this tenant resolves to null → 400 (same as before).
+    const u = await db.user.findUnique({
       where: { id: input.assignedToId },
-      select: { orgId: true },
+      select: { id: true },
     });
-    if (!u || u.orgId !== actor.orgId) {
+    if (!u) {
       throw new ProblemError(Problems.validation('assignedToId is not in this org'));
     }
   }
 
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.lead.update({
       where: { id },
       data: {
@@ -375,20 +382,20 @@ export async function assignLead(
   input: AssignLeadRequest,
   actor: ActorContext,
 ): Promise<LeadPublic> {
-  const existing = await prisma().lead.findUnique({ where: { id } });
+  // RLS belt: a lead in another tenant resolves to null → 404, never 403 (see getLead).
+  const db = tenantPrismaTx(actor.orgId);
+  const existing = await db.lead.findUnique({ where: { id } });
   if (!existing) throw new ProblemError(Problems.notFound('Lead', id));
-  if (existing.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-  }
-  const u = await prisma().user.findUnique({
+  // org-scoped read: a user outside this tenant resolves to null → 400 (same as before).
+  const u = await db.user.findUnique({
     where: { id: input.userId },
-    select: { orgId: true },
+    select: { id: true },
   });
-  if (!u || u.orgId !== actor.orgId) {
+  if (!u) {
     throw new ProblemError(Problems.validation('userId is not in this org'));
   }
 
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.lead.update({
       where: { id },
       data: { assignedToId: input.userId },
@@ -428,14 +435,12 @@ export async function appendActivity(
   input: LeadActivityRequest,
   actor: ActorContext,
 ): Promise<LeadActivityPublic> {
-  const existing = await prisma().lead.findUnique({ where: { id: leadId } });
+  // RLS belt: a lead in another tenant resolves to null → 404, never 403 (see getLead).
+  const existing = await tenantPrismaTx(actor.orgId).lead.findUnique({ where: { id: leadId } });
   if (!existing) throw new ProblemError(Problems.notFound('Lead', leadId));
-  if (existing.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
-  }
 
   const id = newId('lac');
-  const created = await prisma().$transaction(async (tx) => {
+  const created = await tenantTx(actor.orgId, async (tx) => {
     const row = await tx.leadActivity.create({
       data: {
         id,

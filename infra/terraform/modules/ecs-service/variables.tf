@@ -84,7 +84,14 @@ variable "security_group_ids" {
 
 variable "target_group_arn" {
   type        = string
-  description = "ALB target group ARN to register tasks with. The caller must ensure the ALB listener forwarding to this target group exists before the service is created (use `depends_on = [module.alb]` on the module call)."
+  description = "ALB target group ARN to register tasks with. Set enable_load_balancer = false and pass an empty string for services that don't serve HTTP (e.g. queue workers)."
+  default     = ""
+}
+
+variable "enable_load_balancer" {
+  type        = bool
+  description = "Wire the service to an ALB target group. Set false for queue-consumer services (workers) that are not publicly reachable."
+  default     = true
 }
 
 variable "task_role_arn" {

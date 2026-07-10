@@ -187,8 +187,9 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   // GET /v1/auth/me
   app.get('/me', { preHandler: requireAuth }, async (req, reply) => {
     const userId = req.principal?.userId;
-    if (!userId) throw new ProblemError(Problems.unauthorized());
-    const me = await getCurrentUser(userId);
+    const orgId = req.principal?.orgId;
+    if (!userId || !orgId) throw new ProblemError(Problems.unauthorized());
+    const me = await getCurrentUser(userId, orgId);
     if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
     return reply.code(200).send({ user: me });
   });

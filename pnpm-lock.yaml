@@ -154,6 +154,125 @@ importers:
         specifier: ^2.1.1
         version: 2.1.9(@types/node@20.19.41)
 
+  apps/partner-portal:
+    dependencies:
+      '@d2d/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@d2d/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
+      '@d2d/ui-tokens':
+        specifier: workspace:*
+        version: link:../../packages/ui-tokens
+      '@d2d/ui-web':
+        specifier: workspace:*
+        version: link:../../packages/ui-web
+      lucide-react:
+        specifier: ^0.453.0
+        version: 0.453.0(react@18.3.1)
+      next:
+        specifier: ^14.2.13
+        version: 14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      recharts:
+        specifier: ^2.13.0
+        version: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.41
+      '@types/react':
+        specifier: ^18.3.10
+        version: 18.3.29
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.29)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.15)
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      eslint-config-next:
+        specifier: ^14.2.13
+        version: 14.2.35(eslint@8.57.1)(typescript@5.9.3)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.15
+      tailwindcss:
+        specifier: ^3.4.13
+        version: 3.4.19(tsx@4.22.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.1
+        version: 2.1.9(@types/node@20.19.41)
+
+  apps/public-site:
+    dependencies:
+      '@d2d/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@d2d/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
+      '@d2d/ui-tokens':
+        specifier: workspace:*
+        version: link:../../packages/ui-tokens
+      '@d2d/ui-web':
+        specifier: workspace:*
+        version: link:../../packages/ui-web
+      lucide-react:
+        specifier: ^0.453.0
+        version: 0.453.0(react@18.3.1)
+      next:
+        specifier: ^14.2.13
+        version: 14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.41
+      '@types/react':
+        specifier: ^18.3.10
+        version: 18.3.29
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.29)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.15)
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      eslint-config-next:
+        specifier: ^14.2.13
+        version: 14.2.35(eslint@8.57.1)(typescript@5.9.3)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.15
+      tailwindcss:
+        specifier: ^3.4.13
+        version: 3.4.19(tsx@4.22.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.1
+        version: 2.1.9(@types/node@20.19.41)
+
   apps/web-operator:
     dependencies:
       '@d2d/api-client':

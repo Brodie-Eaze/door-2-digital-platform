@@ -6,7 +6,7 @@
  */
 import type { RegionCode } from '@prisma/client';
 import { Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import type {
   CancelDonationRequest,
@@ -51,15 +51,22 @@ async function loadDonationAndAssertTenant(
   };
   orgId: string;
 }> {
-  const donation = await prisma().donation.findUnique({
-    where: { id },
-    include: { conversion: { select: { orgId: true } } },
-  });
+  // Donation carries no orgId — RLS is DISABLED on it (it has no tenant column),
+  // so tenancy lives entirely on the parent Conversion. We must NOT `include` the
+  // parent in one read: under the RLS belt (d2d_app, no GUC) the required
+  // `conversion` relation is invisible → Prisma throws "inconsistent query result"
+  // (a 500) for every donation. Instead, read the (un-scoped) Donation row, then
+  // prove its parent Conversion is visible THROUGH the belt as a separate scoped
+  // read. A foreign parent is RLS-invisible → null → 404 (never 403: withholding
+  // cross-tenant existence is the whole point of tenant isolation).
+  const donation = await prisma().donation.findUnique({ where: { id } });
   if (!donation) throw new ProblemError(Problems.notFound('Donation', id));
-  if (donation.conversion.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(donation.conversion.orgId));
-  }
-  return { row: donation, orgId: donation.conversion.orgId };
+  const parent = await tenantPrismaTx(actor.orgId).conversion.findUnique({
+    where: { id: donation.conversionId },
+    select: { orgId: true },
+  });
+  if (!parent) throw new ProblemError(Problems.notFound('Donation', id));
+  return { row: donation, orgId: parent.orgId };
 }
 
 export async function getDonation(id: string, actor: ActorContext): Promise<DonationPublic> {
@@ -77,7 +84,7 @@ export async function pauseDonation(
   if (row.status === 'cancelled') {
     throw new ProblemError(Problems.conflict('Cannot pause a cancelled donation'));
   }
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { status: 'paused' },
@@ -112,7 +119,7 @@ export async function cancelDonation(
 ): Promise<DonationPublic> {
   const { row } = await loadDonationAndAssertTenant(id, actor);
   if (row.status === 'cancelled') return toPublic(row);
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { status: 'cancelled', cancelledAt: new Date() },
@@ -156,7 +163,7 @@ export async function changeDonationAmount(
   if (newAmount <= 0n) {
     throw new ProblemError(Problems.validation('newAmountCents must be > 0'));
   }
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { amountCents: newAmount },

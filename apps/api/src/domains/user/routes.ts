@@ -53,7 +53,8 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /v1/users/accept-invite — unauthenticated
+  // POST /v1/users/accept-invite — unauthenticated; invite token is the natural
+  // deduplication key (the service rejects an already-consumed token).
   app.post('/accept-invite', async (req, reply) => {
     const body = acceptInviteRequestSchema.parse(req.body);
     const user = await acceptInvite(body);
@@ -83,7 +84,7 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ user });
   });
 
-  // PATCH /v1/users/:id
+  // PATCH /v1/users/:id — idempotent by HTTP definition; no Idempotency-Key required.
   app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateUserRequestSchema.parse(req.body);

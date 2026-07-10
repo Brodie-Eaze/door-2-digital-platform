@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { ChevronRight, Building2 } from 'lucide-react';
 import { Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { ORGS } from '@/lib/fixtures';
 
 export default function OrgsPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Client orgs">
+    <PlatformShell pageTitle="Client orgs">
       <div className="space-y-6 max-w-[1280px]">
         <Section
           title={`${ORGS.length} client orgs`}
@@ -74,6 +74,6 @@ export default function OrgsPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

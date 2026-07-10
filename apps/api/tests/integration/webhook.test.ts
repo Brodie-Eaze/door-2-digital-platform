@@ -416,7 +416,7 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
     expect(res.json().nextCursor).toBeNull();
   });
 
-  it('cross-tenant returns 403', async () => {
+  it('cross-tenant returns 404 (foreign endpoint invisible)', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const create = await app.inject({
@@ -431,6 +431,11 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
       url: `/v1/webhooks/endpoints/${id}/deliveries`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    // listDeliveries reads the endpoint through tenantPrismaTx(actor.orgId):
+    // org A's endpoint is invisible to org B (app-layer orgId filter + RLS
+    // belt under d2d_app), so the read resolves to null → notFound, not the
+    // pre-belt 403 tenantMismatch. The existence oracle closes — org B can't
+    // tell "forbidden" from "doesn't exist". See docs/runbooks/rls-cutover.md §4b.1.
+    expect(res.statusCode).toBe(404);
   });
 });

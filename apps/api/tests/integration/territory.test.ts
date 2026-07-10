@@ -240,7 +240,11 @@ describe('GET /v1/territories', () => {
 });
 
 describe('GET /v1/territories/:id', () => {
-  it('returns 403 cross-tenant (RFC 7807 tenant-mismatch)', async () => {
+  it('returns 404 cross-tenant (RLS belt withholds existence, not 403)', async () => {
+    // Under the §4b RLS belt, org B reading org A's territory sees null (the
+    // row is invisible at the GUC-pinned read), so we 404 rather than 403:
+    // disclosing "this exists but isn't yours" would leak cross-tenant
+    // existence, which is exactly what tenant isolation must prevent.
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const created = await app.inject({
@@ -255,8 +259,8 @@ describe('GET /v1/territories/:id', () => {
       url: `/v1/territories/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
-    expect(peek.statusCode).toBe(403);
-    expect(peek.json().type).toBe('https://docs.d2d.io/problems/tenant-mismatch');
+    expect(peek.statusCode).toBe(404);
+    expect(peek.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 });
 

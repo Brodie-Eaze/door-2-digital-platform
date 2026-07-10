@@ -74,12 +74,19 @@ export async function registerCompliance(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const ctx = requireTenant(req);
       const body = transitionRequestSchema.parse(req.body);
-      const registration = await transitionRegistration(req.params.id, body.status, {
-        userId: ctx.userId,
+      await withIdempotency({
+        req,
+        reply,
         orgId: ctx.orgId,
-        regionCode: ctx.regionCode as RegionCode,
+        handler: async () => {
+          const registration = await transitionRegistration(req.params.id, body.status, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as RegionCode,
+          });
+          return { status: 200, body: { registration } };
+        },
       });
-      return reply.code(200).send({ registration });
     },
   );
 

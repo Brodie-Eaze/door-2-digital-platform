@@ -251,7 +251,12 @@ describe('POST /v1/conversions — sale', () => {
 });
 
 describe('Tenant isolation + auth', () => {
-  it("forbids creating a conversion against another org's lead", async () => {
+  it("can't convert another org's lead — the lead is invisible (404, not 403)", async () => {
+    // RLS belt (SEC-005): the createConversion lead-validation read runs through
+    // tenantPrismaTx(orgB), so org A's lead is invisible → null → 404 notFound.
+    // Pre-belt this returned 403 tenantMismatch (the app saw the foreign row to
+    // reject it); under RLS we never see it, and withholding existence is the
+    // point of tenant isolation.
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const leadId = await createLead(tA, 'cnv-iso-1');
@@ -269,7 +274,7 @@ describe('Tenant isolation + auth', () => {
         donationDetails: {},
       },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
   });
 
   it('requires Idempotency-Key', async () => {
@@ -335,7 +340,7 @@ describe('GET /v1/conversions + GET /v1/conversions/:id', () => {
     expect(b.json().data).toEqual([]);
   });
 
-  it('reads one conversion + cross-tenant 403', async () => {
+  it('reads one conversion + cross-tenant 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const leadId = await createLead(tA, 'cnv-read-1');
@@ -360,12 +365,15 @@ describe('GET /v1/conversions + GET /v1/conversions/:id', () => {
       headers: { authorization: `Bearer ${tA}` },
     });
     expect(a.statusCode).toBe(200);
+    // RLS belt (SEC-005): org B cannot see org A's conversion — the row is
+    // invisible, so the read resolves to null → 404 (not 403). A 403 would
+    // itself disclose that the resource exists.
     const b = await app.inject({
       method: 'GET',
       url: `/v1/conversions/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(b.statusCode).toBe(403);
+    expect(b.statusCode).toBe(404);
   });
 });
 

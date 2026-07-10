@@ -10,7 +10,7 @@
 import { createHmac } from 'node:crypto';
 import type { Prisma, RegionCode } from '@prisma/client';
 import { newId } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { tenantPrismaTx, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { AuditService } from '../audit/service';
 import type {
@@ -65,7 +65,7 @@ async function enqueue(args: {
   actor: ActorContext;
 }): Promise<NotificationPublic> {
   const id = newId('nlg');
-  const row = await prisma().$transaction(async (tx) => {
+  const row = await tenantTx(args.actor.orgId, async (tx) => {
     const next = await tx.notificationLog.create({
       data: {
         id,
@@ -147,7 +147,9 @@ export async function listNotifications(
   query: ListNotificationsQuery,
   actor: ActorContext,
 ): Promise<{ data: NotificationPublic[]; nextCursor: string | null }> {
-  const where: Prisma.NotificationLogWhereInput = { orgId: actor.orgId };
+  // orgId is injected by tenantPrismaTx (suspenders) and enforced by RLS (belt);
+  // see docs/runbooks/rls-cutover.md §4b.
+  const where: Prisma.NotificationLogWhereInput = {};
   if (query.channel) where.channel = query.channel;
   if (query.status) where.status = query.status;
   if (query.from || query.to) {
@@ -156,7 +158,7 @@ export async function listNotifications(
     if (query.to) range.lte = new Date(query.to);
     where.createdAt = range;
   }
-  const rows = await prisma().notificationLog.findMany({
+  const rows = await tenantPrismaTx(actor.orgId).notificationLog.findMany({
     where,
     take: query.limit + 1,
     ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
