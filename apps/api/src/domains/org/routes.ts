@@ -100,18 +100,11 @@ export async function registerOrg(app: FastifyInstance): Promise<void> {
       });
     }
     const body = updateOrgRequestSchema.parse(req.body);
-    await withIdempotency({
-      req,
-      reply,
-      orgId: ctx.orgId,
-      handler: async () => {
-        const updated = await updateOrg(req.params.id, body, {
-          userId: ctx.userId,
-          regionCode: ctx.regionCode as never,
-        });
-        return { status: 200, body: { org: updated } };
-      },
+    const updated = await updateOrg(req.params.id, body, {
+      userId: ctx.userId,
+      regionCode: ctx.regionCode as never,
     });
+    return reply.code(200).send({ org: updated });
   });
 
   // POST /v1/orgs/:id/archive
@@ -173,18 +166,11 @@ export async function registerOrg(app: FastifyInstance): Promise<void> {
         throw new ProblemError(Problems.tenantMismatch(req.params.id));
       }
       const body = updateBillingRequestSchema.parse(req.body);
-      await withIdempotency({
-        req,
-        reply,
-        orgId: ctx.orgId,
-        handler: async () => {
-          const billing = await updateBilling(req.params.id, body, {
-            userId: ctx.userId,
-            regionCode: ctx.regionCode as never,
-          });
-          return { status: 200, body: { billing } };
-        },
+      const billing = await updateBilling(req.params.id, body, {
+        userId: ctx.userId,
+        regionCode: ctx.regionCode as never,
       });
+      return reply.code(200).send({ billing });
     },
   );
 }

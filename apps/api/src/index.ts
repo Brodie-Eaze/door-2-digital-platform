@@ -52,32 +52,6 @@ import { registerRealtime } from './domains/realtime/routes';
 import { registerIntegrations } from './integrations';
 import { registerMcpServer } from './mcp/server';
 
-/**
- * Best-effort extraction of `orgId` from a raw JWT header string.
- *
- * The rate-limit hook fires on `onRequest` — before auth preHandlers run —
- * so req.principal is not yet populated. We decode the PAYLOAD segment of
- * the JWT without verifying the signature; the auth guard verifies later.
- * If the token is missing, malformed, or lacks an orgId we return null and
- * the caller falls back to API-key or IP bucketing.
- */
-function extractOrgIdFromBearer(authHeader: string | undefined): string | null {
-  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
-  const dot1 = token.indexOf('.');
-  const dot2 = token.indexOf('.', dot1 + 1);
-  if (dot1 <= 0 || dot2 <= dot1) return null;
-  try {
-    const payload = JSON.parse(
-      Buffer.from(token.slice(dot1 + 1, dot2), 'base64url').toString('utf8'),
-    ) as Record<string, unknown>;
-    const orgId = payload.orgId;
-    return typeof orgId === 'string' && orgId.length > 0 ? orgId : null;
-  } catch {
-    return null;
-  }
-}
-
 async function buildServer() {
   const e = env();
   const log = logger();
