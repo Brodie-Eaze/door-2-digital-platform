@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Banner, Card, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { PortalShell } from '@/components/PortalShell';
-import { invoiceLabel, invoiceTone, solicitorLabel, solicitorTone } from '@/lib/status';
+import { invoiceLabel, invoiceTone, solicitorLabel } from '@/lib/status';
 import {
   BILLING_PERIODS,
   BUCKET_LABEL,

@@ -249,7 +249,7 @@ green at **282 tests** after the full batch.
 - [x] `domains/notification/service.ts`
 - [x] `domains/user/service.ts` (×4 of 4) — invite / update / archive wrapped in
       `tenantTx`; **`acceptInvite` now resolves identity via the §4b.3 `SECURITY
-    DEFINER` resolver `app_resolve_invite(inviteTokenHash)`** (pre-auth, no org
+DEFINER` resolver `app_resolve_invite(inviteTokenHash)`** (pre-auth, no org
       context to pin), then runs the credential update + user activation + audit
       inside `tenantTx(cred.orgId, …)`. The old `include:{user:true}` owner path is
       gone. The `setUserPassword` credential upsert (Class B) stays unpinned per §3.
@@ -552,7 +552,7 @@ owning `orgId`. **20/20 belt tests green; full integration suite 270/270.**
       270/270). The one wall that gated the whole cutover is closed.
 - [x] **§4b read-side _call-site migration_ — ALL CLASS A READS MIGRATED (14 done +
       auth pre-auth done / 15, org N/A).** Every authenticated `prisma().<model>.findX({
-    where: { orgId } })` read has moved to `tenantPrismaTx(orgId).<model>.findX()`
+where: { orgId } })` read has moved to `tenantPrismaTx(orgId).<model>.findX()`
       (tracked per Class A domain in the §4b.2 tracker). **DONE: `lead` (reference — owner 15/15, `d2d_app` belt 13/13),
       `conversion`, `donation`, `sale`, `user` (incl. `acceptInvite` via the §4b.3
       resolver), the `auth` pre-auth flows (login/refresh via resolvers), `territory`,

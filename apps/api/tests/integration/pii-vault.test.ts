@@ -170,7 +170,7 @@ async function seedDonation(
       donorEmail,
       amountCents: BigInt(5000),
       currency: 'USD',
-      paymentMethodTokenVault: 'tok_test',
+      paymentMethodToken: 'tok_test',
       startedAt: new Date(),
     },
   });
