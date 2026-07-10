@@ -53,20 +53,12 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /v1/users/accept-invite — unauthenticated but idempotent (double-click safe)
+  // POST /v1/users/accept-invite — unauthenticated; invite token is the natural
+  // deduplication key (the service rejects an already-consumed token).
   app.post('/accept-invite', async (req, reply) => {
     const body = acceptInviteRequestSchema.parse(req.body);
-    // Use '__public__' as orgId — the actual org is not known until the invite
-    // is consumed, and the token itself acts as the per-request scope key.
-    await withIdempotency({
-      req,
-      reply,
-      orgId: '__public__',
-      handler: async () => {
-        const user = await acceptInvite(body);
-        return { status: 200, body: { user } };
-      },
-    });
+    const user = await acceptInvite(body);
+    return reply.code(200).send({ user });
   });
 
   // GET /v1/users — list within actor's org
@@ -92,24 +84,17 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ user });
   });
 
-  // PATCH /v1/users/:id
+  // PATCH /v1/users/:id — idempotent by HTTP definition; no Idempotency-Key required.
   app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateUserRequestSchema.parse(req.body);
-    await withIdempotency({
-      req,
-      reply,
+    const user = await updateUser(req.params.id, body, {
+      userId: ctx.userId,
       orgId: ctx.orgId,
-      handler: async () => {
-        const user = await updateUser(req.params.id, body, {
-          userId: ctx.userId,
-          orgId: ctx.orgId,
-          regionCode: ctx.regionCode as never,
-          role: ctx.role,
-        });
-        return { status: 200, body: { user } };
-      },
+      regionCode: ctx.regionCode as never,
+      role: ctx.role,
     });
+    return reply.code(200).send({ user });
   });
 
   // POST /v1/users/:id/archive
