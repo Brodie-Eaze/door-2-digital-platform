@@ -14,16 +14,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, Plus, UserPlus, Database } from 'lucide-react';
-import {
-  Banner,
-  Button,
-  KpiCard,
-  Money,
-  RegionBadge,
-  Reveal,
-  Section,
-  StatusPill,
-} from '@d2d/ui-web';
+import { Banner, Button, KpiCard, Money, RegionBadge, Reveal, Section } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
 import { AccountsEmpty } from '@/components/AccountEmptyStates';
@@ -317,17 +308,6 @@ export default async function AccountsPage({
                       <div className="mt-3 flex items-center gap-2 flex-wrap">
                         <RegionBadge region={a.region} />
                         <span className="tag capitalize">{a.vertical}</span>
-                        <span
-                          className={`pill ${
-                            a.health === 'healthy'
-                              ? 'pill-success'
-                              : a.health === 'attention'
-                                ? 'pill-warn'
-                                : 'pill-danger'
-                          }`}
-                        >
-                          {a.plan}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -360,8 +340,6 @@ export default async function AccountsPage({
                   <th>Knockers</th>
                   <th>MTD Conv.</th>
                   <th>MTD Revenue</th>
-                  <th>Projected LTV</th>
-                  <th>Health</th>
                 </tr>
               </thead>
               <tbody>
@@ -384,22 +362,6 @@ export default async function AccountsPage({
                     <td className="numeric text-[13px]">{a.conversionsMTD.toLocaleString()}</td>
                     <td>
                       <Money cents={a.revenueCentsMTD} region={a.region === 'AU' ? 'AU' : 'US'} />
-                    </td>
-                    <td>
-                      <Money cents={a.ltvCentsMTD} region={a.region === 'AU' ? 'AU' : 'US'} />
-                    </td>
-                    <td>
-                      <StatusPill
-                        tone={
-                          a.health === 'healthy'
-                            ? 'success'
-                            : a.health === 'attention'
-                              ? 'warn'
-                              : 'danger'
-                        }
-                      >
-                        {a.health}
-                      </StatusPill>
                     </td>
                   </tr>
                 ))}
