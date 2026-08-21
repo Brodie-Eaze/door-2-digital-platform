@@ -1,10 +1,8 @@
 # syntax=docker/dockerfile:1.7
 #
-# Door 2 Digital — partner-portal (Next.js 14 standalone client portal).
-# Per-app Dockerfile pattern (mirrors Dockerfile.public-site). The white-label
-# client deliverable: invoices, payout statements, attribution, state clearance,
-# brand kit, and SSO config — live against the D2D API billing/compliance
-# routes. No money movement originates here.
+# Door 2 Digital — web-org (Next.js standalone org console). The client org's
+# own operations surface: today, leads, pipeline, knockers, territories,
+# conversions, commissions, reports — live against the D2D API.
 
 ARG NODE_VERSION=20.10.0
 
@@ -14,7 +12,7 @@ WORKDIR /repo
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
-COPY apps/partner-portal/package.json apps/partner-portal/
+COPY apps/web-org/package.json apps/web-org/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/shared-utils/package.json packages/shared-utils/
 COPY packages/ui-tokens/package.json packages/ui-tokens/
@@ -24,29 +22,29 @@ RUN pnpm install --frozen-lockfile --offline
 
 FROM deps AS build
 WORKDIR /repo
-COPY apps/partner-portal ./apps/partner-portal
+COPY apps/web-org ./apps/web-org
 COPY packages ./packages
 ARG NEXT_PUBLIC_ENV=production
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_ENV=${NEXT_PUBLIC_ENV}
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter partner-portal build
+RUN pnpm --filter web-org build
 
 FROM node:${NODE_VERSION}-alpine AS runner
 RUN apk add --no-cache libc6-compat tini
 WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3013
+ENV PORT=3012
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=build /repo/apps/partner-portal/public ./apps/partner-portal/public
-COPY --from=build /repo/apps/partner-portal/.next/standalone ./
-COPY --from=build /repo/apps/partner-portal/.next/static ./apps/partner-portal/.next/static
+COPY --from=build /repo/apps/web-org/public ./apps/web-org/public
+COPY --from=build /repo/apps/web-org/.next/standalone ./
+COPY --from=build /repo/apps/web-org/.next/static ./apps/web-org/.next/static
 
 USER node
-EXPOSE 3013
+EXPOSE 3012
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "apps/partner-portal/server.js"]
+CMD ["node", "apps/web-org/server.js"]
