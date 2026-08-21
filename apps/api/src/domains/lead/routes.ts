@@ -8,7 +8,7 @@
  *   PATCH  /v1/leads/:id                      status (state-machine), assignedToId
  *   POST   /v1/leads/:id/assign               reassign + LeadActivity entry
  *   POST   /v1/leads/:id/activities           append activity (call/sms/email/note)
- *   POST   /v1/leads/:id/dnk                  501 — handled by Agent 15's DNK service
+ *   POST   /v1/leads/:id/dnk                  flag lead address as do-not-knock + archive lead
  */
 import type { FastifyInstance } from 'fastify';
 import {
@@ -18,7 +18,16 @@ import {
   leadActivityRequestSchema,
   listLeadsQuerySchema,
 } from './schemas';
-import { createLead, listLeads, getLead, updateLead, assignLead, appendActivity } from './service';
+import {
+  createLead,
+  listLeads,
+  listCallbacks,
+  getLead,
+  updateLead,
+  assignLead,
+  appendActivity,
+  flagLeadDnk,
+} from './service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
@@ -28,7 +37,11 @@ interface IdParams {
 }
 
 export async function registerLead(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'lead', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'lead',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // POST /v1/leads — create
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -61,6 +74,18 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(result);
   });
 
+  // GET /v1/leads/callbacks — scheduled callbacks for the native Knocker app.
+  // Static segment so find-my-way matches it ahead of the `/:id` param route.
+  app.get('/callbacks', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const callbacks = await listCallbacks({
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(callbacks);
+  });
+
   // GET /v1/leads/:id — one + last 20 activities
   app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
@@ -73,6 +98,7 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /v1/leads/:id — state machine guarded
+  // PATCH is idempotent by HTTP definition (RFC 5789); no Idempotency-Key required.
   app.patch<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateLeadRequestSchema.parse(req.body);
@@ -126,13 +152,26 @@ export async function registerLead(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/leads/:id/dnk — 501 stub, DNK service in Agent 15
-  app.post<{ Params: IdParams }>('/:id/dnk', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'DNK marking is handled by the do-not-knock service (Agent 15)',
-    }),
-  );
+  // POST /v1/leads/:id/dnk — flag lead's address as do-not-knock + update status
+  app.post<{ Params: IdParams }>('/:id/dnk', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = (req.body as { reason?: string }) ?? {};
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const lead = await flagLeadDnk(
+          req.params.id,
+          { reason: body.reason },
+          {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          },
+        );
+        return { status: 200, body: { lead } };
+      },
+    });
+  });
 }

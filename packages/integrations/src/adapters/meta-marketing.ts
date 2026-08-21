@@ -24,9 +24,10 @@ import type {
   ProviderWebhookEvent,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing } from './stub';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0' as const;
+const META_TIMEOUT_MS = 15_000 as const;
 
 export function createMetaMarketingAdapter(): ProviderAdapter {
   const kind = 'meta_marketing' as const;
@@ -44,7 +45,9 @@ export function createMetaMarketingAdapter(): ProviderAdapter {
     docsUrl: 'https://developers.facebook.com/docs/marketing-apis',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Meta Ads', 'act_demo_meta') };
       }
       const adAccount = config.accountIdentifiers?.adAccountId;
@@ -55,25 +58,30 @@ export function createMetaMarketingAdapter(): ProviderAdapter {
           error: new InvalidConfigError(kind, 'adAccountId + accessToken required'),
         };
       }
-      try {
-        const r = await fetch(
-          `${GRAPH_BASE}/${adAccount}?fields=id,name&access_token=${encodeURIComponent(token)}`,
-        );
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Meta ping ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string; name?: string };
-        return { ok: true, data: { accountLabel: json.name ?? adAccount, accountId: json.id } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      const rr = await fetchWithTimeout(
+        kind,
+        `${GRAPH_BASE}/${adAccount}?fields=id,name&access_token=${encodeURIComponent(token)}`,
+        {},
+        META_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Meta ping ${r.status}`, kind, r.status),
+        };
       }
+      const json = (await r.json()) as { id: string; name?: string };
+      return { ok: true, data: { accountLabel: json.name ?? adAccount, accountId: json.id } };
     },
 
     async buildAudience(input: BuildAudienceInput, config) {
-      if (isStubMode(config)) return { ok: false, error: new StubModeError(kind) };
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      // Sandbox: this op is intentionally inert (no fake audience) — ad delivery
+      // must never be silently faked. Return STUB_MODE so callers know.
+      if (g.stub) return { ok: false, error: new StubModeError(kind) };
       const adAccount = config.accountIdentifiers?.adAccountId;
       const token = config.credentials.accessToken;
       if (!adAccount || !token) {
@@ -84,7 +92,9 @@ export function createMetaMarketingAdapter(): ProviderAdapter {
     },
 
     async deliverCampaign(input: DeliverCampaignInput, config) {
-      if (isStubMode(config)) return { ok: false, error: new StubModeError(kind) };
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) return { ok: false, error: new StubModeError(kind) };
       const adAccount = config.accountIdentifiers?.adAccountId;
       const token = config.credentials.accessToken;
       if (!adAccount || !token) {

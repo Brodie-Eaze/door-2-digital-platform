@@ -30,7 +30,10 @@ export type ProviderKind =
   | 'flux_image'
   | 'ideogram_image'
   | 'runway_video'
-  | 'heygen_avatar';
+  | 'heygen_avatar'
+  | 'crm_salesforce'
+  | 'crm_hubspot'
+  | 'crm_zapier';
 
 /** Coarse-grained capability tags, used by the UI to filter provider cards. */
 export type ProviderCapability =
@@ -43,7 +46,9 @@ export type ProviderCapability =
   | 'campaign.deliver'
   | 'campaign.status'
   | 'conversion.ingest'
-  | 'mcp.server.expose';
+  | 'mcp.server.expose'
+  | 'crm.lead.push'
+  | 'crm.conversion.push';
 
 /** Connection mode — sandbox always returns stub success, production hits the real API. */
 export type ProviderMode = 'sandbox' | 'production';
@@ -164,6 +169,47 @@ export interface DeliverCampaignInput {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// CRM outbound push IO
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface PushLeadInput {
+  leadId: string;
+  orgId: string;
+  givenName: string;
+  familyName: string;
+  email?: string;
+  phone?: string;
+  status: string;
+  sourceTerritoryId?: string;
+  /** ISO datetime of original knock. */
+  knockedAt?: string;
+  notes?: string;
+}
+
+export interface PushLeadOutput {
+  /** Salesforce / HubSpot / Zapier record ID. */
+  externalId: string;
+  /** Link to the record in the CRM. */
+  externalUrl?: string;
+}
+
+export interface PushConversionInput {
+  conversionId: string;
+  orgId: string;
+  leadId?: string;
+  /** 'donation_recurring' | 'donation_oneoff' | 'sale_commercial' */
+  type: string;
+  amountCents: number;
+  attributionSource: string;
+  convertedAt: string;
+}
+
+export interface PushConversionOutput {
+  externalId: string;
+  externalUrl?: string;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Inbound webhook envelope
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -233,6 +279,12 @@ export interface ProviderAdapter {
     input: DeliverCampaignInput,
     config: ProviderConfig,
   ): Promise<Result<{ campaignId: string }>>;
+
+  pushLead?(input: PushLeadInput, config: ProviderConfig): Promise<Result<PushLeadOutput>>;
+  pushConversion?(
+    input: PushConversionInput,
+    config: ProviderConfig,
+  ): Promise<Result<PushConversionOutput>>;
 
   /**
    * Inbound webhook handler. Implementations verify HMAC against

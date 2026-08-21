@@ -19,6 +19,9 @@ import {
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_STATUS_TONE } from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
@@ -545,6 +548,24 @@ function aspectClass(a: CampaignCreative['aspect']): string {
 
 export default function CampaignsPage(): JSX.Element {
   const [openId, setOpenId] = useState<string | null>(null);
+  // Local-only pause/resume overrides — no campaign-control backend wired yet.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, CampaignStatus>>({});
+
+  function effectiveStatus(c: Campaign): CampaignStatus {
+    return statusOverrides[c.id] ?? c.status;
+  }
+
+  function togglePauseResume(c: Campaign): void {
+    const current = effectiveStatus(c);
+    if (current === 'active') {
+      setStatusOverrides((prev) => ({ ...prev, [c.id]: 'paused' }));
+      toast.success(`${c.name} paused locally — delivery API wiring lands in Phase 1.2`);
+    } else if (current === 'paused') {
+      setStatusOverrides((prev) => ({ ...prev, [c.id]: 'active' }));
+      toast.success(`${c.name} resumed locally — delivery API wiring lands in Phase 1.2`);
+    }
+  }
+
   const opened = openId ? CAMPAIGNS.find((c) => c.id === openId) : null;
 
   const totalSpendCents = CAMPAIGNS.reduce((s, c) => s + c.spendCents, 0n);
@@ -560,6 +581,11 @@ export default function CampaignsPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="Campaigns — Meta / Google / TikTok / YouTube">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="campaigns" />
+          <DataSourceBadge source="fixture" />
+        </div>
+        <div className="text-[11px] text-muted">Demo data — live wiring lands in Phase 1.x</div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Megaphone size={14} className="text-accent" />
@@ -600,10 +626,20 @@ export default function CampaignsPage(): JSX.Element {
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() => toast.info('Filter campaigns — wiring lands in Phase 1.2')}
+              >
                 Filter
               </Button>
-              <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={13} />}
+                onClick={() => toast.info('New campaign — campaign builder lands in Phase 1.2')}
+              >
                 New campaign
               </Button>
             </div>
@@ -633,6 +669,7 @@ export default function CampaignsPage(): JSX.Element {
                   Number(c.spendCents) > 0
                     ? Number(c.conversionRevenueCents) / Number(c.spendCents)
                     : 0;
+                const status = effectiveStatus(c);
                 return (
                   <tr
                     key={c.id}
@@ -701,23 +738,29 @@ export default function CampaignsPage(): JSX.Element {
                     </td>
                     <td className="text-[11px] text-muted">{c.attributionSource}</td>
                     <td>
-                      <StatusPill tone={statusTone(c.status)}>{statusLabel(c.status)}</StatusPill>
+                      <StatusPill tone={statusTone(status)}>{statusLabel(status)}</StatusPill>
                     </td>
                     <td>
                       <div className="flex items-center gap-1">
-                        {c.status === 'active' ? (
+                        {status === 'active' ? (
                           <button
                             type="button"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePauseResume(c);
+                            }}
                             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                             title="Pause"
                           >
                             <Pause size={12} />
                           </button>
-                        ) : c.status === 'paused' ? (
+                        ) : status === 'paused' ? (
                           <button
                             type="button"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePauseResume(c);
+                            }}
                             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-success"
                             title="Resume"
                           >
@@ -737,7 +780,12 @@ export default function CampaignsPage(): JSX.Element {
                         </button>
                         <button
                           type="button"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.info(
+                              `Open ${c.name} in ${c.channel} — deep-link wiring lands in Phase 1.2`,
+                            );
+                          }}
                           className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                           title="Open in channel dashboard"
                         >
@@ -831,16 +879,27 @@ export default function CampaignsPage(): JSX.Element {
         </div>
       </div>
 
-      {opened && <CampaignDrawer campaign={opened} onClose={() => setOpenId(null)} />}
+      {opened && (
+        <CampaignDrawer
+          campaign={opened}
+          status={effectiveStatus(opened)}
+          onTogglePauseResume={() => togglePauseResume(opened)}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </PlatformShell>
   );
 }
 
 function CampaignDrawer({
   campaign,
+  status,
+  onTogglePauseResume,
   onClose,
 }: {
   campaign: Campaign;
+  status: CampaignStatus;
+  onTogglePauseResume: () => void;
   onClose: () => void;
 }): JSX.Element {
   const cRoas =
@@ -1015,16 +1074,35 @@ function CampaignDrawer({
           </div>
 
           <div className="flex items-center gap-2 pt-3 border-t border-line2">
-            {campaign.status === 'active' ? (
-              <Button variant="ghost" size="sm" leftIcon={<Pause size={12} />}>
+            {status === 'active' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Pause size={12} />}
+                onClick={onTogglePauseResume}
+              >
                 Pause campaign
               </Button>
-            ) : campaign.status === 'paused' ? (
-              <Button variant="primary" size="sm" leftIcon={<Play size={12} />}>
+            ) : status === 'paused' ? (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Play size={12} />}
+                onClick={onTogglePauseResume}
+              >
                 Resume campaign
               </Button>
             ) : null}
-            <Button variant="ghost" size="sm" leftIcon={<ExternalLink size={12} />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<ExternalLink size={12} />}
+              onClick={() =>
+                toast.info(
+                  `Open ${campaign.name} in ${campaign.channel} — deep-link wiring lands in Phase 1.2`,
+                )
+              }
+            >
               Open in {campaign.channel}
             </Button>
           </div>

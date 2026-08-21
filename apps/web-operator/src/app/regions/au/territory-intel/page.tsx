@@ -1,6 +1,10 @@
+'use client';
+
 import { Sparkles, MapPin, Eye, Plus, Filter, Database } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 
 interface AuZone {
   name: string;
@@ -343,6 +347,7 @@ export default function AuTerritoryIntelPage(): JSX.Element {
                     key={i}
                     style={{ background: bg }}
                     className="hover:ring-2 hover:ring-white/40 cursor-pointer transition"
+                    onClick={() => toast.info('Cell drill-in — wiring lands in Phase 1.2')}
                   />
                 );
               })}
@@ -395,10 +400,21 @@ export default function AuTerritoryIntelPage(): JSX.Element {
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+              <DataSourceBadge source="fixture" />
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() => toast.info('Zone filters — wiring lands in Phase 1.2')}
+              >
                 Filter
               </Button>
-              <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={13} />}
+                onClick={() => toast.info('New AU zone — builder lands in Phase 1.2')}
+              >
                 New AU zone
               </Button>
             </div>
@@ -447,11 +463,21 @@ export default function AuTerritoryIntelPage(): JSX.Element {
                   </td>
                   <td>
                     {z.status === 'AI suggested' ? (
-                      <button className="text-[11px] font-semibold text-accent hover:underline">
+                      <button
+                        className="text-[11px] font-semibold text-accent hover:underline"
+                        onClick={() =>
+                          toast.info(`Send knocker to ${z.name} — wiring lands in Phase 1.2`)
+                        }
+                      >
                         Send knocker
                       </button>
                     ) : (
-                      <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">
+                      <button
+                        className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+                        onClick={() =>
+                          toast.info(`View ${z.name} — detail panel lands in Phase 1.2`)
+                        }
+                      >
                         <Eye size={12} className="text-soft" />
                       </button>
                     )}

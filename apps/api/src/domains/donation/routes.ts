@@ -5,18 +5,27 @@
  *   POST  /v1/donations/:id/pause          pause recurring (audit-trailed)
  *   POST  /v1/donations/:id/cancel         cancel + cancelledAt (audit-trailed)
  *   POST  /v1/donations/:id/change-amount  change recurring amount (validates recurring)
- *   POST  /v1/donations/:id/resume         501 — Phase 1.4
- *   POST  /v1/donations/:id/receipt        501 — Phase 1.4 receipt PDF regenerate
+ *   POST  /v1/donations/:id/resume         resume a paused recurring donation
+ *   POST  /v1/donations/:id/receipt        regenerate + re-send IRS/DGR receipt PDF
  */
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
-import { cancelDonation, changeDonationAmount, getDonation, pauseDonation } from './service';
+import {
+  cancelDonation,
+  changeDonationAmount,
+  generateDonationReceipt,
+  getDonation,
+  pauseDonation,
+  resumeDonation,
+} from './service';
 import {
   cancelDonationRequestSchema,
   changeDonationAmountRequestSchema,
+  generateReceiptRequestSchema,
   pauseDonationRequestSchema,
+  resumeDonationRequestSchema,
 } from './schemas';
 
 interface IdParams {
@@ -24,7 +33,11 @@ interface IdParams {
 }
 
 export async function registerDonation(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'donation', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'donation',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // GET /v1/donations/:id
   app.get<{ Params: IdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
@@ -98,23 +111,45 @@ export async function registerDonation(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/donations/:id/resume — Phase 1.4
-  app.post<{ Params: IdParams }>('/:id/resume', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Donation resume lands in Phase 1.4',
-    }),
-  );
+  // POST /v1/donations/:id/resume
+  app.post<{ Params: IdParams }>('/:id/resume', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = resumeDonationRequestSchema.parse(req.body ?? {});
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const donation = await resumeDonation(req.params.id, body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as never,
+        });
+        return { status: 200, body: { donation } };
+      },
+    });
+  });
 
-  // POST /v1/donations/:id/receipt — Phase 1.4
-  app.post<{ Params: IdParams }>('/:id/receipt', { preHandler: requireAuth }, async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Donation receipt regenerate lands in Phase 1.4',
-    }),
+  // POST /v1/donations/:id/receipt
+  app.post<{ Params: IdParams }>(
+    '/:id/receipt',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const body = generateReceiptRequestSchema.parse(req.body ?? {});
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const receipt = await generateDonationReceipt(req.params.id, body, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          });
+          return { status: 200, body: { receipt } };
+        },
+      });
+    },
   );
 }

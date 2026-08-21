@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { Banner, KpiCard } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
@@ -12,9 +14,24 @@ import {
   LiveActivityFeed,
   PushToFieldStrip,
 } from '@/components/field-ops';
+import type { PushToFieldAction } from '@/components/field-ops/types';
+import { toast } from '@/components/Toaster';
 import { firstRunSnapshot } from '@/lib/first-run';
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+/** Human labels for the push-to-field actions, used in the honest queue toasts. */
+const PUSH_ACTION_LABELS: Record<PushToFieldAction, string> = {
+  broadcast_message: 'Broadcast message',
+  update_pitch_script: 'Pitch script update',
+  reassign_territories: 'Territory reassignment',
+  end_shift_early: 'End-shift instruction',
+};
+
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   const fleet = getAccountFleet(params.slug);
@@ -74,9 +91,11 @@ export default function Page({ params }: { params: { slug: string } }): JSX.Elem
         <PushToFieldStrip
           scopeLabel={fleet.scopeLabel}
           onAction={(kind) => {
-            // Per-account broadcast wiring lands in Phase 1.2. For now: log only.
-            // eslint-disable-next-line no-console
-            console.log(`[${params.slug}] Push to field: ${kind}`);
+            // broadcast_message fires a real POST /api/broadcast inside the strip.
+            // The other three actions are honest queue toasts — no silent click.
+            toast.info(
+              `${PUSH_ACTION_LABELS[kind]} queued for ${account.shortName} dispatch — wiring lands in Phase 1.2`,
+            );
           }}
         />
       </div>

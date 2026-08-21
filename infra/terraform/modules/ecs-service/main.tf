@@ -128,17 +128,22 @@ resource "aws_ecs_service" "this" {
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
-  health_check_grace_period_seconds = 60
+  # Only meaningful when an ALB target group is wired.
+  health_check_grace_period_seconds = var.enable_load_balancer ? 60 : null
 
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
 
-  load_balancer {
-    target_group_arn = var.target_group_arn
-    container_name   = var.name
-    container_port   = var.container_port
+  # Conditionally wire the ALB target group (workers have no public endpoint).
+  dynamic "load_balancer" {
+    for_each = var.enable_load_balancer ? [1] : []
+    content {
+      target_group_arn = var.target_group_arn
+      container_name   = var.name
+      container_port   = var.container_port
+    }
   }
 
   network_configuration {

@@ -40,7 +40,12 @@ output "alb_dns_name" {
 
 output "aurora_cluster_endpoint" {
   value       = module.aurora.cluster_endpoint
-  description = "Aurora writer endpoint (host)."
+  description = "Aurora writer endpoint (direct — do not use from app; use rds_proxy_endpoint)."
+}
+
+output "rds_proxy_endpoint" {
+  value       = module.rds_proxy.proxy_endpoint
+  description = "RDS Proxy endpoint — this is what DATABASE_URL points at. App tasks connect here, never directly to Aurora."
 }
 
 output "redis_primary_endpoint" {
@@ -75,4 +80,54 @@ output "kms_key_arns" {
     s3_audit      = module.kms_s3_audit.key_arn
   }
   description = "CMK ARNs by data class."
+}
+
+output "ecr_workers_repository_url" {
+  value       = module.ecr_workers.repository_url
+  description = "ECR repo for the workers image."
+}
+
+output "ecr_webhooks_repository_url" {
+  value       = module.ecr_webhooks.repository_url
+  description = "ECR repo for the webhooks image."
+}
+
+output "ecs_workers_service_name" {
+  value       = module.workers_service.service_name
+  description = "ECS workers service name."
+}
+
+output "ecs_webhooks_service_name" {
+  value       = module.webhooks_service.service_name
+  description = "ECS webhooks service name."
+}
+
+output "alb_webhooks_dns_name" {
+  value       = module.alb_webhooks.alb_dns_name
+  description = "Webhooks ALB DNS name."
+}
+
+output "cloudfront_domain_name" {
+  value       = aws_cloudfront_distribution.this.domain_name
+  description = "CloudFront distribution domain name (point Route53 alias here or use the app_url output)."
+}
+
+output "cloudfront_distribution_id" {
+  value       = aws_cloudfront_distribution.this.id
+  description = "CloudFront distribution id (for cache invalidations in CI)."
+}
+
+output "waf_alb_arn" {
+  value       = aws_wafv2_web_acl.alb.arn
+  description = "WAF WebACL ARN attached to the API ALB."
+}
+
+output "waf_cloudfront_arn" {
+  value       = aws_wafv2_web_acl.cloudfront.arn
+  description = "WAF WebACL ARN attached to CloudFront."
+}
+
+output "app_url" {
+  value       = var.route53_zone_id != null ? "https://${var.app_subdomain}.${var.domain_name}" : "https://${aws_cloudfront_distribution.this.domain_name}"
+  description = "Application URL (custom domain if route53_zone_id is set, else CloudFront default domain)."
 }

@@ -137,10 +137,24 @@ export const AuditService = {
     regionCode: RegionCode;
     fromUlid?: string;
     toUlid?: string;
+    /** Hard upper bound on rows inspected per call. Defaults to 10 000. */
+    limit?: number;
+    /** Cursor for page-by-page verification: resume after this internal id. */
+    afterId?: bigint;
   }): Promise<
-    | { ok: true; count: number }
-    | { ok: false; brokenAt: string; count: number; expected: string; actual: string }
+    | { ok: true; count: number; nextAfterId: bigint | null }
+    | {
+        ok: false;
+        brokenAt: string;
+        count: number;
+        expected: string;
+        actual: string;
+        nextAfterId: bigint | null;
+      }
   > {
+    const HARD_CAP = 10_000;
+    const effectiveLimit = Math.min(args.limit ?? HARD_CAP, HARD_CAP);
+
     const where: Prisma.AuditEventWhereInput = args.orgId
       ? { orgId: args.orgId }
       : { orgId: null, regionCode: args.regionCode };
@@ -152,9 +166,16 @@ export const AuditService = {
       where.ulid = ulidRange;
     }
 
+    // VERIFYCHAIN-CAP: bounded fetch — never load the full chain into memory.
+    // Callers page forward by passing nextAfterId from the previous response.
+    if (args.afterId !== undefined) {
+      where.id = { gt: args.afterId };
+    }
+
     const rows = await prisma().auditEvent.findMany({
       where,
       orderBy: { id: 'asc' },
+      take: effectiveLimit,
     });
 
     // SEC-002 fix: thread `expectedPrev` forward from the actual previous
@@ -180,8 +201,10 @@ export const AuditService = {
 
     const secret = env().AUDIT_CHAIN_SECRET;
     let count = 0;
+    let lastId: bigint | null = null;
     for (const row of rows) {
       count++;
+      lastId = row.id;
       const forHash: AuditEventForHash = {
         id: row.ulid,
         orgId: row.orgId,
@@ -210,11 +233,16 @@ export const AuditService = {
           count,
           expected,
           actual: row.rowHash,
+          // nextAfterId lets the caller resume pagination even after a break
+          // is found — useful for forensic full-chain scans.
+          nextAfterId: rows.length === effectiveLimit ? lastId : null,
         };
       }
       expectedPrev = row.rowHash;
     }
-    return { ok: true, count };
+    // nextAfterId is non-null only when the page was full (more rows may exist).
+    const nextAfterId = rows.length === effectiveLimit ? lastId : null;
+    return { ok: true, count, nextAfterId };
   },
 
   /**

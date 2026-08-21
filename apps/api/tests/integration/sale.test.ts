@@ -146,7 +146,7 @@ describe('GET /v1/sales/:id', () => {
     expect(res.json().sale.status).toBe('pending_install');
   });
 
-  it('cross-tenant returns 403', async () => {
+  it('cross-tenant returns 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createSale(tA, 'iso-1');
@@ -155,7 +155,8 @@ describe('GET /v1/sales/:id', () => {
       url: `/v1/sales/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
+    expect(res.statusCode).toBe(404);
   });
 
   it('returns 404 unknown id', async () => {
@@ -207,7 +208,7 @@ describe('POST /v1/sales/:id/installer-handoff', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('cross-tenant handoff returns 403', async () => {
+  it('cross-tenant handoff returns 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createSale(tA, 'handoff-iso-1');
@@ -220,7 +221,8 @@ describe('POST /v1/sales/:id/installer-handoff', () => {
         scheduledInstallAt: '2026-06-01T09:00:00.000Z',
       },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant write → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
+    expect(res.statusCode).toBe(404);
   });
 });
 
@@ -236,14 +238,16 @@ describe('Stub endpoints', () => {
     expect(res.statusCode).toBe(501);
   });
 
-  it('POST /:id/cancel returns 501', async () => {
+  // cancel is now IMPLEMENTED (cancel sale + clawback commission), not a 501
+  // stub. A well-formed call against an unknown id resolves to 404.
+  it('POST /:id/cancel is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/sales/sal_x/cancel',
-      headers: { authorization: `Bearer ${t}` },
-      payload: {},
+      url: '/v1/sales/sal_does_not_exist/cancel',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'sal-cancel-404' },
+      payload: { reason: 'buyer rescinded' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

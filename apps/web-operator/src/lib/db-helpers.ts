@@ -57,6 +57,25 @@ export const newBrandKitId = (): string => `brk_${ulid()}`;
 export const newBillingId = (): string => `bil_${ulid()}`;
 export const newAuditId = (): string => `aud_${ulid()}`;
 export const newIdempotencyKey = (): string => `idem_${ulid()}`;
+export const newShiftId = (): string => `ksft_${ulid()}`;
+export const newAssignmentId = (): string => `tas_${ulid()}`;
+export const newUserId = (): string => `usr_${ulid()}`;
+export const newOfferingId = (): string => `svo_${ulid()}`;
+export const newTerritoryId = (): string => `ter_${ulid()}`;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Invite tokens — mirrors apps/api domains/auth/tokens.generateInviteToken.
+// The opaque token is base64url(randomBytes(24)); we persist ONLY its SHA-256
+// (UserCredential.inviteTokenHash) and hand the plaintext back once for the
+// manager to send. acceptInvite() in the Fastify API verifies via
+// hashRefreshToken() = sha256(plaintext), so a token minted here unlocks there.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function generateInviteToken(): { plaintext: string; hash: string } {
+  const plaintext = randomBytes(24).toString('base64url');
+  const hash = createHash('sha256').update(plaintext).digest('hex');
+  return { plaintext, hash };
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Slug helpers
@@ -151,9 +170,58 @@ export async function writeAudit(
   const last = await tx.auditEvent.findFirst({
     where: input.orgId ? { orgId: input.orgId } : { orgId: null, regionCode: input.regionCode },
     orderBy: { id: 'desc' },
-    select: { rowHash: true },
+    select: {
+      ulid: true,
+      orgId: true,
+      regionCode: true,
+      actorUserId: true,
+      action: true,
+      resourceType: true,
+      resourceId: true,
+      beforeJson: true,
+      afterJson: true,
+      metadata: true,
+      occurredAt: true,
+      prevHash: true,
+      rowHash: true,
+    },
   });
   const prevHash = last?.rowHash ?? GENESIS_PREV_HASH;
+
+  // SECRET-DRIFT TRIPWIRE. The chain is only tamper-evident if every writer
+  // (this BFF + the Fastify API) hashes with the SAME AUDIT_CHAIN_SECRET.
+  // Recompute the previous row's hash with OUR secret before extending the
+  // chain: a mismatch means our secret differs from the one that wrote it
+  // (or the row was tampered with) — either way, extending would silently
+  // poison legal evidence. Fail loud instead (2026-08-21 dev incident: BFF
+  // drift broke 5 org chains undetected until the weekly verify).
+  if (last) {
+    const lastRecomputed = computeRowHash(
+      last.prevHash,
+      {
+        id: last.ulid,
+        orgId: last.orgId,
+        regionCode: last.regionCode,
+        actorUserId: last.actorUserId,
+        action: last.action,
+        resourceType: last.resourceType,
+        resourceId: last.resourceId,
+        beforeJson: last.beforeJson ?? null,
+        afterJson: last.afterJson ?? null,
+        metadata: last.metadata ?? {},
+        occurredAt: last.occurredAt.toISOString(),
+      },
+      secret,
+    );
+    if (lastRecomputed !== last.rowHash) {
+      throw new Error(
+        `Audit chain integrity check failed for ${input.orgId ?? `platform/${input.regionCode}`}: ` +
+          `the previous row (${last.ulid}) does not verify with this service's ` +
+          'AUDIT_CHAIN_SECRET. Refusing to extend a chain we would poison. ' +
+          'Check secret alignment across API + BFF (see CLAUDE.md shared-secret law).',
+      );
+    }
+  }
 
   const canonicalMetadata = input.metadata ?? {};
   const forHash = {

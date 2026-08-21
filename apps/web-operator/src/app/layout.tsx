@@ -2,6 +2,7 @@ import '@d2d/ui-tokens/globals.css';
 import 'leaflet/dist/leaflet.css';
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Toaster } from '@/components/Toaster';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -26,7 +27,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-screen font-sans">
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

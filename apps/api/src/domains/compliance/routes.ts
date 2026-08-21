@@ -23,7 +23,13 @@ import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
 import type { RegionCode } from '@prisma/client';
-import { fileRegistration, getStateClearanceMatrix, transitionRegistration } from './service';
+import {
+  fileRegistration,
+  getStateClearanceMatrix,
+  transitionRegistration,
+  manualClearance,
+} from './service';
+import { COOLING_OFF_WINDOWS, COOLING_OFF_BY_STATE } from './cooling-off-data';
 
 const stateClearanceQuerySchema = z.object({ campaignId: z.string().min(1).optional() }).strict();
 
@@ -38,7 +44,11 @@ interface IdParams {
 }
 
 export async function registerCompliance(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'compliance', status: 'live', phase: '1.2' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'compliance',
+    status: 'live',
+    phase: '1.2',
+  }));
 
   // GET /v1/compliance/state-clearance — matrix for the org.
   app.get('/state-clearance', { preHandler: requireAuth }, async (req, reply) => {
@@ -74,22 +84,92 @@ export async function registerCompliance(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const ctx = requireTenant(req);
       const body = transitionRequestSchema.parse(req.body);
-      const registration = await transitionRegistration(req.params.id, body.status, {
-        userId: ctx.userId,
+      await withIdempotency({
+        req,
+        reply,
         orgId: ctx.orgId,
-        regionCode: ctx.regionCode as RegionCode,
+        handler: async () => {
+          const registration = await transitionRegistration(req.params.id, body.status, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as RegionCode,
+          });
+          return { status: 200, body: { registration } };
+        },
       });
-      return reply.code(200).send({ registration });
     },
   );
 
-  // GET /v1/compliance/cooling-off-windows — out of scope for Phase 1.2.
-  app.get('/cooling-off-windows', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'Cooling-off windows lands in Phase 1.2',
-    }),
-  );
+  // POST /v1/compliance/state-clearance — manual clearance override.
+  // Links a campaign to an existing approved registration for campaigns created
+  // after the registration was approved (auto-upsert only covers at-approval-time).
+  const manualClearanceSchema = z
+    .object({
+      campaignId: z.string().min(1),
+      state: z.string().min(2).max(2),
+      paidSolicitorRegistrationId: z.string().min(1),
+    })
+    .strict();
+
+  app.post('/state-clearance', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = manualClearanceSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const clearance = await manualClearance(body, {
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+          regionCode: ctx.regionCode as RegionCode,
+        });
+        return { status: 201, body: { clearance } };
+      },
+    });
+  });
+
+  // GET /v1/compliance/cooling-off-windows — per-jurisdiction FTC + state cooling-off windows.
+  // Optional query param ?state=CA for a single-state lookup.
+  // Auth required: only authenticated org members need this data.
+  const coolingOffQuerySchema = z
+    .object({ state: z.string().length(2).toUpperCase().optional() })
+    .strict();
+
+  app.get('/cooling-off-windows', { preHandler: requireAuth }, async (req, reply) => {
+    const query = coolingOffQuerySchema.parse(req.query);
+
+    if (query.state) {
+      const window = COOLING_OFF_BY_STATE.get(query.state);
+      if (!window) {
+        return reply
+          .code(404)
+          .type('application/problem+json')
+          .send({
+            type: 'https://docs.d2d.io/problems/not-found',
+            title: 'State not found',
+            status: 404,
+            detail: `No cooling-off window data for state '${query.state}'.`,
+          });
+      }
+      return reply.code(200).send({
+        window,
+        meta: {
+          dataAsOf: '2026-06',
+          legalDisclaimer:
+            'This data is provided for operational reference only. Consult qualified legal counsel before relying on it for compliance decisions. State laws change; review quarterly.',
+        },
+      });
+    }
+
+    return reply.code(200).send({
+      windows: COOLING_OFF_WINDOWS,
+      meta: {
+        count: COOLING_OFF_WINDOWS.length,
+        dataAsOf: '2026-06',
+        legalDisclaimer:
+          'This data is provided for operational reference only. Consult qualified legal counsel before relying on it for compliance decisions. State laws change; review quarterly.',
+      },
+    });
+  });
 }

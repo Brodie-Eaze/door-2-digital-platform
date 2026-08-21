@@ -1,11 +1,25 @@
 import { ShieldCheck, Hash } from 'lucide-react';
 import { Banner, Section } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { RECENT_AUDIT } from '@/lib/fixtures';
+
+/**
+ * Stable FNV-1a 32-bit hash → 8 hex chars. Deterministic per event id so the
+ * audit-integrity surface never shows a different "hash" on each render.
+ */
+function fnv1aHex(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
 
 export default function AuditPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Audit log">
+    <PlatformShell pageTitle="Audit log">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="success">
           <span className="text-[13px] flex items-center gap-2">
@@ -37,6 +51,7 @@ export default function AuditPage(): JSX.Element {
           title="Recent events"
           subtitle="Hash-chained immutable outbox · written in same TX as the originating mutation"
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           <table className="tbl">
             <thead>
@@ -63,7 +78,7 @@ export default function AuditPage(): JSX.Element {
                     <span className="text-soft inline-flex items-center gap-1">
                       <Hash size={11} />
                       <span className="font-mono text-[10px]">
-                        {Math.random().toString(16).slice(2, 10)}…
+                        {fnv1aHex(`${e.occurredAt}|${e.actor}|${e.action}|${e.resource}`)}…
                       </span>
                     </span>
                   </td>
@@ -73,6 +88,6 @@ export default function AuditPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

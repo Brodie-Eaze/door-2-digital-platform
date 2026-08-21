@@ -14,6 +14,7 @@ import {
   generateRefreshToken,
   hashRefreshToken,
   signAccessToken,
+  normalizeUserAgent,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './tokens';
@@ -34,6 +35,21 @@ export interface AuthSuccess {
     givenName: string;
     familyName: string;
   };
+}
+
+/**
+ * SEC-007: Return the lockout duration in ms for the given cumulative failure
+ * count, or null if no lockout should be applied yet.
+ *
+ * Thresholds are based on the POST-lock cumulative count (never resets on
+ * lock), so each tier is sticky: once an account hits 20 failures it stays
+ * on the 1-hour tier until a successful login clears it.
+ */
+function lockoutDurationForCount(count: number): number | null {
+  if (count >= 30) return 24 * 60 * 60 * 1000; // 24 hours
+  if (count >= 20) return 60 * 60 * 1000; // 1 hour
+  if (count >= 10) return 15 * 60 * 1000; // 15 minutes
+  return null;
 }
 
 /**
@@ -58,9 +74,40 @@ export async function login(args: {
     await verifyPassword(args.password, 'dummy:00');
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
+
+  // SEC-003 / SEC-007: per-account lockout check. Evaluated BEFORE the password
+  // hash so a locked account cannot be brute-forced even with correct timing.
+  if (user.credential.lockedUntil && user.credential.lockedUntil > new Date()) {
+    // Still burn time equivalent to a hash to avoid a timing oracle that reveals
+    // lockout state vs. bad-password state.
+    await verifyPassword(args.password, 'dummy:00');
+    const retryAfterSeconds = Math.ceil(
+      (user.credential.lockedUntil.getTime() - Date.now()) / 1000,
+    );
+    throw new ProblemError(Problems.rateLimited(retryAfterSeconds));
+  }
+
   const ok = await verifyPassword(args.password, user.credential.passwordHash);
   if (!ok) {
+    // SEC-007: cumulative count is NEVER reset on lock — resetting gave an
+    // attacker a fresh 10 attempts every 15 minutes. The count only resets on a
+    // SUCCESSFUL login (see below). Escalating durations:
+    //   ≥10 attempts → 15 min, ≥20 → 1 hour, ≥30 → 24 hours.
+    const nextCount = user.credential.failedLoginCount + 1;
+    const lockoutDurationMs = lockoutDurationForCount(nextCount);
+    const shouldLock = lockoutDurationMs !== null;
+
     await prisma().$transaction(async (tx) => {
+      await tx.userCredential.update({
+        where: { userId: user.id },
+        data: {
+          failedLoginCount: nextCount,
+          // Only write lockedUntil when the new count crosses a threshold;
+          // leave the existing value alone for intermediate counts so a prior
+          // longer lockout is not inadvertently shortened.
+          ...(shouldLock && { lockedUntil: new Date(Date.now() + lockoutDurationMs) }),
+        },
+      });
       await writeAudit(tx, {
         orgId: user.orgId,
         regionCode: user.regionCode,
@@ -68,11 +115,21 @@ export async function login(args: {
         action: 'auth.login_failed',
         resourceType: 'User',
         resourceId: user.id,
-        metadata: { reason: 'invalid_password' },
+        metadata: {
+          reason: 'invalid_password',
+          failedAttempt: nextCount,
+          accountLocked: shouldLock,
+        },
       });
     });
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
+
+  // Successful login: clear the failure counter and any stale lockout.
+  await prisma().userCredential.update({
+    where: { userId: user.id },
+    data: { failedLoginCount: 0, lockedUntil: null },
+  });
 
   return issueTokens(user, { ip: args.ip, userAgent: args.userAgent, audit: 'auth.login_success' });
 }
@@ -252,8 +309,9 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
       role: user.role,
       regionCode: user.regionCode,
       brandCode: user.brandCode,
-      // Vanity claims for browser topbar — never read for authz decisions.
-      email: user.email,
+      // SEC-005: givenName is a vanity claim for the browser topbar. email was
+      // removed — it is PII and ends up in logs/proxies. The topbar fetches
+      // user data from /api/session/me on mount instead.
       givenName: user.givenName,
     },
     e.JWT_ACCESS_SECRET,
@@ -261,6 +319,9 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
   const refresh = generateRefreshToken();
   const refreshId = newId('rft');
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
+
+  // SEC-012: coerce UA to browser-family/major only before persistence.
+  const normalizedUa = normalizeUserAgent(args.userAgent);
 
   await prisma().$transaction(async (tx) => {
     if (args.rotateFromId) {
@@ -276,7 +337,7 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
         orgId: user.orgId,
         tokenHash: refresh.hash,
         expiresAt,
-        userAgent: args.userAgent ?? null,
+        userAgent: normalizedUa,
         ip: args.ip ?? null,
       },
     });
@@ -288,7 +349,8 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
       action: args.audit,
       resourceType: 'User',
       resourceId: user.id,
-      metadata: { ip: args.ip, userAgent: args.userAgent },
+      // SEC-012: do not log raw IP or UA in audit events.
+      metadata: { userAgent: normalizedUa },
     });
   });
 

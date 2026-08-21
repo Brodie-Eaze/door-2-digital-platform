@@ -19,10 +19,17 @@ import type {
   RegionCode,
 } from '@prisma/client';
 import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma, tenantTx } from '../../config/db';
+import { tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
-import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
+import { accrueConversionCommission } from '../commission/service';
+import { emitAnalyticsEvent } from '../analytics/service';
+import type {
+  CreateConversionRequest,
+  DisputeConversionRequest,
+  ListConversionsQuery,
+  RefundConversionRequest,
+} from './schemas';
 
 interface ActorContext {
   userId: string;
@@ -99,12 +106,14 @@ export async function createConversion(
   input: CreateConversionRequest,
   actor: ActorContext,
 ): Promise<ConversionPublic> {
-  // Validate the lead lives in the same org. Pull the address region so the
-  // paid-solicitor clearance gate can derive the donor's state authoritatively.
-  const lead = await prisma().lead.findUnique({
+  // Validate the lead lives in the same org. tenantPrismaTx AND-scopes orgId +
+  // GUC-pins the read (the RLS belt), so a lead in another tenant is invisible →
+  // null → 404 (never 403: withholding existence is the point of tenant
+  // isolation). Pull the address region so the paid-solicitor clearance gate can
+  // derive the donor's state authoritatively.
+  const lead = await tenantPrismaTx(actor.orgId).lead.findUnique({
     where: { id: input.leadId },
     select: {
-      orgId: true,
       status: true,
       regionCode: true,
       brandCode: true,
@@ -112,9 +121,6 @@ export async function createConversion(
     },
   });
   if (!lead) throw new ProblemError(Problems.notFound('Lead', input.leadId));
-  if (lead.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(lead.orgId));
-  }
 
   // Paid-solicitor state-clearance hard-gate (legal P0). A charity conversion
   // (which carries a campaignId) MUST be cleared for the donor's state before
@@ -196,7 +202,7 @@ export async function createConversion(
             input.type === 'donation_recurring' && input.donationDetails?.frequency
               ? input.donationDetails.frequency
               : null,
-          paymentMethodToken: input.paymentMethodToken ?? input.paymentExternalId ?? 'unknown',
+          paymentMethodTokenVault: input.paymentMethodToken ?? input.paymentExternalId ?? null,
           status: 'active',
           deductibleGiftRecipientNo: input.donationDetails?.deductibleGiftRecipientNo ?? null,
           einOrEquivalent: input.donationDetails?.einOrEquivalent ?? null,
@@ -226,6 +232,17 @@ export async function createConversion(
       });
     }
 
+    await accrueConversionCommission(
+      {
+        orgId: actor.orgId,
+        userId: input.knockerId ?? actor.userId,
+        conversionId,
+        conversionType: input.type,
+        amountCents,
+      },
+      tx,
+    );
+
     await AuditService.recordEvent(tx, {
       orgId: actor.orgId,
       regionCode: actor.regionCode,
@@ -234,6 +251,25 @@ export async function createConversion(
       resourceType: 'Conversion',
       resourceId: conversionId,
       afterJson: {
+        type: input.type,
+        attributionSource: input.attributionSource,
+        amountCents: amountCents.toString(),
+        currency: input.currency,
+        paymentProvider: input.paymentProvider,
+        processorResidualCents: processorResidualCents.toString(),
+        d2dRakeCents: rake.toString(),
+      },
+    });
+
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: input.knockerId ?? actor.userId,
+      eventType: 'conversion',
+      entityType: 'Conversion',
+      entityId: conversionId,
+      occurredAt: signedAt,
+      payload: {
         type: input.type,
         attributionSource: input.attributionSource,
         amountCents: amountCents.toString(),
@@ -254,7 +290,9 @@ export async function listConversions(
   query: ListConversionsQuery,
   actor: ActorContext,
 ): Promise<{ data: ConversionPublic[]; nextCursor: string | null }> {
-  const where: Prisma.ConversionWhereInput = { orgId: actor.orgId };
+  // orgId is injected + GUC-pinned by tenantPrismaTx (the RLS belt); we only add
+  // the caller's optional filters here.
+  const where: Prisma.ConversionWhereInput = {};
   if (query.leadId) where.leadId = query.leadId;
   if (query.type) where.type = query.type;
   if (query.attributionSource) where.attributionSource = query.attributionSource;
@@ -264,7 +302,7 @@ export async function listConversions(
     if (query.to) range.lte = new Date(query.to);
     where.signedAt = range;
   }
-  const rows = await prisma().conversion.findMany({
+  const rows = await tenantPrismaTx(actor.orgId).conversion.findMany({
     where,
     take: query.limit + 1,
     ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
@@ -281,20 +319,166 @@ export async function listConversions(
 }
 
 export async function getConversion(id: string, actor: ActorContext): Promise<ConversionPublic> {
-  const row = await prisma().conversion.findUnique({
+  // RLS belt: tenantPrismaTx AND-scopes orgId + GUC-pins the read, so a
+  // conversion in another tenant resolves to null → 404. We deliberately do NOT
+  // distinguish "exists in another org" (would be a 403) — that disclosure is
+  // exactly what tenant isolation must withhold. Donation/Sale children ride the
+  // parent Conversion's visibility (they carry no orgId of their own).
+  const row = await tenantPrismaTx(actor.orgId).conversion.findUnique({
     where: { id },
     include: { donation: true, sale: true },
   });
   if (!row) throw new ProblemError(Problems.notFound('Conversion', id));
+  return toPublic(row, row.donation, row.sale);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Phase 1.4 — Refund instruction + dispute intake (ADR-0019: instruct-only)
+// ───────────────────────────────────────────────────────────────────────────
+
+async function loadConversionAndAssertTenant(
+  id: string,
+  actor: ActorContext,
+): Promise<{
+  id: string;
+  orgId: string;
+  regionCode: RegionCode;
+  amountCents: bigint;
+  currency: string;
+  conversionId: string; // alias for id — keeps callers readable
+}> {
+  const row = await tenantPrismaTx(actor.orgId).conversion.findUnique({ where: { id } });
+  if (!row) throw new ProblemError(Problems.notFound('Conversion', id));
   if (row.orgId !== actor.orgId) {
     throw new ProblemError(Problems.tenantMismatch(row.orgId));
   }
-  return toPublic(row, row.donation, row.sale);
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    regionCode: row.regionCode,
+    amountCents: row.amountCents,
+    currency: row.currency,
+    conversionId: row.id,
+  };
+}
+
+export interface RefundInstructionPublic {
+  id: string;
+  conversionId: string;
+  amountCents: string;
+  currency: string;
+  reason: string;
+  clawbackCommissions: boolean;
+  status: 'pending_manual_action';
+  instructedAt: string;
+}
+
+export async function refundConversion(
+  id: string,
+  input: RefundConversionRequest,
+  actor: ActorContext,
+): Promise<RefundInstructionPublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const instructionId = newId('rfi');
+  const instructedAt = new Date();
+
+  await tenantTx(actor.orgId, async (tx) => {
+    if (input.clawbackCommissions) {
+      await tx.commission.updateMany({
+        where: { conversionId: conv.id, status: 'accrued' },
+        data: { status: 'clawback_pending' },
+      });
+    }
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.refund_instruction',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: { amountCents: conv.amountCents.toString(), currency: conv.currency },
+      afterJson: {
+        instructionId,
+        refundAmountCents: input.amountCents.toString(),
+        currency: input.currency,
+        status: 'pending_manual_action',
+        clawbackCommissions: input.clawbackCommissions,
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: instructionId,
+    conversionId: conv.id,
+    amountCents: input.amountCents.toString(),
+    currency: input.currency,
+    reason: input.reason,
+    clawbackCommissions: input.clawbackCommissions,
+    status: 'pending_manual_action',
+    instructedAt: instructedAt.toISOString(),
+  };
+}
+
+export interface DisputePublic {
+  id: string;
+  conversionId: string;
+  reason: string;
+  chargebackCode: string | null;
+  status: 'received';
+  receivedAt: string;
+}
+
+export async function disputeConversion(
+  id: string,
+  input: DisputeConversionRequest,
+  actor: ActorContext,
+): Promise<DisputePublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const disputeId = newId('dsp');
+  const receivedAt = input.notifiedAt ? new Date(input.notifiedAt) : new Date();
+
+  await tenantTx(actor.orgId, async (tx) => {
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.dispute_intake',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: {},
+      afterJson: {
+        disputeId,
+        chargebackCode: input.chargebackCode ?? null,
+        status: 'received',
+        receivedAt: receivedAt.toISOString(),
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: disputeId,
+    conversionId: conv.id,
+    reason: input.reason,
+    chargebackCode: input.chargebackCode ?? null,
+    status: 'received',
+    receivedAt: receivedAt.toISOString(),
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
+
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org).
+ * Returns '[encrypted]' for vault rows; JIT unmask via /v1/pii/unmask-request. */
+function maskDonorEmail(email: string): string {
+  if (email === 'redacted@vaulted') return '[encrypted]';
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
 
 function toPublic(
   c: {
@@ -356,7 +540,9 @@ function toPublic(
     amountCents: c.amountCents.toString(),
     currency: c.currency,
     signedAt: c.signedAt.toISOString(),
-    signatureKey: c.signatureKey,
+    // PII-first: the signature S3 key points at a signed consent/contract — never
+    // returned on the read path; signed-doc retrieval is an audited signed-URL grant.
+    signatureKey: null,
     paymentProvider: c.paymentProvider,
     paymentExternalId: c.paymentExternalId,
     processorResidualCents: c.processorResidualCents.toString(),
@@ -365,7 +551,8 @@ function toPublic(
       ? {
           id: donation.id,
           conversionId: donation.conversionId,
-          donorEmail: donation.donorEmail,
+          // PII-first: donor email masked at the read boundary.
+          donorEmail: maskDonorEmail(donation.donorEmail),
           amountCents: donation.amountCents.toString(),
           currency: donation.currency,
           frequency: donation.frequency,

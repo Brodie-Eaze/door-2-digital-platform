@@ -22,6 +22,10 @@ export const conversionDonationDetailsSchema = z
     giftAidEligible: z.boolean().optional(),
     deductibleGiftRecipientNo: z.string().max(40).optional(),
     einOrEquivalent: z.string().max(40).optional(),
+    // F-004: donor email accepted at conversion time; immediately vault-encrypted,
+    // never persisted in plaintext. Optional — some door conversions are collected
+    // without an email address (field stays null, digestable later on follow-up).
+    donorEmail: z.string().email().max(254).optional(),
   })
   .strict();
 
@@ -72,3 +76,22 @@ export const listConversionsQuerySchema = cursorPageQuerySchema.extend({
   to: z.string().datetime().optional(),
 });
 export type ListConversionsQuery = z.infer<typeof listConversionsQuerySchema>;
+
+export const refundConversionRequestSchema = z
+  .object({
+    reason: z.string().min(1).max(500),
+    amountCents: bigIntCentsSchema,
+    currency: z.string().length(3),
+    clawbackCommissions: z.boolean().default(false),
+  })
+  .strict();
+export type RefundConversionRequest = z.infer<typeof refundConversionRequestSchema>;
+
+export const disputeConversionRequestSchema = z
+  .object({
+    reason: z.string().min(1).max(500),
+    chargebackCode: z.string().max(40).optional(),
+    notifiedAt: z.string().datetime().optional(),
+  })
+  .strict();
+export type DisputeConversionRequest = z.infer<typeof disputeConversionRequestSchema>;

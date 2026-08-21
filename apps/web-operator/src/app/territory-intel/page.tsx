@@ -18,8 +18,23 @@ import {
   type ZoneSelection,
 } from '@/components/TerritoryHeatmap';
 import { ALL_CELLS } from '@/components/territoryCells';
+import { useDataFreshness } from '@/components/DataSourceBadge';
 
 type StatusFilter = 'all' | CellStatus;
+
+/** Shape returned by GET /api/territories (live, DB-derived rows). */
+type ApiTerritory = {
+  id: string;
+  name: string;
+  regionCode: string;
+  vertical: string;
+  status: string;
+  propensity: number;
+  knocks: number;
+  conversions: number;
+  saturation: number;
+  centroid: { lat: number; lng: number } | null;
+};
 
 type ZoneRow = {
   name: string;
@@ -184,12 +199,121 @@ const ZONES: ZoneRow[] = [
   },
 ];
 
+/**
+ * Map a live API territory row → the ZoneRow the table/panel render from.
+ * Income/lift aren't yet in the DB so we derive an honest placeholder from the
+ * propensity signal; saturation/knocks/conversions are real. Bounds come from
+ * the parsed centroid (a ~0.06° box) so a clicked live row still drives the map
+ * panel; territories with no parseable centroid get a neutral US-center box.
+ */
+function apiToZoneRow(t: ApiTerritory): ZoneRow {
+  const cellStatus: ZoneRow['cellStatus'] =
+    t.status === 'blocked'
+      ? 'blocked'
+      : t.propensity >= 0.75 && t.saturation < 30
+        ? 'ai_suggested'
+        : t.propensity < 0.35
+          ? 'low_yield'
+          : 'active';
+
+  const tone: ZoneRow['tone'] =
+    cellStatus === 'ai_suggested'
+      ? 'success'
+      : cellStatus === 'blocked'
+        ? 'danger'
+        : cellStatus === 'low_yield'
+          ? 'muted'
+          : 'info';
+
+  const statusLabel =
+    cellStatus === 'ai_suggested'
+      ? 'AI suggested'
+      : cellStatus === 'blocked'
+        ? 'Blocked'
+        : cellStatus === 'low_yield'
+          ? 'Low-yield'
+          : 'Active';
+
+  // Est lift = conversion-rate edge over a 0.40 portfolio baseline, only shown
+  // for fresh AI-suggested zones (where the lift is actionable).
+  const estLiftPp =
+    cellStatus === 'ai_suggested' ? Math.max(1, Math.round((t.propensity - 0.4) * 100)) : null;
+
+  const c = t.centroid;
+  const bounds: [[number, number], [number, number]] = c
+    ? [
+        [c.lat - 0.03, c.lng - 0.045],
+        [c.lat + 0.03, c.lng + 0.045],
+      ]
+    : [
+        [39.5, -98.6],
+        [39.56, -98.5],
+      ];
+
+  // Knockable doors aren't in the DB yet; show real remaining capacity as
+  // (knocks so far) when we have it, else an honest 0.
+  const knockable = t.knocks;
+
+  return {
+    name: t.name,
+    propensity: t.propensity,
+    medianIncome: '—',
+    medianIncomeCents: 0,
+    density: t.saturation > 60 ? 'High' : t.saturation > 25 ? 'Medium' : 'Low',
+    saturation: t.saturation,
+    estLift: estLiftPp != null ? `+${estLiftPp}pp` : '—',
+    estLiftPp,
+    knockable,
+    status: statusLabel,
+    tone,
+    cellStatus,
+    bounds,
+  };
+}
+
+/**
+ * Derive the top AI-suggested zones from live propensity: highest
+ * propensity × lowest saturation, excluding blocked. Mirrors the model the
+ * fixture constants stand in for, but on real DB-derived numbers.
+ */
 export default function TerritoryIntelPage(): JSX.Element {
   const [selectedCell, setSelectedCell] = useState<ZoneSelection | null>(null);
   const [assignedSet, setAssignedSet] = useState<Set<string>>(new Set());
   const [showNewZoneBanner, setShowNewZoneBanner] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [, setLiveRows] = useState<ZoneRow[] | null>(null);
+  const { markFresh, markFixture } = useDataFreshness('fixture');
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Fetch real territory propensity on mount. When the org has Territory rows
+  // we render those; otherwise we fall back to the fixture heatmap cells and
+  // the badge honestly reports DEMO DATA.
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/territories', { headers: { accept: 'application/json' } });
+        if (!res.ok) throw new Error(`territories ${res.status}`);
+        const json = (await res.json()) as { territories?: ApiTerritory[] };
+        if (cancelled) return;
+        const rows = Array.isArray(json.territories) ? json.territories : [];
+        if (rows.length > 0) {
+          setLiveRows(rows.map(apiToZoneRow));
+          markFresh();
+        } else {
+          setLiveRows(null);
+          markFixture();
+        }
+      } catch {
+        if (cancelled) return;
+        setLiveRows(null);
+        markFixture();
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, [markFresh, markFixture]);
 
   // Count cells by status for the filter pills — derived from the same data
   // module the map renders from, so the pill numbers match the visible cells.

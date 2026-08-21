@@ -15,11 +15,21 @@ export interface AccessTokenPayload {
   role: string;
   regionCode: string;
   brandCode: string;
-  /** Optional vanity claims used by the browser topbar — NOT used for authz. */
-  email?: string;
+  /**
+   * Optional vanity claim used by the browser topbar — NOT used for authz.
+   * SEC-005: email was removed from this type; it is PII and must not be
+   * embedded in tokens where it can appear in logs and reverse proxies.
+   * The topbar fetches user data from /api/session/me on mount.
+   */
   givenName?: string;
   iat: number;
   exp: number;
+  /**
+   * Set only by the synthetic-demo issuer (apps/web-operator/api/session/demo).
+   * The API's requireAuth rejects any token carrying this claim so a demo-minted
+   * cookie can never be used as a real session against the API.
+   */
+  demo?: boolean;
 }
 
 export const ACCESS_TOKEN_TTL_SECONDS = 5 * 60; // 5 minutes
@@ -140,4 +150,39 @@ export function generateInviteToken(): { plaintext: string; hash: string } {
   const plaintext = base64url(buf);
   const hash = createHash('sha256').update(plaintext).digest('hex');
   return { plaintext, hash };
+}
+
+/**
+ * Normalise a raw User-Agent string to a coarse browser-family label for
+ * storage (SEC-012 — PII minimisation). The full UA string is a fingerprinting
+ * vector; we retain only enough to be operationally useful (browser family +
+ * major version) without persisting a device fingerprint.
+ *
+ * Examples:
+ *   "Mozilla/5.0 … Chrome/124.0.0.0 …"  → "Chrome/124"
+ *   "Mozilla/5.0 … Firefox/125.0 …"      → "Firefox/125"
+ *   "Mozilla/5.0 … Safari/… Version/17…" → "Safari/17"
+ *   "okhttp/4.12.0"                       → "okhttp/4"
+ *   anything else / missing               → "other"
+ */
+export function normalizeUserAgent(ua: string | undefined | null): string {
+  if (!ua) return 'other';
+  // Edge — must match before Chrome (Chromium-based; reports both tokens).
+  const edgeMatch = /\bEdg\/(\d+)/.exec(ua);
+  if (edgeMatch) return `Edge/${edgeMatch[1]}`;
+  // Chrome / Chromium.
+  const chromeMatch = /\bChrome\/(\d+)/.exec(ua);
+  if (chromeMatch) return `Chrome/${chromeMatch[1]}`;
+  // Firefox.
+  const ffMatch = /\bFirefox\/(\d+)/.exec(ua);
+  if (ffMatch) return `Firefox/${ffMatch[1]}`;
+  // Safari — Version/N is the human-readable version; present on WebKit browsers.
+  const safariVersionMatch = /\bVersion\/(\d+).*Safari\//.exec(ua);
+  if (safariVersionMatch) return `Safari/${safariVersionMatch[1]}`;
+  const safariMatch = /\bSafari\/(\d+)/.exec(ua);
+  if (safariMatch) return `Safari/${safariMatch[1]}`;
+  // Generic HTTP clients / mobile SDKs — keep name + major version only.
+  const genericMatch = /^([A-Za-z][A-Za-z0-9._-]{0,39})\/(\d+)/.exec(ua.trimStart());
+  if (genericMatch) return `${genericMatch[1]}/${genericMatch[2]}`;
+  return 'other';
 }

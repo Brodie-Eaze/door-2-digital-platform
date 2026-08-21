@@ -23,9 +23,10 @@ import type {
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubImage, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, stubImage, stubPing } from './stub';
 
 const REPLICATE_BASE = 'https://api.replicate.com/v1' as const;
+const REPLICATE_TIMEOUT_MS = 30_000 as const;
 const FLUX_VERSION = '5e7a9f4b8c2a3d6e9f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f' as const;
 const MODEL_ID = 'flux-1.1-pro' as const;
 
@@ -39,43 +40,47 @@ export function createFluxAdapter(): ProviderAdapter {
     docsUrl: 'https://replicate.com/black-forest-labs/flux-1.1-pro',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('FLUX (Replicate)', 'flux_demo') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'Replicate apiKey required') };
       }
-      try {
-        const r = await fetch(`${REPLICATE_BASE}/account`, {
-          headers: { authorization: `Token ${apiKey}` },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Replicate ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { username: string };
-        return { ok: true, data: { accountLabel: json.username, accountId: json.username } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      const rr = await fetchWithTimeout(kind, `${REPLICATE_BASE}/account`, {
+        headers: { authorization: `Token ${apiKey}` },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Replicate ${r.status}`, kind, r.status),
+        };
       }
+      const json = (await r.json()) as { username: string };
+      return { ok: true, data: { accountLabel: json.username, accountId: json.username } };
     },
 
     async generateImage(
       input: GenerateImageInput,
       config: ProviderConfig,
     ): Promise<Result<GenerateImageOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubImage(input.prompt, MODEL_ID, input.count, 4) };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'Replicate apiKey required') };
       }
-      try {
-        const r = await fetch(`${REPLICATE_BASE}/predictions`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${REPLICATE_BASE}/predictions`,
+        {
           method: 'POST',
           headers: { authorization: `Token ${apiKey}`, 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -86,30 +91,31 @@ export function createFluxAdapter(): ProviderAdapter {
               num_outputs: input.count,
             },
           }),
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Replicate ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string; output?: string[]; status: string };
-        const urls = json.output ?? [];
+        },
+        REPLICATE_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            images: urls.map((url, i) => ({
-              url,
-              costCents: 4,
-              modelId: MODEL_ID,
-              seed: 0,
-              c2paManifestId: `c2pa-${json.id}-${i}`,
-            })),
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Replicate ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { id: string; output?: string[]; status: string };
+      const urls = json.output ?? [];
+      return {
+        ok: true,
+        data: {
+          images: urls.map((url, i) => ({
+            url,
+            costCents: 4,
+            modelId: MODEL_ID,
+            seed: 0,
+            c2paManifestId: `c2pa-${json.id}-${i}`,
+          })),
+        },
+      };
     },
   };
 }

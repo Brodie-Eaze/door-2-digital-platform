@@ -1,3 +1,5 @@
+'use client';
+
 import {
   ShieldCheck,
   AlertTriangle,
@@ -13,6 +15,9 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
@@ -500,6 +505,11 @@ export default function BrandSafetyPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="Brand safety control room">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="brand-safety" />
+          <DataSourceBadge source="fixture" />
+        </div>
+        <div className="text-[11px] text-muted">Demo data — live wiring lands in Phase 1.x</div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <ShieldCheck size={14} className="text-accent" />
@@ -542,7 +552,15 @@ export default function BrandSafetyPage(): JSX.Element {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             {RULE_PACKS.map((p) => (
-              <div key={`${p.vertical}-${p.jurisdiction}`} className="card card-pad">
+              <div
+                key={`${p.vertical}-${p.jurisdiction}`}
+                onClick={() =>
+                  toast.info(
+                    `Inspect ${p.vertical} · ${p.jurisdiction} rule chain — wiring lands in Phase 1.2`,
+                  )
+                }
+                className="card card-pad cursor-pointer hover:ring-1 hover:ring-accent transition"
+              >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <div className="text-[13px] font-semibold text-ink">{p.vertical}</div>
@@ -580,7 +598,12 @@ export default function BrandSafetyPage(): JSX.Element {
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() => toast.info('Filter blocks — wiring lands in Phase 1.2')}
+              >
                 Filter
               </Button>
             </div>
@@ -603,7 +626,13 @@ export default function BrandSafetyPage(): JSX.Element {
             </thead>
             <tbody>
               {RECENT_BLOCKS.map((b) => (
-                <tr key={b.id} className="cursor-pointer hover:bg-paper">
+                <tr
+                  key={b.id}
+                  onClick={() =>
+                    toast.info(`Inspect ${b.id} — decision history wiring lands in Phase 1.2`)
+                  }
+                  className="cursor-pointer hover:bg-paper"
+                >
                   <td className="!pr-0 w-[60px]">
                     <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper relative">
                       <img
@@ -656,6 +685,10 @@ export default function BrandSafetyPage(): JSX.Element {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.info(`Override ${b.id} — wiring lands in Phase 1.2`);
+                        }}
                         className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-ink hover:bg-paper"
                         title="Override block"
                       >
@@ -663,6 +696,10 @@ export default function BrandSafetyPage(): JSX.Element {
                       </button>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.info(`Hold ${b.id} for review — wiring lands in Phase 1.2`);
+                        }}
                         className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-warn hover:bg-paper"
                         title="Hold for review"
                       >
@@ -670,6 +707,10 @@ export default function BrandSafetyPage(): JSX.Element {
                       </button>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.info(`Discard ${b.id} — wiring lands in Phase 1.2`);
+                        }}
                         className="text-[10.5px] font-medium px-2 py-1 rounded border border-line2 text-muted hover:text-danger hover:bg-paper"
                         title="Discard"
                       >
@@ -677,6 +718,12 @@ export default function BrandSafetyPage(): JSX.Element {
                       </button>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.info(
+                            `Inspect ${b.id} — decision history wiring lands in Phase 1.2`,
+                          );
+                        }}
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                         title="Inspect"
                       >
@@ -695,7 +742,12 @@ export default function BrandSafetyPage(): JSX.Element {
           subtitle="Editable rule library · regex + LLM-as-judge + image/video scan"
           paddedBody={false}
           action={
-            <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={13} />}
+              onClick={() => toast.info('New rule — rule builder lands in Phase 1.2')}
+            >
               New rule
             </Button>
           }
@@ -734,6 +786,7 @@ export default function BrandSafetyPage(): JSX.Element {
                   <td>
                     <button
                       type="button"
+                      onClick={() => toast.info(`Edit ${r.id} — rule editor lands in Phase 1.2`)}
                       className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                       title="Edit"
                     >

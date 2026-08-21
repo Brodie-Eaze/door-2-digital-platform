@@ -13,13 +13,22 @@
  *   - GET  /sso/:orgSlug/config   → cert-free config view (org_admin+)
  *   - PUT  /sso/:orgSlug/config   → upsert IdP config (org_admin+)
  *
- * MFA / WebAuthn remain 501 stubs (Phase 1.2).
+ * MFA (TOTP) — GET /mfa/setup + POST /verify-mfa — Phase 1.2 real.
+ * WebAuthn register + assert — POST /webauthn/register/{begin,finish} + assert/{begin,finish} — live.
  */
 import * as querystring from 'node:querystring';
+import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { loginRequestSchema, refreshRequestSchema, logoutRequestSchema } from './schemas';
 import { login, refresh, logout, getCurrentUser } from './service';
+import { setupTotp, verifyTotp } from './mfa';
+import {
+  beginRegistration,
+  finishRegistration,
+  beginAssertion,
+  finishAssertion,
+} from './webauthn.service';
 import { optionalAuth, requireAuth } from '../../shared/middleware/auth-guard';
 import { ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from './tokens';
 import { env } from '../../config/env';
@@ -126,42 +135,56 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get('/_status', async () => ({ domain: 'auth', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'auth',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/auth/login
-  app.post('/login', async (req, reply) => {
-    const body = loginRequestSchema.parse(req.body);
-    const result = await login({
-      email: body.email,
-      password: body.password,
-      ip: req.ip,
-      userAgent:
-        typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
-    });
-    setAuthCookies(reply, result.accessToken, result.refreshToken);
-    return reply.code(200).send(result);
-  });
+  // SEC-003: tighter per-route rate limit — 5 attempts per IP per minute.
+  // This overrides the global 120/min bucket for this endpoint only.
+  app.post(
+    '/login',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = loginRequestSchema.parse(req.body);
+      const result = await login({
+        email: body.email,
+        password: body.password,
+        ip: req.ip,
+        userAgent:
+          typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
+      });
+      setAuthCookies(reply, result.accessToken, result.refreshToken);
+      return reply.code(200).send(result);
+    },
+  );
 
   // POST /v1/auth/refresh — accept refresh token from JSON body OR d2d_rt cookie.
-  app.post('/refresh', async (req, reply) => {
-    let refreshToken: string | undefined;
-    // Prefer cookie if present.
-    const cookies = (req as unknown as { cookies?: Record<string, string | undefined> }).cookies;
-    if (cookies && typeof cookies.d2d_rt === 'string') {
-      refreshToken = cookies.d2d_rt;
-    } else {
-      const body = refreshRequestSchema.parse(req.body);
-      refreshToken = body.refreshToken;
-    }
-    const result = await refresh({
-      refreshToken,
-      ip: req.ip,
-      userAgent:
-        typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
-    });
-    setAuthCookies(reply, result.accessToken, result.refreshToken);
-    return reply.code(200).send(result);
-  });
+  app.post(
+    '/refresh',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      let refreshToken: string | undefined;
+      // Prefer cookie if present.
+      const cookies = (req as unknown as { cookies?: Record<string, string | undefined> }).cookies;
+      if (cookies && typeof cookies.d2d_rt === 'string') {
+        refreshToken = cookies.d2d_rt;
+      } else {
+        const body = refreshRequestSchema.parse(req.body);
+        refreshToken = body.refreshToken;
+      }
+      const result = await refresh({
+        refreshToken,
+        ip: req.ip,
+        userAgent:
+          typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined,
+      });
+      setAuthCookies(reply, result.accessToken, result.refreshToken);
+      return reply.code(200).send(result);
+    },
+  );
 
   // POST /v1/auth/logout — works with cookie OR Authorization header. Auth
   // is OPTIONAL so a stale cookie still gets cleared cleanly without 401.
@@ -187,22 +210,50 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   // GET /v1/auth/me
   app.get('/me', { preHandler: requireAuth }, async (req, reply) => {
     const userId = req.principal?.userId;
-    if (!userId) throw new ProblemError(Problems.unauthorized());
+    const orgId = req.principal?.orgId;
+    if (!userId || !orgId) throw new ProblemError(Problems.unauthorized());
     const me = await getCurrentUser(userId);
-    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    // Belt: the JWT's orgId claim must match the user's actual org.
+    if (!me || me.orgId !== orgId) throw new ProblemError(Problems.unauthorized('User not active'));
     return reply.code(200).send({ user: me });
   });
 
-  // ── Stubs preserved for Phase 1.2 ─────────────────────────────────────
+  // ── MFA — TOTP setup + verify (Phase 1.2 real) ────────────────────────
 
-  app.post('/verify-mfa', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'TOTP/SMS verification lands in Phase 1.2',
-    }),
-  );
+  const verifyMfaSchema = z.object({ token: z.string().length(6) }).strict();
+
+  // GET /v1/auth/mfa/setup — generate + store a TOTP credential.
+  // Returns the otpauth:// URI the authenticator app scans.
+  // Requires a live session (auth guard). Re-calling overwrites any pending
+  // un-confirmed credential; to prevent casual reset of an active MFA, gate
+  // at the product layer (e.g. require re-password before calling this).
+  app.get('/mfa/setup', { preHandler: requireAuth }, async (req, reply) => {
+    const userId = req.principal?.userId;
+    if (!userId) throw new ProblemError(Problems.unauthorized());
+    const me = await getCurrentUser(userId);
+    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    const result = await setupTotp(userId, me.email, {
+      orgId: me.orgId,
+      regionCode: me.regionCode,
+    });
+    return reply.code(200).send(result);
+  });
+
+  // POST /v1/auth/verify-mfa — verify a TOTP code.
+  // On the first successful call after setup, stamps mfaEnabledAt.
+  // Subsequent calls serve as step-up verification.
+  app.post('/verify-mfa', { preHandler: requireAuth }, async (req, reply) => {
+    const userId = req.principal?.userId;
+    if (!userId) throw new ProblemError(Problems.unauthorized());
+    const me = await getCurrentUser(userId);
+    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    const body = verifyMfaSchema.parse(req.body);
+    const result = await verifyTotp(userId, body.token, {
+      orgId: me.orgId,
+      regionCode: me.regionCode,
+    });
+    return reply.code(200).send(result);
+  });
 
   // ── SAML SSO (Phase 1.1 enterprise table-stakes) ──────────────────────
 
@@ -264,21 +315,54 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/webauthn/begin', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'WebAuthn step-up lands in Phase 1.2',
-    }),
-  );
+  // ── WebAuthn registration (super_admin / org_admin enrol a hardware key) ──
 
-  app.post('/webauthn/finish', async (_req, reply) =>
-    reply.code(501).type('application/problem+json').send({
-      type: 'https://docs.d2d.io/problems/not-implemented',
-      title: 'Not implemented',
-      status: 501,
-      detail: 'WebAuthn step-up lands in Phase 1.2',
-    }),
-  );
+  // POST /v1/auth/webauthn/register/begin
+  app.post('/webauthn/register/begin', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const user = await import('../../config/db').then(({ prisma }) =>
+      prisma().user.findUnique({
+        where: { id: principal.userId },
+        select: { email: true, givenName: true },
+      }),
+    );
+    if (!user) throw new ProblemError(Problems.notFound('User', principal.userId));
+    const options = await beginRegistration(principal.userId, user.email, user.givenName);
+    return reply.code(200).send(options);
+  });
+
+  // POST /v1/auth/webauthn/register/finish
+  app.post('/webauthn/register/finish', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const body = req.body as { response: unknown; deviceName?: string };
+    const result = await finishRegistration(
+      principal.userId,
+      principal.orgId,
+      principal.regionCode as never,
+      body.deviceName,
+      body.response as import('@simplewebauthn/server').RegistrationResponseJSON,
+    );
+    return reply.code(201).send(result);
+  });
+
+  // ── WebAuthn step-up assertion (obtain X-WebAuthn-Step-Up token) ──
+
+  // POST /v1/auth/webauthn/assert/begin
+  app.post('/webauthn/assert/begin', { preHandler: requireAuth }, async (req, reply) => {
+    const options = await beginAssertion(req.principal!.userId);
+    return reply.code(200).send(options);
+  });
+
+  // POST /v1/auth/webauthn/assert/finish
+  app.post('/webauthn/assert/finish', { preHandler: requireAuth }, async (req, reply) => {
+    const principal = req.principal!;
+    const body = req.body as { response: unknown };
+    const result = await finishAssertion(
+      principal.userId,
+      principal.orgId,
+      principal.regionCode as never,
+      body.response as import('@simplewebauthn/server').AuthenticationResponseJSON,
+    );
+    return reply.code(200).send(result);
+  });
 }

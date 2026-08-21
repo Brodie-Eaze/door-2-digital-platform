@@ -269,7 +269,9 @@ describe('Tenant isolation + auth', () => {
         donationDetails: {},
       },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant lead → 404 (Problems.tenantMismatch), NOT 403: a foreign lead
+    // id is indistinguishable from a non-existent one (no enumeration oracle).
+    expect(res.statusCode).toBe(404);
   });
 
   it('requires Idempotency-Key', async () => {
@@ -335,7 +337,7 @@ describe('GET /v1/conversions + GET /v1/conversions/:id', () => {
     expect(b.json().data).toEqual([]);
   });
 
-  it('reads one conversion + cross-tenant 403', async () => {
+  it('reads one conversion + cross-tenant 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const leadId = await createLead(tA, 'cnv-read-1');
@@ -365,30 +367,35 @@ describe('GET /v1/conversions + GET /v1/conversions/:id', () => {
       url: `/v1/conversions/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(b.statusCode).toBe(403);
+    // cross-tenant read → 404 (Problems.tenantMismatch), NOT 403: a cross-tenant
+    // id must be indistinguishable from a non-existent one (no enumeration oracle).
+    expect(b.statusCode).toBe(404);
   });
 });
 
-describe('Stub endpoints', () => {
-  it('POST /:id/refund returns 501', async () => {
+// Phase 1.4: refund + dispute are now IMPLEMENTED (ADR-0019 instruct-only),
+// not 501 stubs. A well-formed call against an unknown id resolves through the
+// service to 404, proving the route is wired (was: asserting 501).
+describe('Refund + dispute (implemented)', () => {
+  it('POST /:id/refund is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/conversions/anything/refund',
-      headers: { authorization: `Bearer ${t}` },
-      payload: {},
+      url: '/v1/conversions/cnv_does_not_exist/refund',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'cnv-refund-404' },
+      payload: { amountCents: '100', currency: 'USD', reason: 'duplicate_charge' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 
-  it('POST /:id/dispute returns 501', async () => {
+  it('POST /:id/dispute is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/conversions/anything/dispute',
-      headers: { authorization: `Bearer ${t}` },
-      payload: {},
+      url: '/v1/conversions/cnv_does_not_exist/dispute',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'cnv-dispute-404' },
+      payload: { reason: 'fraud' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

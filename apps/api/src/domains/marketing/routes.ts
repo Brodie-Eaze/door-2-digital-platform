@@ -28,6 +28,7 @@
  *   - No JWT for inbound webhook (HMAC is the auth)
  */
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { Problems, ProblemError } from '@d2d/shared-utils';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
@@ -50,6 +51,22 @@ interface IdParams {
   id: string;
 }
 
+const queueCreativesSchema = z
+  .object({
+    variantIds: z.array(z.string().min(1).max(120)).min(1).max(50),
+    // The BFF forwards orgId + requestedByUserId; orgId is authoritatively
+    // taken from the tenant guard, requestedByUserId stamps Creative.approvedBy.
+    orgId: z.string().min(1).optional(),
+    requestedByUserId: z.string().min(1).optional(),
+  })
+  .strict();
+
+const listCampaignsQuerySchema = z
+  .object({
+    status: z.string().min(1).max(40).optional(),
+  })
+  .strict();
+
 const ADMIN_ROLES = new Set(['super_admin', 'org_admin']);
 
 function requireAdmin(role: string): void {
@@ -61,7 +78,11 @@ function requireAdmin(role: string): void {
 export async function registerMarketing(app: FastifyInstance): Promise<void> {
   const service = new MarketingService(app.integrations);
 
-  app.get('/_status', async () => ({ domain: 'marketing', status: 'live', phase: '3.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'marketing',
+    status: 'live',
+    phase: '3.1',
+  }));
 
   // ── Providers ──────────────────────────────────────────────────────────
 
@@ -213,6 +234,49 @@ export async function registerMarketing(app: FastifyInstance): Promise<void> {
         return { status: 201, body: { job } };
       },
     });
+  });
+
+  // ── Review queue (approve → draft AdCampaign) ──────────────────────────
+
+  // Approve a batch of generated variants into a NEW draft AdCampaign. The
+  // BFF /api/marketing/queue forwards { variantIds, orgId, requestedByUserId }.
+  app.post('/creatives/queue', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const body = queueCreativesSchema.parse(req.body);
+    await withIdempotency({
+      req,
+      reply,
+      orgId: ctx.orgId,
+      handler: async () => {
+        const result = await service.queueCreatives(
+          body.variantIds,
+          body.requestedByUserId ?? ctx.userId,
+          {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+          },
+        );
+        return { status: 201, body: result };
+      },
+    });
+  });
+
+  // List draft AdCampaigns (the review queue) with their creatives.
+  app.get('/campaigns', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const query = listCampaignsQuerySchema.parse(req.query);
+    const campaigns = await service.listDraftCampaigns(ctx.orgId, query.status ?? 'draft');
+    return reply.code(200).send({ campaigns });
+  });
+
+  // ── CAPI attribution ───────────────────────────────────────────────────
+
+  // Recently-attributed retargeting conversions (last 50, tenant-scoped).
+  app.get('/attribution/recent', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const conversions = await service.recentAttributedConversions(ctx.orgId);
+    return reply.code(200).send({ conversions });
   });
 
   // ── Inbound webhooks (no JWT — HMAC is the auth) ───────────────────────

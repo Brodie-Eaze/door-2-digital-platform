@@ -1,3 +1,6 @@
+'use client';
+
+import Link from 'next/link';
 import {
   Sparkles,
   Wand2,
@@ -21,6 +24,9 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Reveal, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { pickCreativeImage, inferTheme, type CreativeTheme } from '@/lib/creative-images';
 
 /**
@@ -708,6 +714,10 @@ export default function MarketingStudioPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="AI Marketing Studio — overview">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="overview" />
+          <DataSourceBadge source="fixture" />
+        </div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={14} className="text-accent" />
@@ -906,15 +916,20 @@ export default function MarketingStudioPage(): JSX.Element {
               title="Approval queue"
               subtitle={`${APPROVAL_QUEUE.length} creatives awaiting human review`}
               action={
-                <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
-                  Review all
-                </Button>
+                <Link href="/marketing-studio/review-queue">
+                  <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
+                    Review all
+                  </Button>
+                </Link>
               }
             >
               <ul className="space-y-2.5">
                 {APPROVAL_QUEUE.map((it) => (
                   <li
                     key={it.id}
+                    onClick={() =>
+                      toast.info(`Inspect ${it.id} — creative inspector wiring lands in Phase 1.2`)
+                    }
                     className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
                   >
                     <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
@@ -1011,7 +1026,12 @@ export default function MarketingStudioPage(): JSX.Element {
 function TopCreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
   const dims = aspectDims(creative.aspect);
   return (
-    <div className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0">
+    <div
+      onClick={() =>
+        toast.info(`Inspect ${creative.id} — creative inspector wiring lands in Phase 1.2`)
+      }
+      className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0"
+    >
       <div className={`${aspectClass(creative.aspect)} relative overflow-hidden bg-paper`}>
         <img
           src={pickCreativeImage(creative.theme, creative.id, { w: dims.w, h: dims.h })}
@@ -1074,6 +1094,10 @@ function TopCreativeCard({ creative }: { creative: TopCreative }): JSX.Element {
           </StatusPill>
           <button
             type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toast.info(`Inspect ${creative.id} — creative inspector wiring lands in Phase 1.2`);
+            }}
             className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
             title="Inspect"
           >

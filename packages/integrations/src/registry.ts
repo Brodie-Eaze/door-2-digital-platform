@@ -23,6 +23,9 @@ import { createRunwayAdapter } from './adapters/runway';
 import { createHeyGenAdapter } from './adapters/heygen';
 import { createGoogleAdsAdapter } from './adapters/google-ads';
 import { createTikTokAdapter } from './adapters/tiktok';
+import { createCrmZapierAdapter } from './adapters/crm-zapier';
+import { createCrmHubSpotAdapter } from './adapters/crm-hubspot';
+import { createCrmSalesforceAdapter } from './adapters/crm-salesforce';
 
 export class IntegrationRegistry {
   private readonly adapters = new Map<ProviderKind, ProviderAdapter>();
@@ -77,5 +80,8 @@ export function buildDefaultRegistry(): IntegrationRegistry {
   r.register(createHeyGenAdapter());
   r.register(createGoogleAdsAdapter());
   r.register(createTikTokAdapter());
+  r.register(createCrmZapierAdapter());
+  r.register(createCrmHubSpotAdapter());
+  r.register(createCrmSalesforceAdapter());
   return r;
 }

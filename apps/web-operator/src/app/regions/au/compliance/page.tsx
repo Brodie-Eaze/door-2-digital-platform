@@ -1,3 +1,5 @@
+'use client';
+
 import {
   ShieldCheck,
   AlertTriangle,
@@ -9,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { toast } from '@/components/Toaster';
 
 const APP_PRINCIPLES: {
   num: number;
@@ -381,6 +384,11 @@ export default function AuComplianceDeepDivePage(): JSX.Element {
                       <button
                         className="text-[11px] font-semibold text-accent hover:underline"
                         type="button"
+                        onClick={() =>
+                          toast.info(
+                            `Cancel & refund ${w.donor} (${w.state}) — wiring lands in Phase 1.2`,
+                          )
+                        }
                       >
                         Cancel & refund
                       </button>

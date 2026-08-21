@@ -132,14 +132,15 @@ async function loadPortfolio(): Promise<PortfolioData> {
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams?: { just_onboarded?: string };
+  searchParams?: Promise<{ just_onboarded?: string }>;
 }): Promise<JSX.Element> {
   const session = await getSession();
   if (!session) redirect('/login?next=/accounts');
 
   const { entries, source, error } = await loadPortfolio();
   const accounts = entries.map((e) => e.account);
-  const justOnboardedSlug = searchParams?.just_onboarded;
+  const resolvedSearchParams = await searchParams;
+  const justOnboardedSlug = resolvedSearchParams?.just_onboarded;
   const justOnboarded = justOnboardedSlug
     ? accounts.find((a) => a.slug === justOnboardedSlug)
     : undefined;

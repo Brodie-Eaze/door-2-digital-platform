@@ -6,12 +6,14 @@
  */
 import type { RegionCode } from '@prisma/client';
 import { Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import type {
   CancelDonationRequest,
   ChangeDonationAmountRequest,
+  GenerateReceiptRequest,
   PauseDonationRequest,
+  ResumeDonationRequest,
 } from './schemas';
 
 interface ActorContext {
@@ -23,7 +25,10 @@ interface ActorContext {
 export interface DonationPublic {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  // F-004: the plaintext-named `donorEmail` field is NOT exposed on the read
+  // path — the real value lives in donorEmailVault (JIT-unmask only). We surface
+  // the deterministic search digest so callers can correlate without revealing PII.
+  donorEmailDigest: string | null;
   amountCents: string;
   currency: string;
   frequency: string | null;
@@ -40,26 +45,35 @@ async function loadDonationAndAssertTenant(
   row: {
     id: string;
     conversionId: string;
-    donorEmail: string;
+    donorEmailDigest: string | null;
     amountCents: bigint;
     currency: string;
     frequency: string | null;
     status: string;
     receiptNumber: string | null;
+    einOrEquivalent: string | null;
+    deductibleGiftRecipientNo: string | null;
     startedAt: Date;
     cancelledAt: Date | null;
   };
   orgId: string;
 }> {
-  const donation = await prisma().donation.findUnique({
-    where: { id },
-    include: { conversion: { select: { orgId: true } } },
-  });
+  // Donation carries no orgId — RLS is DISABLED on it (it has no tenant column),
+  // so tenancy lives entirely on the parent Conversion. We must NOT `include` the
+  // parent in one read: under the RLS belt (d2d_app, no GUC) the required
+  // `conversion` relation is invisible → Prisma throws "inconsistent query result"
+  // (a 500) for every donation. Instead, read the (un-scoped) Donation row, then
+  // prove its parent Conversion is visible THROUGH the belt as a separate scoped
+  // read. A foreign parent is RLS-invisible → null → 404 (never 403: withholding
+  // cross-tenant existence is the whole point of tenant isolation).
+  const donation = await prisma().donation.findUnique({ where: { id } });
   if (!donation) throw new ProblemError(Problems.notFound('Donation', id));
-  if (donation.conversion.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(donation.conversion.orgId));
-  }
-  return { row: donation, orgId: donation.conversion.orgId };
+  const parent = await tenantPrismaTx(actor.orgId).conversion.findUnique({
+    where: { id: donation.conversionId },
+    select: { orgId: true },
+  });
+  if (!parent) throw new ProblemError(Problems.notFound('Donation', id));
+  return { row: donation, orgId: parent.orgId };
 }
 
 export async function getDonation(id: string, actor: ActorContext): Promise<DonationPublic> {
@@ -77,7 +91,7 @@ export async function pauseDonation(
   if (row.status === 'cancelled') {
     throw new ProblemError(Problems.conflict('Cannot pause a cancelled donation'));
   }
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { status: 'paused' },
@@ -112,7 +126,7 @@ export async function cancelDonation(
 ): Promise<DonationPublic> {
   const { row } = await loadDonationAndAssertTenant(id, actor);
   if (row.status === 'cancelled') return toPublic(row);
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { status: 'cancelled', cancelledAt: new Date() },
@@ -156,7 +170,7 @@ export async function changeDonationAmount(
   if (newAmount <= 0n) {
     throw new ProblemError(Problems.validation('newAmountCents must be > 0'));
   }
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.donation.update({
       where: { id },
       data: { amountCents: newAmount },
@@ -184,10 +198,110 @@ export async function changeDonationAmount(
   return toPublic(updated);
 }
 
+export async function resumeDonation(
+  id: string,
+  input: ResumeDonationRequest,
+  actor: ActorContext,
+): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  if (row.status === 'active') return toPublic(row);
+  if (row.status === 'cancelled') {
+    throw new ProblemError(Problems.conflict('Cannot resume a cancelled donation'));
+  }
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { status: 'active' },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'donation.resumed',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'active' },
+      ...(input.reason ? { metadata: { reason: input.reason } } : {}),
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+export interface DonationReceiptPublic {
+  donationId: string;
+  receiptNumber: string;
+  amountCents: string;
+  currency: string;
+  frequency: string | null;
+  einOrEquivalent: string | null;
+  deductibleGiftRecipientNo: string | null;
+  issuedAt: string;
+}
+
+export async function generateDonationReceipt(
+  id: string,
+  input: GenerateReceiptRequest,
+  actor: ActorContext,
+): Promise<DonationReceiptPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+
+  // If a receipt already exists and caller didn't request resend, just return it.
+  if (row.receiptNumber && !input.resend) {
+    return toReceiptPublic(row);
+  }
+
+  // Generate a new receipt number: D2D-{YYYY}-{6-hex} — globally unique within the tenant.
+  const year = new Date().getFullYear();
+  const hex = crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
+  const receiptNumber = `D2D-${year}-${hex}`;
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { receiptNumber },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: input.resend ? 'donation.receipt_resent' : 'donation.receipt_generated',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { receiptNumber: row.receiptNumber },
+      afterJson: { receiptNumber },
+    });
+    return next;
+  });
+  return toReceiptPublic(updated);
+}
+
+function toReceiptPublic(r: {
+  id: string;
+  amountCents: bigint;
+  currency: string;
+  frequency: string | null;
+  receiptNumber: string | null;
+  einOrEquivalent: string | null;
+  deductibleGiftRecipientNo: string | null;
+}): DonationReceiptPublic {
+  return {
+    donationId: r.id,
+    receiptNumber: r.receiptNumber ?? '',
+    amountCents: r.amountCents.toString(),
+    currency: r.currency,
+    frequency: r.frequency,
+    einOrEquivalent: r.einOrEquivalent,
+    deductibleGiftRecipientNo: r.deductibleGiftRecipientNo,
+    issuedAt: new Date().toISOString(),
+  };
+}
+
 function toPublic(r: {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  donorEmailDigest: string | null;
   amountCents: bigint;
   currency: string;
   frequency: string | null;
@@ -199,7 +313,9 @@ function toPublic(r: {
   return {
     id: r.id,
     conversionId: r.conversionId,
-    donorEmail: r.donorEmail,
+    // F-004: never surface the plaintext-named email field; expose the search
+    // digest only. Real value is JIT-unmask via /v1/pii/* against donorEmailVault.
+    donorEmailDigest: r.donorEmailDigest,
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,

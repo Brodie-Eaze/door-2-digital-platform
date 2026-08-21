@@ -8,9 +8,63 @@
 import type { RegionCode } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type { CreateOrgRequest } from '@d2d/shared-types';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx } from '../../config/db';
+import { redis } from '../../config/redis';
 import { writeAudit } from '../../shared/audit/write';
 import type { UpdateOrgRequest, UpdateBrandKitRequest, UpdateBillingRequest } from './schemas';
+
+// ── Org cache helpers ──────────────────────────────────────────────────────
+//
+// Org records are read on nearly every authenticated request (route guard +
+// billing lookups) but mutate rarely. A short-TTL Redis cache with jitter
+// eliminates the DB round-trip on hot paths.
+//
+// TTL: 5 minutes + ±30s jitter → avoids stampede on deploy or bulk import.
+// Invalidation: every write path (updateOrg / archiveOrg / upsertBrandKit /
+// updateBilling) calls `invalidateOrgCache` so consumers see fresh data
+// within one request cycle. Stale cache is the fallback, not the guarantee.
+//
+// Key format: `org:{orgId}:v1` — per-tenant, versioned namespace.
+
+const ORG_CACHE_TTL_BASE_S = 300; // 5 min
+const ORG_CACHE_JITTER_S = 30;
+
+function orgCacheKey(orgId: string): string {
+  return `org:${orgId}:v1`;
+}
+
+function orgCacheTtl(): number {
+  return (
+    ORG_CACHE_TTL_BASE_S + Math.floor(Math.random() * ORG_CACHE_JITTER_S * 2) - ORG_CACHE_JITTER_S
+  );
+}
+
+async function getCachedOrg(orgId: string): Promise<OrgPublic | null> {
+  try {
+    const raw = await redis().get(orgCacheKey(orgId));
+    if (!raw) return null;
+    return JSON.parse(raw) as OrgPublic;
+  } catch {
+    // Redis hiccup — degrade gracefully to DB
+    return null;
+  }
+}
+
+async function setCachedOrg(org: OrgPublic): Promise<void> {
+  try {
+    await redis().setex(orgCacheKey(org.id), orgCacheTtl(), JSON.stringify(org));
+  } catch {
+    // Non-fatal — DB is the source of truth
+  }
+}
+
+export async function invalidateOrgCache(orgId: string): Promise<void> {
+  try {
+    await redis().del(orgCacheKey(orgId));
+  } catch {
+    // Non-fatal
+  }
+}
 
 interface ActorContext {
   userId?: string;
@@ -25,7 +79,7 @@ export async function createOrg(
   const brandKitId = newId('brk');
   const billingId = newId('bil');
 
-  const result = await prisma().$transaction(async (tx) => {
+  const result = await tenantTx(orgId, async (tx) => {
     const org = await tx.org.create({
       data: {
         id: orgId,
@@ -73,9 +127,27 @@ export async function createOrg(
 }
 
 export async function getOrg(orgId: string): Promise<OrgPublic> {
+  // Org is a CONTROL-PLANE table (SEC-005 / WS6 §4b): it has no `orgId` column —
+  // its tenant key is its own primary key `id`. The rls_belt migration enables RLS
+  // on 26 child tables; Org is deliberately ABSENT (OrgBilling carries the tenant
+  // column, not Org). So there is no GUC to pin and no deny-by-default to dodge — a
+  // plain prisma() read is correct under the d2d_app belt (d2d_app holds DML grants
+  // on all tables). tenantPrismaTx would pass Org straight through untouched anyway
+  // (db.ts: non-org-scoped models bypass the GUC wrapper), so wrapping it would be a
+  // misleading no-op. Tenant isolation for Org is enforced ABOVE this layer: the
+  // route guard (req.params.id === ctx.orgId) + WS1 app-layer suspenders.
+  //
+  // Cache-aside: warm path serves from Redis (5-min TTL + jitter). Cold/miss
+  // path falls back to DB and re-populates the cache. Every write path
+  // invalidates via `invalidateOrgCache`.
+  const cached = await getCachedOrg(orgId);
+  if (cached) return cached;
+
   const org = await prisma().org.findUnique({ where: { id: orgId } });
   if (!org) throw new ProblemError(Problems.notFound('Org', orgId));
-  return toOrgPublic(org);
+  const pub = toOrgPublic(org);
+  await setCachedOrg(pub);
+  return pub;
 }
 
 export async function updateOrg(
@@ -97,7 +169,7 @@ export async function updateOrg(
   const existing = await prisma().org.findUnique({ where: { id: orgId } });
   if (!existing) throw new ProblemError(Problems.notFound('Org', orgId));
 
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(orgId, async (tx) => {
     const next = await tx.org.update({
       where: { id: orgId },
       data: {
@@ -129,6 +201,7 @@ export async function updateOrg(
     });
     return next;
   });
+  await invalidateOrgCache(orgId);
   return toOrgPublic(updated);
 }
 
@@ -137,7 +210,7 @@ export async function archiveOrg(orgId: string, actor: ActorContext): Promise<Or
   if (!existing) throw new ProblemError(Problems.notFound('Org', orgId));
   if (existing.status === 'archived') return toOrgPublic(existing);
 
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(orgId, async (tx) => {
     const next = await tx.org.update({
       where: { id: orgId },
       data: { status: 'archived', archivedAt: new Date() },
@@ -154,6 +227,7 @@ export async function archiveOrg(orgId: string, actor: ActorContext): Promise<Or
     });
     return next;
   });
+  await invalidateOrgCache(orgId);
   return toOrgPublic(updated);
 }
 
@@ -165,7 +239,7 @@ export async function upsertBrandKit(
   const org = await prisma().org.findUnique({ where: { id: orgId } });
   if (!org) throw new ProblemError(Problems.notFound('Org', orgId));
 
-  const result = await prisma().$transaction(async (tx) => {
+  const result = await tenantTx(orgId, async (tx) => {
     const existing = await tx.brandKit.findUnique({ where: { orgId } });
     const data = {
       displayName: input.displayName ?? existing?.displayName ?? org.tradingName,
@@ -196,6 +270,9 @@ export async function upsertBrandKit(
     });
     return next;
   });
+  // BrandKit changes update the org's presentation layer; invalidate so any
+  // cached org record (which embedders may derive from) is refreshed.
+  await invalidateOrgCache(orgId);
   return toBrandKitPublic(result);
 }
 
@@ -207,7 +284,7 @@ export async function updateBilling(
   const org = await prisma().org.findUnique({ where: { id: orgId } });
   if (!org) throw new ProblemError(Problems.notFound('Org', orgId));
 
-  const result = await prisma().$transaction(async (tx) => {
+  const result = await tenantTx(orgId, async (tx) => {
     const existing = await tx.orgBilling.findUnique({ where: { orgId } });
     if (!existing) {
       // Should be created by createOrg, but guard for legacy rows.
@@ -253,6 +330,8 @@ export async function updateBilling(
     });
     return next;
   });
+  // Billing changes affect rate/limit data often read alongside the org.
+  await invalidateOrgCache(orgId);
   return toBillingPublic(result);
 }
 

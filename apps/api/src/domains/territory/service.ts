@@ -13,10 +13,11 @@
  */
 import type { RegionCode, Prisma, Vertical } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantTx } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
 import type {
   CreateTerritoryRequest,
+  DraftTerritoryRequest,
   UpdateTerritoryRequest,
   ListTerritoriesQuery,
   CreateAssignmentRequest,
@@ -55,6 +56,25 @@ export interface AssignmentPublic {
 
 export interface TerritoryWithAssignments extends TerritoryPublic {
   assignments: AssignmentPublic[];
+}
+
+/**
+ * Flat shape the Knocker iOS map decodes directly (it expects a bare JSON
+ * array). `polygon`/`centroid` are the stored TEXT placeholders — passed
+ * through verbatim so the client can parse WKT/GeoJSON itself and fall back
+ * to centroid when polygon is null. Distinct from `TerritoryPublic`, which
+ * parses centroid into `{lng,lat}` for the operator console.
+ */
+export interface AssignedTerritory {
+  id: string;
+  name: string;
+  vertical: Vertical;
+  polygon: string | null;
+  centroid: string | null;
+  campaignId: string | null;
+  status: string;
+  areaType: string; // "polygon" | "radius" — lets the Knocker map render a circle
+  radiusMeters: number | null; // set when areaType = 'radius'
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -196,6 +216,21 @@ export async function createTerritory(
     return row;
   });
 
+  // Fire-and-forget: subscribe to Planet Labs imagery for this territory.
+  void (async () => {
+    try {
+      const { env } = await import('../../config/env');
+      if (!input.polygonWkt || !env().PLANET_API_KEY) return;
+      const { wktToGeoJSON, createPlanetSubscription } = await import('../satellite/service');
+      const { enqueuePlanetIntel } = await import('../../workers/planet-intel.worker');
+      const geoPolygon = wktToGeoJSON(input.polygonWkt);
+      const subscriptionId = await createPlanetSubscription(created.id, geoPolygon);
+      await enqueuePlanetIntel({ territoryId: created.id, subscriptionId });
+    } catch {
+      // non-fatal: planet subscription is best-effort
+    }
+  })();
+
   return toPublic(created);
 }
 
@@ -288,6 +323,82 @@ export async function updateTerritory(
   return toPublic(updated);
 }
 
+/**
+ * Propose a polygon edit for an existing territory without replacing it.
+ *
+ * Creates a NEW Territory row with status='draft', carrying the proposed
+ * polygon and a back-reference to the original in metadata.  The original
+ * territory stays active and undisturbed.  A manager reviews the draft via
+ * GET /v1/territories?status=draft, then either:
+ *   - PATCH /v1/territories/:draftId { status: 'archived' } to discard, or
+ *   - PATCH /v1/territories/:originalId { status: 'archived' } + rename the
+ *     draft to take over (polygon edits are immutable once live per ADR-0013).
+ *
+ * No schema migration needed — metadata already carries arbitrary JSON.
+ */
+export async function draftTerritory(
+  originalId: string,
+  input: DraftTerritoryRequest,
+  actor: ActorContext,
+): Promise<TerritoryPublic> {
+  const original = await prisma().territory.findUnique({ where: { id: originalId } });
+  if (!original) throw new ProblemError(Problems.notFound('Territory', originalId));
+  if (original.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(original.orgId));
+  }
+  if (original.status === 'archived') {
+    throw new ProblemError(Problems.conflict('Cannot draft from an archived territory'));
+  }
+
+  const ring = parseWktPolygon(input.polygonWkt);
+  const centroid = centroidOf(ring);
+  const s2 = stubS2Covering(centroid);
+  const draftId = newId('ter');
+
+  const existingMeta = (original.metadata ?? {}) as Record<string, unknown>;
+  const draftMeta: Record<string, unknown> = {
+    ...existingMeta,
+    originalTerritoryId: originalId,
+    draftReason: input.reason ?? null,
+  };
+
+  const created = await prisma().$transaction(async (tx) => {
+    const row = await tx.territory.create({
+      data: {
+        id: draftId,
+        orgId: actor.orgId,
+        regionCode: actor.regionCode,
+        name: `[DRAFT] ${original.name}`,
+        vertical: original.vertical,
+        polygon: input.polygonWkt,
+        centroid: `${centroid.lng} ${centroid.lat}`,
+        s2CellIds: s2,
+        campaignId: original.campaignId ?? null,
+        status: 'draft',
+        metadata: draftMeta as Prisma.InputJsonValue,
+      },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'territory.draft_created',
+      resourceType: 'Territory',
+      resourceId: draftId,
+      afterJson: {
+        originalTerritoryId: originalId,
+        name: row.name,
+        vertical: row.vertical,
+        centroid: `${centroid.lng} ${centroid.lat}`,
+        reason: input.reason ?? null,
+      },
+    });
+    return row;
+  });
+
+  return toPublic(created);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Assignments
 // ───────────────────────────────────────────────────────────────────────────
@@ -372,6 +483,166 @@ export async function removeAssignment(
   return toAssignmentPublic(updated);
 }
 
+/**
+ * Territories assigned to the caller for the native Knocker app's map.
+ *
+ * Tenant-scoped through the joined Territory.orgId (TerritoryAssignment has
+ * no org column). Returns only active territories whose assignment is live:
+ * `expiresAt` null (permanent) OR in the future. A revoke sets
+ * `expiresAt = now`, so the strict `gt now` comparison excludes just-revoked
+ * rows on the next read.
+ */
+export async function listAssignedTerritories(actor: ActorContext): Promise<AssignedTerritory[]> {
+  const now = new Date();
+  const assignments = await prisma().territoryAssignment.findMany({
+    where: {
+      userId: actor.userId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      territory: { orgId: actor.orgId, status: 'active' },
+    },
+    select: {
+      territory: {
+        select: {
+          id: true,
+          name: true,
+          vertical: true,
+          polygon: true,
+          centroid: true,
+          campaignId: true,
+          status: true,
+          areaType: true,
+          radiusMeters: true,
+        },
+      },
+    },
+    orderBy: { territory: { name: 'asc' } },
+  });
+  return assignments.map((a) => ({
+    id: a.territory.id,
+    name: a.territory.name,
+    vertical: a.territory.vertical,
+    polygon: a.territory.polygon,
+    centroid: a.territory.centroid,
+    campaignId: a.territory.campaignId,
+    status: a.territory.status,
+    areaType: a.territory.areaType,
+    radiusMeters: a.territory.radiusMeters,
+  }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Territory claims — real-time area ownership signal (4-hour TTL)
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface TerritoryClaimPublic {
+  id: string;
+  orgId: string;
+  territoryId: string;
+  userId: string;
+  userName: string;
+  claimedAt: string;
+  expiresAt: string;
+}
+
+const CLAIM_TTL_HOURS = 4;
+
+/**
+ * Upsert a territory claim for this user (renew if one already exists).
+ * expiresAt = now + 4 hours.
+ */
+export async function claimTerritory(
+  territoryId: string,
+  userId: string,
+  userName: string,
+  orgId: string,
+): Promise<TerritoryClaimPublic> {
+  // Verify territory belongs to this org — 404 per project convention.
+  const ter = await prisma().territory.findUnique({ where: { id: territoryId } });
+  if (!ter) throw new ProblemError(Problems.notFound('Territory', territoryId));
+  if (ter.orgId !== orgId) throw new ProblemError(Problems.notFound('Territory', territoryId));
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + CLAIM_TTL_HOURS * 60 * 60 * 1000);
+
+  // Upsert: find any existing active claim by this user on this territory.
+  const existing = await prisma().territoryClaim.findFirst({
+    where: { orgId, territoryId, userId },
+  });
+
+  // SEC-005 (C2) — write inside a tenant-pinned tx so the app.current_org_id
+  // GUC is set and the territory_claims RLS policy enforces the orgId at the DB
+  // level (not just the explicit `orgId` stamp). Mirrors catalog/conversion.
+  const row = await tenantTx(orgId, async (tx) => {
+    if (existing) {
+      return tx.territoryClaim.update({
+        where: { id: existing.id },
+        data: { claimedAt: now, expiresAt },
+      });
+    }
+    return tx.territoryClaim.create({
+      data: {
+        orgId,
+        territoryId,
+        userId,
+        userName,
+        claimedAt: now,
+        expiresAt,
+      },
+    });
+  });
+
+  return toClaimPublic(row);
+}
+
+/**
+ * Delete any active claim by this user on this territory.
+ */
+export async function releaseClaim(
+  territoryId: string,
+  userId: string,
+  orgId: string,
+): Promise<void> {
+  // SEC-005 (C2) — delete inside a tenant-pinned tx so the territory_claims RLS
+  // policy scopes the DELETE to this org at the DB level.
+  await tenantTx(orgId, async (tx) => {
+    await tx.territoryClaim.deleteMany({
+      where: { orgId, territoryId, userId },
+    });
+  });
+}
+
+/**
+ * Return all non-expired claims for this org.
+ */
+export async function getActiveClaims(orgId: string): Promise<TerritoryClaimPublic[]> {
+  const now = new Date();
+  const rows = await prisma().territoryClaim.findMany({
+    where: { orgId, expiresAt: { gt: now } },
+    orderBy: { claimedAt: 'asc' },
+  });
+  return rows.map(toClaimPublic);
+}
+
+function toClaimPublic(r: {
+  id: string;
+  orgId: string;
+  territoryId: string;
+  userId: string;
+  userName: string;
+  claimedAt: Date;
+  expiresAt: Date;
+}): TerritoryClaimPublic {
+  return {
+    id: r.id,
+    orgId: r.orgId,
+    territoryId: r.territoryId,
+    userId: r.userId,
+    userName: r.userName,
+    claimedAt: r.claimedAt.toISOString(),
+    expiresAt: r.expiresAt.toISOString(),
+  };
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Heatmap (stub aggregate — real cell-density compute lands in Phase 1.2)
 // ───────────────────────────────────────────────────────────────────────────
@@ -394,15 +665,26 @@ export async function heatmap(
     where: { orgId: actor.orgId, status: 'active' },
     select: { id: true, centroid: true, s2CellIds: true },
   });
+
+  // PERF-INDEXES / HEATMAP-N+1: one groupBy instead of per-territory count.
+  // Territories with zero knocks are not present in the groupBy result; they
+  // are merged below with a default of 0 so the return shape is unchanged.
+  const knockGroups = await prisma().knock.groupBy({
+    by: ['territoryId'],
+    where: { orgId: actor.orgId },
+    _count: { _all: true },
+  });
+  const knockCountByTerritory = new Map<string, number>(
+    knockGroups.map((g) => [g.territoryId, g._count._all]),
+  );
+
   const cells: Array<{ cellId: string; count: number; centroid: { lng: number; lat: number } }> =
     [];
   for (const t of territories) {
     const c = toCentroid(t.centroid);
     if (!c) continue;
     if (c.lng < w || c.lng > e || c.lat < s || c.lat > n) continue;
-    const count = await prisma().knock.count({
-      where: { territoryId: t.id, orgId: actor.orgId },
-    });
+    const count = knockCountByTerritory.get(t.id) ?? 0;
     const cellId = t.s2CellIds[0] ?? `S2L13_${c.lng.toFixed(3)}_${c.lat.toFixed(3)}`;
     cells.push({ cellId, count, centroid: c });
   }

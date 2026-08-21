@@ -24,7 +24,7 @@ import { Prisma } from '@prisma/client';
 import type { RegionCode, SolicitorStatus } from '@prisma/client';
 import { newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type { PaidSolicitorRegistrationRequest } from '@d2d/shared-types';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 
 interface ActorContext {
@@ -141,19 +141,30 @@ export async function getStateClearanceMatrix(
     campaign: { orgId, ...(campaignId ? { id: campaignId } : {}) },
   };
 
-  const rows = await prisma().campaignStateClearance.findMany({
-    where,
-    select: {
-      campaignId: true,
-      state: true,
-      clearedAt: true,
-      campaign: { select: { name: true } },
-      registration: {
-        select: { id: true, status: true, expiresAt: true },
+  // CampaignStateClearance carries no orgId of its own (not RLS-enabled), but
+  // this read JOINS to the RLS-enabled Campaign in BOTH the `where` relation-
+  // filter and the `campaign` select. Under the non-owner `d2d_app` role, a join
+  // to an RLS table with no `app.current_org_id` GUC set sees ZERO rows — so a
+  // bare prisma() read would silently return an EMPTY matrix after cutover.
+  // `tenantPrismaTx` can't fix this (it no-ops on non-orgScoped models like CSC),
+  // so we run inside a GUC-pinned tx via tenantTx — the database then admits this
+  // org's campaigns and the join resolves. The explicit `campaign: { orgId }`
+  // app-layer filter stays (the suspenders). See docs/runbooks/rls-cutover.md §4b.
+  const rows = await tenantTx(orgId, (tx) =>
+    tx.campaignStateClearance.findMany({
+      where,
+      select: {
+        campaignId: true,
+        state: true,
+        clearedAt: true,
+        campaign: { select: { name: true } },
+        registration: {
+          select: { id: true, status: true, expiresAt: true },
+        },
       },
-    },
-    orderBy: [{ campaignId: 'asc' }, { state: 'asc' }],
-  });
+      orderBy: [{ campaignId: 'asc' }, { state: 'asc' }],
+    }),
+  );
 
   const now = new Date();
   return rows.map((r) => {
@@ -193,22 +204,25 @@ export async function fileRegistration(
   input: PaidSolicitorRegistrationRequest,
   actor: ActorContext,
 ): Promise<PaidSolicitorRegistrationPublic> {
-  // Resolve the charity client org from the campaign + assert tenancy.
-  const campaign = await prisma().campaign.findUnique({
+  // Resolve the charity client org from the campaign. Campaign is RLS-enabled, so
+  // read it through the belt: tenantPrismaTx AND-injects `orgId = actor.orgId` and
+  // sets the GUC, so a campaign owned by another org is simply invisible → 404.
+  // (Pre-belt this was a found row + 403 tenantMismatch; post-belt the foreign row
+  // never returns, so cross-tenant filing is a uniform notFound — the existence
+  // oracle closes.) The returned campaign.orgId therefore always equals
+  // actor.orgId. See docs/runbooks/rls-cutover.md §4b.
+  const campaign = await tenantPrismaTx(actor.orgId).campaign.findUnique({
     where: { id: input.campaignId },
     select: { orgId: true, regionCode: true },
   });
   if (!campaign) throw new ProblemError(Problems.notFound('Campaign', input.campaignId));
-  if (campaign.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(campaign.orgId));
-  }
 
   const filedAt = input.filedAt ? new Date(input.filedAt) : null;
   const status: SolicitorStatus =
     input.status ?? (filedAt || input.evidenceKey ? 'submitted' : 'pending');
   const registrationId = newId('psr');
 
-  const row = await prisma().$transaction(async (tx) => {
+  const row = await tenantTx(actor.orgId, async (tx) => {
     const created = await tx.paidSolicitorRegistration.create({
       data: {
         id: registrationId,
@@ -256,16 +270,19 @@ export async function transitionRegistration(
   next: SolicitorStatus,
   actor: ActorContext,
 ): Promise<PaidSolicitorRegistrationPublic> {
+  // PaidSolicitorRegistration carries no orgId and is NOT RLS-enabled (operator
+  // filings keyed by entityOrgId/clientOrgId), so it stays on the owner prisma()
+  // read — the belt can't scope it. The entityOrgId check below is therefore the
+  // REAL (un-beltable) tenant guard. We fold a foreign-org match into notFound
+  // rather than a 403 tenantMismatch so cross-tenant access is a uniform "does
+  // not exist", matching fileRegistration's belt-driven 404 and closing the
+  // existence oracle. See docs/runbooks/rls-cutover.md §4b.
   const current = await prisma().paidSolicitorRegistration.findUnique({
     where: { id: registrationId },
     select: { entityOrgId: true, clientOrgId: true, state: true, status: true, filedAt: true },
   });
-  if (!current) {
+  if (!current || current.entityOrgId !== actor.orgId) {
     throw new ProblemError(Problems.notFound('PaidSolicitorRegistration', registrationId));
-  }
-  // The filing operator org owns the registration.
-  if (current.entityOrgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(current.entityOrgId));
   }
 
   const allowed = STATUS_TRANSITIONS[current.status];
@@ -276,7 +293,7 @@ export async function transitionRegistration(
   }
 
   const now = new Date();
-  const row = await prisma().$transaction(async (tx) => {
+  const row = await tenantTx(actor.orgId, async (tx) => {
     const updated = await tx.paidSolicitorRegistration.update({
       where: { id: registrationId },
       data: {
@@ -335,6 +352,125 @@ export async function transitionRegistration(
   });
 
   return toRegistrationPublic(row);
+}
+
+/**
+ * Manual state-clearance override — links an existing campaign to an already-
+ * approved registration for cases where the campaign was created AFTER the
+ * registration was approved (the auto-upsert in transitionRegistration only
+ * covers campaigns that existed at approval time).
+ *
+ * Asserts:
+ *   - The registration exists and is `approved` + not expired.
+ *   - The campaign belongs to the registration's `clientOrgId`.
+ *   - The actor's org matches the registration's `entityOrgId` (operator only).
+ */
+export interface ManualClearanceInput {
+  campaignId: string;
+  state: string;
+  paidSolicitorRegistrationId: string;
+}
+
+export interface CampaignStateClearancePublic {
+  campaignId: string;
+  state: string;
+  clearedAt: string;
+  registrationId: string;
+}
+
+export async function manualClearance(
+  input: ManualClearanceInput,
+  actor: ActorContext,
+): Promise<CampaignStateClearancePublic> {
+  const reg = await prisma().paidSolicitorRegistration.findUnique({
+    where: { id: input.paidSolicitorRegistrationId },
+    select: {
+      entityOrgId: true,
+      clientOrgId: true,
+      state: true,
+      status: true,
+      expiresAt: true,
+    },
+  });
+  if (!reg) {
+    throw new ProblemError(
+      Problems.notFound('PaidSolicitorRegistration', input.paidSolicitorRegistrationId),
+    );
+  }
+  // Only the operator entity that filed the registration may create clearances.
+  if (reg.entityOrgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(reg.entityOrgId));
+  }
+  if (reg.status !== 'approved') {
+    throw new ProblemError(
+      Problems.conflict(
+        `Registration is ${reg.status} — only approved registrations may grant clearance`,
+      ),
+    );
+  }
+  if (reg.expiresAt !== null && reg.expiresAt <= new Date()) {
+    throw new ProblemError(Problems.conflict('Registration has expired'));
+  }
+  if (reg.state !== input.state) {
+    throw new ProblemError(
+      Problems.conflict(`Registration covers state ${reg.state}, not ${input.state}`),
+    );
+  }
+
+  // Assert the campaign belongs to the charity client org on the registration.
+  const campaign = await prisma().campaign.findUnique({
+    where: { id: input.campaignId },
+    select: { orgId: true },
+  });
+  if (!campaign) {
+    throw new ProblemError(Problems.notFound('Campaign', input.campaignId));
+  }
+  if (campaign.orgId !== reg.clientOrgId) {
+    throw new ProblemError(
+      Problems.conflict('Campaign does not belong to the registration client org'),
+    );
+  }
+
+  const now = new Date();
+  const clearance = await prisma().$transaction(async (tx) => {
+    const row = await tx.campaignStateClearance.upsert({
+      where: { campaignId_state: { campaignId: input.campaignId, state: input.state } },
+      update: {
+        paidSolicitorRegistrationId: input.paidSolicitorRegistrationId,
+        clearedAt: now,
+      },
+      create: {
+        id: newId('csc'),
+        campaignId: input.campaignId,
+        state: input.state,
+        paidSolicitorRegistrationId: input.paidSolicitorRegistrationId,
+        clearedAt: now,
+      },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'compliance.state_clearance_changed',
+      resourceType: 'CampaignStateClearance',
+      resourceId: `${input.campaignId}:${input.state}`,
+      afterJson: {
+        campaignId: input.campaignId,
+        state: input.state,
+        registrationId: input.paidSolicitorRegistrationId,
+        cleared: true,
+        manual: true,
+      },
+    });
+    return row;
+  });
+
+  return {
+    campaignId: clearance.campaignId,
+    state: clearance.state,
+    clearedAt: clearance.clearedAt.toISOString(),
+    registrationId: clearance.paidSolicitorRegistrationId,
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -3,9 +3,9 @@
  */
 import type { RegionCode } from '@prisma/client';
 import { Problems, ProblemError } from '@d2d/shared-utils';
-import { prisma } from '../../config/db';
+import { prisma, tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
-import type { InstallerHandoffRequest } from './schemas';
+import type { CancelSaleRequest, InstallerHandoffRequest } from './schemas';
 
 interface ActorContext {
   userId: string;
@@ -35,14 +35,20 @@ async function loadSaleAndAssertTenant(
     status: string;
   };
 }> {
-  const sale = await prisma().sale.findUnique({
-    where: { id },
-    include: { conversion: { select: { orgId: true } } },
-  });
+  // Sale carries no orgId — RLS is DISABLED on it, so tenancy lives on the parent
+  // Conversion. We must NOT `include` the parent in one read: under the RLS belt
+  // (d2d_app, no GUC) the required `conversion` relation is invisible → Prisma
+  // throws "inconsistent query result" (a 500). Instead, read the (un-scoped) Sale
+  // row, then prove its parent Conversion is visible THROUGH the belt as a separate
+  // scoped read. A foreign parent is RLS-invisible → null → 404 (never 403:
+  // withholding cross-tenant existence is the whole point of tenant isolation).
+  const sale = await prisma().sale.findUnique({ where: { id } });
   if (!sale) throw new ProblemError(Problems.notFound('Sale', id));
-  if (sale.conversion.orgId !== actor.orgId) {
-    throw new ProblemError(Problems.tenantMismatch(sale.conversion.orgId));
-  }
+  const parent = await tenantPrismaTx(actor.orgId).conversion.findUnique({
+    where: { id: sale.conversionId },
+    select: { orgId: true },
+  });
+  if (!parent) throw new ProblemError(Problems.notFound('Sale', id));
   return { row: sale };
 }
 
@@ -60,7 +66,7 @@ export async function installerHandoff(
   if (row.status === 'cancelled') {
     throw new ProblemError(Problems.conflict('Cannot handoff a cancelled sale'));
   }
-  const updated = await prisma().$transaction(async (tx) => {
+  const updated = await tenantTx(actor.orgId, async (tx) => {
     const next = await tx.sale.update({
       where: { id },
       data: {
@@ -84,6 +90,93 @@ export async function installerHandoff(
         scheduledInstallAt: next.scheduledInstallAt?.toISOString() ?? null,
       },
       ...(input.notes && { metadata: { notes: input.notes } }),
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+const VALID_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  pending_install: ['installed', 'cancelled'],
+  installed: ['cancelled'],
+  cancelled: [],
+};
+
+export async function updateSaleStatus(
+  id: string,
+  newStatus: string,
+  actor: ActorContext,
+): Promise<SalePublic> {
+  const { row } = await loadSaleAndAssertTenant(id, actor);
+
+  const allowed = VALID_STATUS_TRANSITIONS[row.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    throw new ProblemError(
+      Problems.conflict(`Cannot transition sale from ${row.status} to ${newStatus}`),
+    );
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.sale.update({
+      where: { id },
+      data: { status: newStatus },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'sale.status_updated',
+      resourceType: 'Sale',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: newStatus },
+    });
+    return next;
+  });
+
+  return toPublic(updated);
+}
+
+export async function cancelSale(
+  id: string,
+  input: CancelSaleRequest,
+  actor: ActorContext,
+): Promise<SalePublic> {
+  const { row } = await loadSaleAndAssertTenant(id, actor);
+  if (row.status === 'cancelled') return toPublic(row);
+
+  const allowed = VALID_STATUS_TRANSITIONS[row.status] ?? [];
+  if (!allowed.includes('cancelled')) {
+    throw new ProblemError(Problems.conflict(`Cannot cancel a sale with status ${row.status}`));
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.sale.update({
+      where: { id },
+      data: { status: 'cancelled' },
+    });
+
+    if (input.clawbackCommissions) {
+      // Mark accrued commissions on this conversion as clawback-pending.
+      await tx.commission.updateMany({
+        where: { conversionId: next.conversionId, status: 'accrued' },
+        data: { status: 'clawback_pending' },
+      });
+    }
+
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'sale.cancelled',
+      resourceType: 'Sale',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'cancelled' },
+      metadata: {
+        reason: input.reason,
+        clawbackCommissions: input.clawbackCommissions,
+      },
     });
     return next;
   });

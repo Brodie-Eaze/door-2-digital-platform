@@ -32,7 +32,15 @@ import { registerKnock, registerKnockSessions } from './domains/knock/routes';
 import { registerLead } from './domains/lead/routes';
 import { registerCrm } from './domains/crm/routes';
 import { registerConversion } from './domains/conversion/routes';
+import { registerFieldSignup } from './domains/field-signup/routes';
+import { registerCatalog } from './domains/catalog/routes';
+import { registerRoster } from './domains/roster/routes';
+import { registerPhoto } from './domains/photo/routes';
+import { registerPropensity } from './domains/propensity/routes';
+import { registerVoice } from './domains/voice/routes';
+import { registerAnalytics } from './domains/analytics/routes';
 import { registerDonation } from './domains/donation/routes';
+import { registerPayment } from './domains/payment/routes';
 import { registerSale } from './domains/sale/routes';
 import { registerCommission } from './domains/commission/routes';
 import { registerPayout } from './domains/payout/routes';
@@ -51,6 +59,22 @@ import { registerContentStudio } from './domains/content-studio/routes';
 import { registerRealtime } from './domains/realtime/routes';
 import { registerIntegrations } from './integrations';
 import { registerMcpServer } from './mcp/server';
+import { startAuditShipper } from './workers/audit-shipper.worker';
+import { startDnkSync } from './workers/dnk-sync.worker';
+import { startLeadSequenceWorker } from './workers/lead-sequence.worker';
+import { startNotificationSendWorker } from './workers/notification-send.worker';
+import { startWebhookDeliverWorker } from './workers/webhook-deliver.worker';
+import { startCommissionCalcWorker } from './workers/commission-calc.worker';
+import { startPayoutPrepareWorker } from './workers/payout-prepare.worker';
+import { startKnockSyncWorker } from './workers/knock-sync.worker';
+import { startLeadRoutingWorker } from './workers/lead-routing.worker';
+import { startConversionFinaliseWorker } from './workers/conversion-finalise.worker';
+import { startContentGenerateWorker } from './workers/content-generate.worker';
+import { startAdDeliverWorker } from './workers/ad-deliver.worker';
+import { startGeoRefreshWorker } from './workers/geo-refresh.worker';
+import { startAddressEnrichWorker } from './workers/address-enrich.worker';
+import { startPlanetIntelWorker } from './workers/planet-intel.worker';
+import { registerPlanetInbound } from './inbound/planet';
 
 async function buildServer() {
   const e = env();
@@ -62,7 +86,12 @@ async function buildServer() {
 
   const app = Fastify({
     logger: log,
-    trustProxy: true,
+    // SEC-006: trust exactly 1 upstream hop (the load balancer). `true` would
+    // trust the entire X-Forwarded-For chain, allowing an attacker to prepend a
+    // spoofed IP and bypass the per-IP rate limit bucket. With hop count = 1,
+    // Fastify takes the rightmost client IP added by our LB — which the caller
+    // cannot control.
+    trustProxy: 1,
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
   });
@@ -80,7 +109,7 @@ async function buildServer() {
       directives: {
         'default-src': ["'self'"],
         'script-src': ["'self'"],
-        'style-src': ["'self'", "'unsafe-inline'"],
+        'style-src': ["'self'"],
         'img-src': ["'self'", 'data:', 'blob:'],
         'connect-src': ["'self'"],
         'frame-ancestors': ["'none'"],
@@ -101,24 +130,56 @@ async function buildServer() {
     maxAge: 600,
   });
 
-  // Rate limiter — bucket per client IP.
+  // ── Rate limiter ───────────────────────────────────────────────────────────
   //
   // SEC-010 / PEN-011: the bucket key MUST derive from a TRUSTED identifier.
-  // It previously preferred the caller-supplied `x-api-key` header, so an
-  // attacker could rotate that header to a fresh value on every request and
-  // mint an unlimited number of empty buckets — fully bypassing the limit.
+  // keyGenerator runs before auth (no verified principal yet), so we key on
+  // req.ip — connection-derived, trustProxy-validated, not caller-forged.
+  // x-api-key header keying was removed (attacker can rotate it freely).
   //
-  // This global limiter runs on the `onRequest` hook (before any auth
-  // preHandler), so no verified principal / API-key id exists yet, and this
-  // service has no API-key auth layer to derive one from. We therefore key on
-  // `req.ip` — Fastify-derived from the connection (with `trustProxy` honouring
-  // the validated X-Forwarded-For), which the caller cannot freely forge — and
-  // never read the attacker-controlled header for keying.
+  // Tiered limits via max() — org/key prefixes reserved for future.
+  // RFC 7807 error body + Retry-After header on 429 (ADR-0009).
+  // Health probes opt out via `config: { rateLimit: false }`.
+  // Route-level tightening uses `config.rateLimit: { max, timeWindow }`.
   await app.register(rateLimit, {
-    max: 120,
+    global: true,
+    max: (_req, key) => {
+      const k = key as string;
+      if (k.startsWith('org:') || k.startsWith('key:')) return 300;
+      // RATE_LIMIT_GLOBAL_MAX: staging/load-test knob (k6 fires from one IP).
+      // Unset in production → the 120/min default stands.
+      return e.RATE_LIMIT_GLOBAL_MAX ?? 120;
+    },
     timeWindow: '1 minute',
     redis: redis(),
     keyGenerator: (req) => `ip:${req.ip}`,
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
+    addHeadersOnExceeding: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    errorResponseBuilder: (_req, context) => {
+      const retryAfterSec = Math.ceil((context.ttl ?? 60_000) / 1000);
+      return {
+        // statusCode drives the HTTP status @fastify/rate-limit sets. Without
+        // it the reply fell through as 500 — clients saw a server error, not a
+        // 429 with Retry-After (found by the k6 smoke: 250 "500"s that were
+        // all rate-limit refusals). Keep both fields: statusCode for the
+        // plugin, status for RFC 7807 consumers.
+        statusCode: 429,
+        type: 'https://docs.d2d.io/problems/rate-limited',
+        title: 'Rate limited',
+        status: 429,
+        detail: `Too many requests — retry after ${retryAfterSec}s`,
+        retryAfter: retryAfterSec,
+      };
+    },
   });
 
   await app.register(sensible);
@@ -157,7 +218,15 @@ async function buildServer() {
   // CRM + money (Phase 1.3)
   await app.register(registerCrm, { prefix: '/v1/crm' });
   await app.register(registerConversion, { prefix: '/v1/conversions' });
+  await app.register(registerFieldSignup, { prefix: '/v1/field' });
+  await app.register(registerCatalog, { prefix: '/v1/catalog' });
+  await app.register(registerRoster, { prefix: '/v1/roster' });
+  await app.register(registerPhoto, { prefix: '/v1/photos' });
+  await app.register(registerPropensity, { prefix: '/v1/propensity' });
+  await app.register(registerVoice, { prefix: '/v1/voice' });
+  await app.register(registerAnalytics, { prefix: '/v1/analytics' });
   await app.register(registerDonation, { prefix: '/v1/donations' });
+  await app.register(registerPayment, { prefix: '/v1/payments' });
   await app.register(registerSale, { prefix: '/v1/sales' });
   await app.register(registerCommission, { prefix: '/v1/commissions' });
   await app.register(registerPayout, { prefix: '/v1/payout-batches' });
@@ -167,6 +236,50 @@ async function buildServer() {
 
   // Privacy ops (Phase 1.4)
   await app.register(registerDsar, { prefix: '/v1/dsar/requests' });
+
+  // Data intelligence inbound webhook (Planet Labs push delivery)
+  await app.register(registerPlanetInbound, { prefix: '/v1/inbound' });
+
+  // GET /v1/addresses/:id/intel — Snowflake enrichment score + features for an address.
+  // Read-only: queries the PropensityScore table written by the address-enrich worker.
+  await app.register(
+    async (intelApp) => {
+      const { requireAuth } = await import('./shared/middleware/auth-guard');
+      const { requireTenant } = await import('./shared/middleware/tenant-guard');
+      intelApp.get<{ Params: { id: string } }>(
+        '/:id/intel',
+        { preHandler: requireAuth },
+        async (req, reply) => {
+          const ctx = requireTenant(req);
+          const { prisma: db } = await import('./config/db');
+          const row = await db().propensityScore.findFirst({
+            where: {
+              geoType: 'address',
+              geoKey: req.params.id,
+              OR: [{ orgId: ctx.orgId }, { orgId: null }],
+            },
+            orderBy: { computedAt: 'desc' },
+          });
+          if (!row) return reply.code(404).send({ error: 'not_found' });
+          const features = (row.features ?? {}) as Record<string, unknown>;
+          return reply.code(200).send({
+            intel: {
+              score: row.score,
+              prizmName: features.prizmName ?? null,
+              prizmCode: features.prizmCode ?? null,
+              medianHhIncomeUsd: features.medianHhIncomeUsd ?? null,
+              charitablePropensity: features.charitablePropensity ?? null,
+              estimatedHomeValueUsd: features.estimatedHomeValueUsd ?? null,
+              ownerOccupancyRate: features.ownerOccupancyRate ?? null,
+              modelName: row.modelName,
+              computedAt: row.computedAt.toISOString(),
+            },
+          });
+        },
+      );
+    },
+    { prefix: '/v1/addresses' },
+  );
 
   // Marketing + AI content (Phase 3) — registry first so route handlers can dispatch.
   await app.register(registerIntegrations);
@@ -193,7 +306,27 @@ async function main(): Promise<void> {
   const e = env();
   const app = await buildServer();
   await app.listen({ port: e.PORT, host: e.HOST });
-  // Fastify logger reports the bound address.
+
+  if (e.CRON_LEADER) {
+    startAuditShipper();
+    startDnkSync();
+    startLeadSequenceWorker();
+    startNotificationSendWorker();
+    startWebhookDeliverWorker();
+    startCommissionCalcWorker();
+    startPayoutPrepareWorker();
+    startKnockSyncWorker();
+    startLeadRoutingWorker();
+    startConversionFinaliseWorker();
+    startContentGenerateWorker();
+    startAdDeliverWorker();
+    startGeoRefreshWorker();
+    startAddressEnrichWorker();
+    startPlanetIntelWorker();
+    logger().info(
+      'CRON_LEADER=true — all 15 workers started: audit-shipper, dnk-sync, lead-sequence, notification-send, webhook-deliver, commission-calc, payout-prepare, knock-sync, lead-routing, conversion-finalise, content-generate, ad-deliver, geo-refresh, address-enrich, planet-intel',
+    );
+  }
 }
 
 main().catch((err) => {

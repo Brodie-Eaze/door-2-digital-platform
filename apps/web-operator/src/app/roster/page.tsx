@@ -14,9 +14,16 @@ import {
   LayoutGrid,
   CheckCircle2,
   LogOut,
+  CopyPlus,
+  Save,
+  Trash2,
+  MoveRight,
+  MapPin,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
 type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
@@ -54,8 +61,96 @@ const REPS: Rep[] = [
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Compliance thresholds — labor-hour limits for scheduling guardrails.
+// ─────────────────────────────────────────────────────────────────────────────
+const MAX_HOURS_PER_DAY = 10;
+const MAX_HOURS_PER_WEEK = 40;
+
+interface RosterUser {
+  id: string;
+  role: string;
+  initials: string;
+}
+
+/** Look up a rep within a known list, falling back to a synthesized record so a
+ * rep that exists only in live shift data (not in the roster directory) still
+ * renders rather than collapsing onto REPS[0]. */
+function repByInitialsIn(initials: string, reps: Rep[]): Rep {
+  return (
+    reps.find((r) => r.initials === initials) ??
+    REPS.find((r) => r.initials === initials) ?? { initials, name: initials, account: '—' }
+  );
+}
+
 function repByInitials(initials: string): Rep {
   return REPS.find((r) => r.initials === initials) ?? REPS[0]!;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conflict detection — the scheduling moat. Pure, side-effect free, testable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert 'HH:MM' to minutes-since-midnight. */
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number) as [number, number];
+  return h * 60 + m;
+}
+
+/** Do two [start,end) ranges (in minutes) overlap? Touching edges don't count. */
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+interface ConflictResult {
+  hasConflict: boolean;
+  /** Human-readable reasons, e.g. "JM already 09:00–17:00 Mon". */
+  reasons: string[];
+}
+
+/**
+ * Flags two classes of scheduling conflict for a candidate shift against the
+ * rest of the roster (excluding the candidate's own id):
+ *   (a) same rep + same day + overlapping start/end time
+ *   (b) same rep assigned two different territories on the same day
+ * Warn-don't-block: callers surface this but still allow the save.
+ */
+function detectConflict(candidate: Shift, allShifts: Shift[]): ConflictResult {
+  const reasons: string[] = [];
+  const sameRepDay = allShifts.filter(
+    (s) =>
+      s.id !== candidate.id && s.repInitials === candidate.repInitials && s.day === candidate.day,
+  );
+
+  const cStart = toMinutes(candidate.start);
+  const cEnd = toMinutes(candidate.end);
+  const dayLabel = DAY_LABELS[candidate.day] ?? `Day ${candidate.day}`;
+
+  for (const other of sameRepDay) {
+    // (a) Overlapping time window.
+    if (rangesOverlap(cStart, cEnd, toMinutes(other.start), toMinutes(other.end))) {
+      reasons.push(`${candidate.repName} already ${other.start}–${other.end} ${dayLabel}`);
+    }
+    // (b) Two different territories same day.
+    if (other.territory !== candidate.territory) {
+      reasons.push(
+        `${candidate.repName} double-booked ${candidate.territory} + ${other.territory} ${dayLabel}`,
+      );
+    }
+  }
+
+  // De-duplicate identical reason strings.
+  const unique = [...new Set(reasons)];
+  return { hasConflict: unique.length > 0, reasons: unique };
+}
+
+/** Set of shift ids that are currently in conflict, for badge rendering. */
+function conflictedShiftIds(allShifts: Shift[]): Set<string> {
+  const ids = new Set<string>();
+  for (const s of allShifts) {
+    if (detectConflict(s, allShifts).hasConflict) ids.add(s.id);
+  }
+  return ids;
 }
 
 function buildSeed(): Shift[] {
@@ -411,9 +506,22 @@ function hoursOf(shift: Shift): number {
   return Math.max(0, eh + em / 60 - (sh + sm / 60));
 }
 
+/** Monday of the current week, local time. weekOffset 0 = this week. */
+function currentMonday(): Date {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dow = (d.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
+  d.setDate(d.getDate() - dow);
+  return d;
+}
+
+/** Index of today within the Mon–Sun grid (0 = Mon). */
+function todayDayIndex(): number {
+  return (new Date().getDay() + 6) % 7;
+}
+
 function weekDates(offset: number): Date[] {
-  // Anchor on Mon May 19, 2026
-  const base = new Date(2026, 4, 19);
+  const base = currentMonday();
   base.setDate(base.getDate() + offset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base);
@@ -424,8 +532,60 @@ function weekDates(offset: number): Date[] {
 
 const TERRITORIES = ['Austin East', 'Austin North', 'Dallas Metro', 'Dallas North', 'Houston SE'];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Coverage heat bar — target share of the fleet that should be staffed on a
+// given day before we stop flagging it amber/red. A glance signal, not a gate.
+// ─────────────────────────────────────────────────────────────────────────────
+const COVERAGE_TARGET = 0.6; // ≥60% of reps assigned that day = "green"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Roster templates — saved in localStorage keyed by org. This HQ page has no
+// orgSlug in scope, so we key by a stable 'hq' constant. (Noted in the build
+// summary: per-org slugging can be wired once the page receives org context.)
+// ─────────────────────────────────────────────────────────────────────────────
+const ROSTER_TEMPLATE_ORG_KEY = 'hq';
+
+/** A template shift is a single-create payload minus weekStart (and ids). */
+type TemplateShift = Omit<Shift, 'id'>;
+
+/** The per-shift payload for POST /api/shifts/bulk (lunch may be explicit null). */
+interface BulkShiftPayload {
+  repInitials: string;
+  repName: string;
+  account: string;
+  day: number;
+  start: string;
+  end: string;
+  territory: string;
+  lunch: string | null;
+  status: ShiftStatus;
+}
+interface RosterTemplate {
+  name: string;
+  shifts: TemplateShift[];
+}
+
+function templateStorageKey(orgKey: string): string {
+  return `d2d.roster-template.${orgKey}`;
+}
+
+/** ISO date string (YYYY-MM-DD) for the Monday at the given weekOffset. */
+function weekStartISO(offset: number): string {
+  const base = currentMonday();
+  base.setDate(base.getDate() + offset * 7);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function RosterPage(): JSX.Element {
+  // Seeded from buildSeed() but overridden on mount from /api/shifts.
   const [shifts, setShifts] = useState<Shift[]>(() => buildSeed());
+  // Roster directory of knockers. Seeded from REPS, overridden on mount from
+  // /api/users?role=knocker. `repsLive` tells the UI which mode it's in.
+  const [reps, setReps] = useState<Rep[]>(REPS);
+  const [, setRepsLive] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [dayIndex, setDayIndex] = useState(0);
@@ -441,6 +601,26 @@ export default function RosterPage(): JSX.Element {
   // Live timecard clock-out tracking
   const [clockedOut, setClockedOut] = useState<Record<string, string>>({});
 
+  // Multi-select for bulk actions (set of shift ids).
+  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<string>>(new Set());
+  // Pending bulk picker ('day' | 'territory' | null) shown inline in the bar.
+  const [bulkPicker, setBulkPicker] = useState<'day' | 'territory' | null>(null);
+  // Add-shift modal day prefill (from a coverage-bar click).
+  const [addPrefillDay, setAddPrefillDay] = useState<number | null>(null);
+  // Saved roster templates (hydrated post-mount from localStorage).
+  const [templates, setTemplates] = useState<RosterTemplate[]>([]);
+  // Copy-last-week in-flight guard so the button can't double-fire.
+  const [copyingWeek, setCopyingWeek] = useState(false);
+
+  // Honest-data freshness for the week-schedule section. markFresh() on a
+  // successful /api/shifts fetch; otherwise it stays 'fixture' (demo data).
+  const {
+    source: shiftSource,
+    updatedAt: shiftUpdatedAt,
+    markFresh,
+    markFixture,
+  } = useDataFreshness('fixture');
+
   const dragId = useRef<string | null>(null);
   const justDraggedRef = useRef(false);
   const [hoverCell, setHoverCell] = useState<string | null>(null);
@@ -452,8 +632,9 @@ export default function RosterPage(): JSX.Element {
   }, [dates]);
   const dayLabels = useMemo(() => dates.map((d, i) => `${DAY_LABELS[i]} ${d.getDate()}`), [dates]);
 
-  // Live KPIs — "today" = weekOffset 0, day 0 (Mon)
-  const todayShifts = shifts.filter((s) => s.day === 0 && weekOffset === 0);
+  // Live KPIs — "today" = the real weekday within the current week.
+  const todayIdx = todayDayIndex();
+  const todayShifts = shifts.filter((s) => s.day === todayIdx && weekOffset === 0);
   const scheduledToday = todayShifts.length;
   const hoursToday = todayShifts.reduce((a, s) => a + hoursOf(s), 0);
   const onLunchNow = todayShifts.filter((s) => s.status === 'lunch').length;
@@ -474,48 +655,607 @@ export default function RosterPage(): JSX.Element {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // Fetch the knocker directory once on mount. The endpoint returns PII-safe
+  // { id, role, initials } rows (no plaintext names). We synthesize display
+  // names from initials since names live behind the PII vault. If the endpoint
+  // returns empty (no knockers seeded yet) we keep the seed REPS so the demo
+  // stays populated.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchUsers(): Promise<void> {
+      try {
+        const res = await fetch('/api/users?role=knocker');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { users?: RosterUser[] };
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          const mapped: Rep[] = data.users.map((u) => ({
+            initials: u.initials,
+            name: `Knocker ${u.id.slice(-4)}`,
+            account: '—',
+          }));
+          setReps(mapped);
+          setRepsLive(true);
+        }
+        // Empty → no knockers in DB yet; keep seed REPS for the demo.
+      } catch {
+        // Network failure — keep seed REPS.
+      }
+    }
+
+    void fetchUsers();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch shifts from /api/shifts whenever the week changes. Falls back to
+  // seed data if the API returns an empty array (no shifts in DB yet).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchShifts(): Promise<void> {
+      try {
+        const ws = weekStartISO(weekOffset);
+        const res = await fetch(`/api/shifts?weekStart=${ws}`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { shifts?: Shift[] };
+        if (Array.isArray(data.shifts) && data.shifts.length > 0) {
+          // Real saved shifts → live DB read.
+          markFresh();
+          setShifts(data.shifts);
+        } else {
+          // Empty array → no shifts saved for this week yet; keep the seed
+          // fixtures and keep the badge honest (fixture, not LIVE).
+          markFixture();
+        }
+      } catch {
+        // Network failure — keep current state (badge stays fixture/stale).
+      }
+    }
+
+    void fetchShifts();
+    return (): void => {
+      cancelled = true;
+    };
+    // markFresh/markFixture are stable callbacks from useDataFreshness; intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset]);
+
+  // Clear any multi-select when the week changes — otherwise the bulk action
+  // bar persists with stale shift ids from the previous week.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset]);
+
+  // Hydrate saved roster templates from localStorage after mount (avoids
+  // SSR/hydration mismatch — mirrors the onboard-account day-one pattern).
+  useEffect(() => {
+    try {
+      const rawTpl = window.localStorage.getItem(templateStorageKey(ROSTER_TEMPLATE_ORG_KEY));
+      if (rawTpl) {
+        const parsed = JSON.parse(rawTpl) as unknown;
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (t): t is RosterTemplate =>
+              !!t &&
+              typeof t === 'object' &&
+              typeof (t as RosterTemplate).name === 'string' &&
+              Array.isArray((t as RosterTemplate).shifts),
+          );
+          setTemplates(valid);
+        }
+      }
+    } catch {
+      // localStorage unavailable (private mode etc.) — templates just won't persist.
+    }
+  }, []);
+
   function moveShift(id: string, targetRepInitials: string, targetDay: number): void {
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const rep = repByInitials(targetRepInitials);
-        return {
-          ...s,
-          repInitials: rep.initials,
-          repName: rep.name,
-          account: rep.account,
-          day: targetDay,
-        };
-      }),
+    const prev = shifts.find((s) => s.id === id);
+    if (!prev || (prev.repInitials === targetRepInitials && prev.day === targetDay)) return;
+    const rep = repByInitialsIn(targetRepInitials, reps);
+    const before = {
+      repInitials: prev.repInitials,
+      repName: prev.repName,
+      account: prev.account,
+      day: prev.day,
+    };
+
+    // Warn-don't-block: surface conflict + hours-over-limit for the landing cell.
+    const candidate: Shift = {
+      ...prev,
+      repInitials: rep.initials,
+      repName: rep.name,
+      account: rep.account,
+      day: targetDay,
+    };
+    warnOnConflict(candidate);
+    warnOnHours(candidate);
+
+    // Optimistic update
+    setShifts((p) =>
+      p.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              repInitials: rep.initials,
+              repName: rep.name,
+              account: rep.account,
+              day: targetDay,
+            }
+          : s,
+      ),
     );
+
+    const rollback = (): void => {
+      setShifts((p) => p.map((s) => (s.id === id ? { ...s, ...before } : s)));
+    };
+
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repInitials: rep.initials,
+        repName: rep.name,
+        account: rep.account,
+        day: targetDay,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        toast.success(`Moved ${rep.name} → ${DAY_LABELS[targetDay]}. Tap to undo`, {
+          onClick: () => {
+            rollback();
+            void fetch(`/api/shifts/${id}`, {
+              method: 'PATCH',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(before),
+            }).catch(() => toast.error('Undo failed to save'));
+          },
+        });
+      })
+      .catch(() => {
+        rollback();
+        toast.error('Failed to move shift — change reverted');
+      });
   }
 
   function updateShift(id: string, patch: Partial<Shift>): void {
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    const prev = shifts.find((s) => s.id === id);
+    // Optimistic update
+    setShifts((p) => p.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+      })
+      .catch(() => {
+        if (prev) setShifts((p) => p.map((s) => (s.id === id ? prev : s)));
+        toast.error('Failed to save shift — change reverted');
+      });
+  }
+
+  /** Warn (toast.error) if the candidate shift conflicts. Never blocks. */
+  function warnOnConflict(candidate: Shift): void {
+    const result = detectConflict(candidate, shifts);
+    if (result.hasConflict) {
+      toast.error(`Conflict: ${result.reasons[0]}`);
+    }
+  }
+
+  /** Warn (toast.info) if the candidate pushes the rep over the daily or weekly
+   * hour limit. Never blocks. */
+  function warnOnHours(candidate: Shift): void {
+    const repShifts = shifts.filter(
+      (s) => s.repInitials === candidate.repInitials && s.id !== candidate.id,
+    );
+    const weekTotal = repShifts.reduce((a, s) => a + hoursOf(s), 0) + hoursOf(candidate);
+    const dayTotal =
+      repShifts.filter((s) => s.day === candidate.day).reduce((a, s) => a + hoursOf(s), 0) +
+      hoursOf(candidate);
+
+    if (dayTotal > MAX_HOURS_PER_DAY) {
+      toast.info(
+        `${candidate.repName} now ${dayTotal.toFixed(1)}h on ${DAY_LABELS[candidate.day]} — over ${MAX_HOURS_PER_DAY}h/day`,
+      );
+    } else if (weekTotal > MAX_HOURS_PER_WEEK) {
+      toast.info(
+        `${candidate.repName} now ${weekTotal.toFixed(1)}h this week — over ${MAX_HOURS_PER_WEEK}h/week`,
+      );
+    }
   }
 
   function addShift(s: Omit<Shift, 'id' | 'repName' | 'account'>): void {
-    const rep = repByInitials(s.repInitials);
+    const rep = repByInitialsIn(s.repInitials, reps);
+    const optimisticId = `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    // Warn-don't-block: check the new shift against the existing roster.
+    const candidate: Shift = { ...s, id: optimisticId, repName: rep.name, account: rep.account };
+    warnOnConflict(candidate);
+    warnOnHours(candidate);
+    // Optimistic update
     setShifts((prev) => [
       ...prev,
       {
         ...s,
-        id: `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: optimisticId,
         repName: rep.name,
         account: rep.account,
       },
     ]);
+    // Persist to API; replace optimistic ID with the real one when it lands.
+    // On failure, remove the ghost row — a shift with a temp ID can never be
+    // edited or deleted (every PATCH/DELETE on it would 404).
+    void fetch('/api/shifts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        weekStart: weekStartISO(weekOffset),
+        repInitials: s.repInitials,
+        repName: rep.name,
+        account: rep.account,
+        day: s.day,
+        start: s.start,
+        end: s.end,
+        territory: s.territory,
+        lunch: s.lunch ?? null,
+        status: s.status,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { shift?: { id: string } };
+        if (data.shift?.id) {
+          setShifts((prev) =>
+            prev.map((sh) => (sh.id === optimisticId ? { ...sh, id: data.shift!.id } : sh)),
+          );
+        }
+        toast.success(`Shift added — ${rep.name} · ${DAY_LABELS[s.day]} ${s.start}–${s.end}`);
+      })
+      .catch(() => {
+        setShifts((prev) => prev.filter((sh) => sh.id !== optimisticId));
+        toast.error('Failed to save shift — removed from grid. Try again.');
+      });
   }
 
   function deleteShift(id: string): void {
+    const removed = shifts.find((s) => s.id === id);
+    // Optimistic removal
     setShifts((prev) => prev.filter((s) => s.id !== id));
+    void fetch(`/api/shifts/${id}`, { method: 'DELETE' })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+      })
+      .catch(() => {
+        if (removed) setShifts((prev) => [...prev, removed]);
+        toast.error('Failed to delete shift — restored');
+      });
   }
 
   function clockOut(id: string): void {
     const now = new Date();
     const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setClockedOut((prev) => ({ ...prev, [id]: stamp }));
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, status: 'completed' } : s)));
+    const prev = shifts.find((s) => s.id === id);
+    setClockedOut((p) => ({ ...p, [id]: stamp }));
+    // Optimistic status update
+    setShifts((p) => p.map((s) => (s.id === id ? { ...s, status: 'completed' } : s)));
+    // Persist completed status + actual end time to API
+    void fetch(`/api/shifts/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', end: stamp }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        toast.success(`Clocked out at ${stamp}`);
+      })
+      .catch(() => {
+        if (prev) setShifts((p) => p.map((s) => (s.id === id ? prev : s)));
+        setClockedOut((p) => {
+          const { [id]: _drop, ...rest } = p;
+          return rest;
+        });
+        toast.error('Clock-out failed to save — reverted');
+      });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Multi-select + bulk actions
+  // ───────────────────────────────────────────────────────────────────────────
+
+  function toggleSelected(id: string): void {
+    setSelectedShiftIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelection(): void {
+    setSelectedShiftIds(new Set());
+    setBulkPicker(null);
+  }
+
+  /** After a bulk mutation, surface any resulting conflicts / hours-overruns as
+   * a single warn toast (warn-don't-block). `nextShifts` is the post-mutation
+   * roster so warnings reflect the new state. */
+  function warnBulkResult(nextShifts: Shift[], touchedIds: Set<string>): void {
+    const conflicted = nextShifts.filter(
+      (s) => touchedIds.has(s.id) && detectConflict(s, nextShifts).hasConflict,
+    );
+    if (conflicted.length > 0) {
+      const first = detectConflict(conflicted[0]!, nextShifts).reasons[0];
+      toast.error(
+        `${conflicted.length} conflict${conflicted.length > 1 ? 's' : ''} after bulk change — ${first}`,
+      );
+    }
+    // Hours overruns across the touched reps.
+    const repsTouched = new Set(
+      nextShifts.filter((s) => touchedIds.has(s.id)).map((s) => s.repInitials),
+    );
+    for (const ri of repsTouched) {
+      const repShifts = nextShifts.filter((s) => s.repInitials === ri);
+      const weekTotal = repShifts.reduce((a, s) => a + hoursOf(s), 0);
+      if (weekTotal > MAX_HOURS_PER_WEEK) {
+        toast.info(
+          `${repShifts[0]?.repName ?? ri} now ${weekTotal.toFixed(1)}h this week — over ${MAX_HOURS_PER_WEEK}h/week`,
+        );
+        break; // one nudge is enough — don't spam.
+      }
+    }
+  }
+
+  function bulkDelete(): void {
+    const ids = [...selectedShiftIds];
+    if (ids.length === 0) return;
+    const removed = shifts.filter((s) => ids.includes(s.id));
+    // Optimistic removal.
+    setShifts((prev) => prev.filter((s) => !selectedShiftIds.has(s.id)));
+    clearSelection();
+
+    let failed = 0;
+    void Promise.all(
+      ids.map((id) =>
+        fetch(`/api/shifts/${id}`, { method: 'DELETE' })
+          .then((res) => {
+            if (!res.ok) throw new Error(String(res.status));
+          })
+          .catch(() => {
+            failed += 1;
+          }),
+      ),
+    ).then(() => {
+      if (failed > 0) {
+        // Restore the ones that failed to delete.
+        setShifts((prev) => {
+          const have = new Set(prev.map((s) => s.id));
+          const restore = removed.filter((s) => !have.has(s.id));
+          return [...prev, ...restore];
+        });
+        toast.error(`Deleted ${ids.length - failed} · ${failed} failed and were restored`);
+      } else {
+        toast.success(`Deleted ${ids.length} shift${ids.length > 1 ? 's' : ''}`);
+      }
+    });
+  }
+
+  function bulkPatch(patch: Partial<Shift>, label: string): void {
+    const ids = [...selectedShiftIds];
+    if (ids.length === 0) return;
+    const before = new Map(shifts.filter((s) => ids.includes(s.id)).map((s) => [s.id, s] as const));
+    // Optimistic update.
+    const nextShifts = shifts.map((s) => (selectedShiftIds.has(s.id) ? { ...s, ...patch } : s));
+    setShifts(nextShifts);
+    warnBulkResult(nextShifts, new Set(ids));
+    const touched = new Set(ids);
+    clearSelection();
+
+    let failed = 0;
+    void Promise.all(
+      ids.map((id) =>
+        fetch(`/api/shifts/${id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(patch),
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error(String(res.status));
+          })
+          .catch(() => {
+            failed += 1;
+          }),
+      ),
+    ).then(() => {
+      if (failed > 0) {
+        // Roll back only the failed rows.
+        setShifts((prev) => prev.map((s) => (touched.has(s.id) ? (before.get(s.id) ?? s) : s)));
+        toast.error(`${label}: ${ids.length - failed} saved · ${failed} failed and reverted`);
+      } else {
+        toast.success(`${label} — ${ids.length} shift${ids.length > 1 ? 's' : ''}`);
+      }
+    });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Copy last week — pull the prior week's shifts, strip ids, bulk-create them
+  // for the current week. Append (never overwrite); warn if it adds conflicts.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  function copyLastWeek(): void {
+    if (copyingWeek) return;
+    setCopyingWeek(true);
+    const prevWS = weekStartISO(weekOffset - 1);
+    const curWS = weekStartISO(weekOffset);
+
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch(`/api/shifts?weekStart=${prevWS}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { shifts?: Shift[] };
+        const prevShifts = Array.isArray(data.shifts) ? data.shifts : [];
+        if (prevShifts.length === 0) {
+          toast.info('Last week has no saved shifts to copy');
+          return;
+        }
+        // Fetch the current week so we can skip rows that already exist —
+        // copy-last-week appends, and re-running it must not create duplicates.
+        const curRes = await fetch(`/api/shifts?weekStart=${curWS}`);
+        const curData = curRes.ok ? ((await curRes.json()) as { shifts?: Shift[] }) : {};
+        const curShifts = Array.isArray(curData.shifts) ? curData.shifts : [];
+        const dupKey = (s: {
+          repInitials: string;
+          day: number;
+          start: string;
+          end: string;
+        }): string => `${s.repInitials}|${s.day}|${s.start}|${s.end}`;
+        const existing = new Set(curShifts.map(dupKey));
+        const toCopy = prevShifts.filter((s) => !existing.has(dupKey(s)));
+        if (toCopy.length === 0) {
+          toast.info('Last week is already copied into this week');
+          return;
+        }
+        // Strip ids → single-create payloads.
+        const payload = toCopy.map((s) => ({
+          repInitials: s.repInitials,
+          repName: s.repName,
+          account: s.account,
+          day: s.day,
+          start: s.start,
+          end: s.end,
+          territory: s.territory,
+          lunch: s.lunch ?? null,
+          status: 'scheduled' as ShiftStatus,
+        }));
+        const created = await postBulk(curWS, payload);
+        if (created === null) {
+          toast.error('Copy last week failed to save');
+          return;
+        }
+        await refetchCurrentWeek();
+        toast.success(
+          `Copied ${created.length} shift${created.length > 1 ? 's' : ''} from last week`,
+        );
+      } catch {
+        toast.error('Copy last week failed — network error');
+      } finally {
+        setCopyingWeek(false);
+      }
+    })();
+  }
+
+  /** POST a batch to /api/shifts/bulk. Returns created rows or null on failure. */
+  async function postBulk(weekStart: string, payload: BulkShiftPayload[]): Promise<Shift[] | null> {
+    try {
+      const res = await fetch('/api/shifts/bulk', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ weekStart, shifts: payload }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { shifts?: Shift[] };
+      return Array.isArray(data.shifts) ? data.shifts : [];
+    } catch {
+      return null;
+    }
+  }
+
+  /** Re-fetch the current week and replace state + flag any new conflicts. */
+  async function refetchCurrentWeek(): Promise<void> {
+    try {
+      const ws = weekStartISO(weekOffset);
+      const res = await fetch(`/api/shifts?weekStart=${ws}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { shifts?: Shift[] };
+      if (Array.isArray(data.shifts) && data.shifts.length > 0) {
+        markFresh();
+        setShifts(data.shifts);
+        const conflicts = conflictedShiftIds(data.shifts);
+        if (conflicts.size > 0) {
+          toast.info(`Heads up — ${conflicts.size} shift(s) now in conflict`);
+        }
+      } else {
+        // Empty week → keep the seed fixtures; don't claim a LIVE read.
+        markFixture();
+      }
+    } catch {
+      // keep current state
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Templates — save the current week's shifts (stripped of id + week) to
+  // localStorage; apply a saved template by bulk-creating it for this week.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  function persistTemplates(next: RosterTemplate[]): void {
+    setTemplates(next);
+    try {
+      window.localStorage.setItem(
+        templateStorageKey(ROSTER_TEMPLATE_ORG_KEY),
+        JSON.stringify(next),
+      );
+    } catch {
+      // Non-fatal — template just won't survive a reload.
+    }
+  }
+
+  function saveAsTemplate(): void {
+    if (shifts.length === 0) {
+      toast.info('No shifts to save as a template');
+      return;
+    }
+    const name = window.prompt('Template name', `Week template ${templates.length + 1}`);
+    if (!name || !name.trim()) return;
+    const tplShifts: TemplateShift[] = shifts.map((s) => {
+      const { id: _id, ...rest } = s;
+      return rest;
+    });
+    const next = [
+      ...templates.filter((t) => t.name !== name.trim()),
+      { name: name.trim(), shifts: tplShifts },
+    ];
+    persistTemplates(next);
+    toast.success(`Saved template "${name.trim()}" · ${tplShifts.length} shifts`);
+  }
+
+  function applyTemplate(name: string): void {
+    const tpl = templates.find((t) => t.name === name);
+    if (!tpl || tpl.shifts.length === 0) {
+      toast.error('Template not found or empty');
+      return;
+    }
+    const curWS = weekStartISO(weekOffset);
+    const payload = tpl.shifts.map((s) => ({
+      repInitials: s.repInitials,
+      repName: s.repName,
+      account: s.account,
+      day: s.day,
+      start: s.start,
+      end: s.end,
+      territory: s.territory,
+      lunch: s.lunch ?? null,
+      status: 'scheduled' as ShiftStatus,
+    }));
+    void (async (): Promise<void> => {
+      const created = await postBulk(curWS, payload);
+      if (created === null) {
+        toast.error(`Failed to apply template "${name}"`);
+        return;
+      }
+      await refetchCurrentWeek();
+      toast.success(`Applied "${name}" — ${created.length} shifts`);
+    })();
+  }
+
+  function deleteTemplate(name: string): void {
+    persistTemplates(templates.filter((t) => t.name !== name));
+    toast.info(`Removed template "${name}"`);
   }
 
   // Drag handlers
@@ -555,6 +1295,20 @@ export default function RosterPage(): JSX.Element {
   const editingShift = shifts.find((s) => s.id === editShiftId) ?? null;
   const summaryShifts = summaryRep ? shifts.filter((s) => s.repInitials === summaryRep) : [];
 
+  // Conflict set + weekly-hours map, recomputed when shifts change.
+  // Coverage per day = count of distinct reps with ≥1 shift that day.
+  // Used by the heat bar to show fleet-coverage at a glance.
+  const coverageByDay = useMemo(() => {
+    const counts: number[] = Array.from({ length: 7 }, () => 0);
+    for (let d = 0; d < 7; d += 1) {
+      const repsOnDay = new Set(shifts.filter((s) => s.day === d).map((s) => s.repInitials));
+      counts[d] = repsOnDay.size;
+    }
+    return counts;
+  }, [shifts]);
+
+  const selectedCount = selectedShiftIds.size;
+
   return (
     <PlatformShell pageTitle="Roster & shifts">
       <div className="space-y-5 max-w-[1700px]">
@@ -570,7 +1324,7 @@ export default function RosterPage(): JSX.Element {
           <KpiCard
             label="Scheduled today"
             value={scheduledToday}
-            hint={`of ${REPS.length} total`}
+            hint={`of ${reps.length} total`}
           />
           <KpiCard
             label="Hours today"
@@ -616,7 +1370,7 @@ export default function RosterPage(): JSX.Element {
               This week
             </button>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <div className="flex items-center bg-paper rounded-lg p-0.5 border border-line2">
               {[
                 { v: 'day' as const, icon: CalendarDays, label: 'Day' },
@@ -633,22 +1387,57 @@ export default function RosterPage(): JSX.Element {
                 </button>
               ))}
             </div>
+            <button
+              onClick={copyLastWeek}
+              disabled={copyingWeek}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-line2 text-muted hover:text-ink hover:bg-paper transition disabled:opacity-50"
+              title="Copy last week's shifts into this week (append)"
+            >
+              <CopyPlus size={13} />
+              {copyingWeek ? 'Copying…' : 'Copy last week'}
+            </button>
+            <button
+              onClick={saveAsTemplate}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-line2 text-muted hover:text-ink hover:bg-paper transition"
+              title="Save this week's shifts as a reusable template"
+            >
+              <Save size={13} />
+              Save as template
+            </button>
+            <TemplateMenu templates={templates} onApply={applyTemplate} onDelete={deleteTemplate} />
             <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus size={13} />}
-              onClick={() => setAddOpen(true)}
+              onClick={() => {
+                setAddPrefillDay(null);
+                setAddOpen(true);
+              }}
             >
               Add shift
             </Button>
           </div>
         </div>
 
+        {/* Bulk action bar — only when shifts are selected */}
+        {selectedCount > 0 && (
+          <BulkActionBar
+            count={selectedCount}
+            picker={bulkPicker}
+            setPicker={setBulkPicker}
+            onMoveDay={(d) => bulkPatch({ day: d }, `Moved to ${DAY_LABELS[d]}`)}
+            onSetTerritory={(t) => bulkPatch({ territory: t }, `Territory → ${t}`)}
+            onDelete={bulkDelete}
+            onClear={clearSelection}
+          />
+        )}
+
         {view === 'week' && (
           <Section
             title="Week schedule"
-            subtitle="All accounts · all Knockers · drag to reassign"
+            subtitle="All accounts · all Knockers · drag to reassign · check cards to bulk-edit"
             paddedBody={false}
+            action={<DataSourceBadge source={shiftSource} updatedAt={shiftUpdatedAt} />}
           >
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
@@ -663,11 +1452,11 @@ export default function RosterPage(): JSX.Element {
                     {dayLabels.map((d, i) => (
                       <th
                         key={d}
-                        className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === 0 && weekOffset === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
+                        className={`text-left px-3 py-3 border-b border-line2 text-[11px] uppercase tracking-wider font-medium ${i === todayIdx && weekOffset === 0 ? 'text-accent bg-accentSoft/30' : 'text-muted'}`}
                         style={{ minWidth: 130 }}
                       >
                         {d}{' '}
-                        {i === 0 && weekOffset === 0 && (
+                        {i === todayIdx && weekOffset === 0 && (
                           <span className="text-[9px] text-accent">· TODAY</span>
                         )}
                       </th>
@@ -676,9 +1465,51 @@ export default function RosterPage(): JSX.Element {
                       Total
                     </th>
                   </tr>
+                  {/* Coverage heat bar — % of the fleet staffed each day. */}
+                  <tr>
+                    <th className="text-left px-4 pb-2 pt-0 text-[9px] uppercase tracking-wider text-soft font-medium align-bottom">
+                      Coverage
+                    </th>
+                    {coverageByDay.map((cnt, di) => {
+                      const ratio = reps.length > 0 ? cnt / reps.length : 0;
+                      const pct = Math.round(ratio * 100);
+                      const tone =
+                        cnt === 0
+                          ? 'bg-rose-400'
+                          : ratio >= COVERAGE_TARGET
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-400';
+                      const low = ratio < COVERAGE_TARGET;
+                      return (
+                        <th key={di} className="px-3 pb-2 pt-0 align-bottom">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (low) {
+                                setAddPrefillDay(di);
+                                setAddOpen(true);
+                              }
+                            }}
+                            title={`${cnt}/${reps.length} reps · ${pct}% coverage${low ? ' · click to add a shift' : ''}`}
+                            className={`block w-full ${low ? 'cursor-pointer' : 'cursor-default'}`}
+                            aria-label={`${DAY_LABELS[di]} coverage ${pct}%`}
+                          >
+                            <div className="h-1 w-full rounded-full bg-line2 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${tone}`}
+                                style={{ width: `${Math.max(pct, cnt === 0 ? 0 : 6)}%` }}
+                              />
+                            </div>
+                            <div className="text-[8.5px] text-soft mt-0.5 numeric">{pct}%</div>
+                          </button>
+                        </th>
+                      );
+                    })}
+                    <th className="px-4 pb-2 pt-0" />
+                  </tr>
                 </thead>
                 <tbody>
-                  {REPS.map((r) => {
+                  {reps.map((r) => {
                     const repShifts = shifts.filter((s) => s.repInitials === r.initials);
                     const totalHrs = repShifts.reduce((a, s) => a + hoursOf(s), 0);
                     return (
@@ -701,7 +1532,7 @@ export default function RosterPage(): JSX.Element {
                           const cellKey = `${r.initials}:${di}`;
                           const cellShifts = repShifts.filter((s) => s.day === di);
                           const isHover = hoverCell === cellKey;
-                          const isToday = di === 0 && weekOffset === 0;
+                          const isToday = di === todayIdx && weekOffset === 0;
                           return (
                             <td
                               key={di}
@@ -752,31 +1583,50 @@ export default function RosterPage(): JSX.Element {
                                     const missed = sh.status === 'missed';
                                     const completed =
                                       sh.status === 'completed' || !!clockedOut[sh.id];
+                                    const isSelected = selectedShiftIds.has(sh.id);
                                     return (
                                       <div
                                         key={sh.id}
                                         draggable
                                         onDragStart={onDragStart(sh.id)}
                                         onDragEnd={onDragEnd}
-                                        onClick={() => {
+                                        onClick={(e) => {
                                           if (justDraggedRef.current) return;
+                                          // Shift-click (or with a selection active) toggles
+                                          // membership instead of opening the edit panel.
+                                          if (e.shiftKey || selectedShiftIds.size > 0) {
+                                            toggleSelected(sh.id);
+                                            return;
+                                          }
                                           setEditShiftId(sh.id);
                                         }}
-                                        className={`p-2 rounded-md border cursor-grab active:cursor-grabbing hover:shadow-sm transition ${
-                                          missed
-                                            ? 'bg-rose-50 border-rose-300'
-                                            : onLunch
-                                              ? 'bg-amber-50 border-amber-300'
-                                              : completed
-                                                ? 'bg-emerald-50 border-emerald-300'
-                                                : isToday
-                                                  ? 'bg-accentSoft border-accent/30'
-                                                  : 'bg-paper border-line2'
+                                        className={`relative p-2 rounded-md border cursor-grab active:cursor-grabbing hover:shadow-sm transition ${
+                                          isSelected
+                                            ? 'ring-2 ring-accent border-accent bg-accentSoft/50'
+                                            : missed
+                                              ? 'bg-rose-50 border-rose-300'
+                                              : onLunch
+                                                ? 'bg-amber-50 border-amber-300'
+                                                : completed
+                                                  ? 'bg-emerald-50 border-emerald-300'
+                                                  : isToday
+                                                    ? 'bg-accentSoft border-accent/30'
+                                                    : 'bg-paper border-line2'
                                         } ${isDragging ? 'opacity-30 scale-95 rotate-1' : ''}`}
                                       >
-                                        <div className="flex items-center justify-between">
-                                          <div className="text-[11px] font-semibold text-ink numeric">
-                                            {sh.start}–{sh.end}
+                                        <div className="flex items-center justify-between gap-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onClick={(e) => e.stopPropagation()}
+                                              onChange={() => toggleSelected(sh.id)}
+                                              aria-label="Select shift for bulk action"
+                                              className="w-3 h-3 accent-accent cursor-pointer"
+                                            />
+                                            <div className="text-[11px] font-semibold text-ink numeric">
+                                              {sh.start}–{sh.end}
+                                            </div>
                                           </div>
                                           {missed && (
                                             <AlertCircle size={11} className="text-rose-500" />
@@ -837,6 +1687,7 @@ export default function RosterPage(): JSX.Element {
             setDayIndex={setDayIndex}
             dayLabels={dayLabels}
             shifts={shifts}
+            reps={reps}
             onClickShift={(id) => setEditShiftId(id)}
             clockedOut={clockedOut}
           />
@@ -927,7 +1778,7 @@ export default function RosterPage(): JSX.Element {
       {/* Rep weekly summary panel */}
       {summaryRep && (
         <RepSummaryPanel
-          rep={repByInitials(summaryRep)}
+          rep={repByInitialsIn(summaryRep, reps)}
           shifts={summaryShifts}
           onClose={() => setSummaryRep(null)}
         />
@@ -936,10 +1787,16 @@ export default function RosterPage(): JSX.Element {
       {/* Add shift modal */}
       {addOpen && (
         <AddShiftModal
-          onClose={() => setAddOpen(false)}
+          reps={reps}
+          prefillDay={addPrefillDay}
+          onClose={() => {
+            setAddOpen(false);
+            setAddPrefillDay(null);
+          }}
           onAdd={(s) => {
             addShift(s);
             setAddOpen(false);
+            setAddPrefillDay(null);
           }}
         />
       )}
@@ -1027,7 +1884,18 @@ function EditShiftPanel({
     if (!shift.lunch) return '12:00';
     return shift.lunch.split('-')[0] ?? '12:00';
   });
-  const [lunchDur, setLunchDur] = useState('45');
+  const [lunchDur, setLunchDur] = useState(() => {
+    // Derive the stored lunch duration ('HH:MM-HH:MM') so an untouched save
+    // round-trips faithfully instead of being forced back to 45 minutes.
+    if (!shift.lunch) return '45';
+    const [s, e] = shift.lunch.split('-');
+    if (!s || !e || e === 'CURRENT') return '45';
+    const [sh, sm] = s.split(':').map(Number) as [number, number];
+    const [eh, em] = e.split(':').map(Number) as [number, number];
+    if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return '45';
+    const mins = eh * 60 + em - (sh * 60 + sm);
+    return mins > 0 ? String(mins) : '45';
+  });
   const [status, setStatus] = useState<ShiftStatus>(shift.status);
 
   return (
@@ -1130,7 +1998,11 @@ function EditShiftPanel({
               // build lunch string
               const dur = parseInt(lunchDur, 10);
               let lunch: string | undefined = undefined;
-              if (!Number.isNaN(dur) && dur > 0) {
+              if (shift.lunch && shift.lunch.endsWith('-CURRENT')) {
+                // An in-progress lunch — preserve the live sentinel rather than
+                // recomputing a fixed end time and freezing the timer.
+                lunch = `${lunchStart}-CURRENT`;
+              } else if (!Number.isNaN(dur) && dur > 0) {
                 const [lh, lm] = lunchStart.split(':').map(Number) as [number, number];
                 const totalMin = lh * 60 + lm + dur;
                 const eh = Math.floor(totalMin / 60);
@@ -1266,14 +2138,19 @@ function SummaryStat({ label, value }: { label: string; value: string }): JSX.El
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AddShiftModal({
+  reps,
+  prefillDay,
   onClose,
   onAdd,
 }: {
+  reps: Rep[];
+  prefillDay: number | null;
   onClose: () => void;
   onAdd: (s: Omit<Shift, 'id' | 'repName' | 'account'>) => void;
 }): JSX.Element {
-  const [repInitials, setRepInitials] = useState(REPS[0]!.initials);
-  const [day, setDay] = useState(0);
+  const repOptions = reps.length > 0 ? reps : REPS;
+  const [repInitials, setRepInitials] = useState(repOptions[0]!.initials);
+  const [day, setDay] = useState(prefillDay ?? 0);
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('17:00');
   const [territory, setTerritory] = useState(TERRITORIES[0]!);
@@ -1295,7 +2172,7 @@ function AddShiftModal({
               onChange={(e) => setRepInitials(e.target.value)}
               className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
             >
-              {REPS.map((r) => (
+              {repOptions.map((r) => (
                 <option key={r.initials} value={r.initials}>
                   {r.initials} · {r.name}
                 </option>
@@ -1371,6 +2248,7 @@ function DayView({
   setDayIndex,
   dayLabels,
   shifts,
+  reps,
   onClickShift,
   clockedOut,
 }: {
@@ -1378,6 +2256,7 @@ function DayView({
   setDayIndex: (d: number) => void;
   dayLabels: string[];
   shifts: Shift[];
+  reps: Rep[];
   onClickShift: (id: string) => void;
   clockedOut: Record<string, string>;
 }): JSX.Element {
@@ -1432,7 +2311,7 @@ function DayView({
               ))}
             </div>
           </div>
-          {REPS.map((r) => {
+          {reps.map((r) => {
             const repShifts = dayShifts.filter((s) => s.repInitials === r.initials);
             return (
               <div key={r.initials} className="flex border-b border-line2 hover:bg-paper/30">
@@ -1536,5 +2415,181 @@ function MonthView({ shifts, weekOffset }: { shifts: Shift[]; weekOffset: number
         </div>
       </div>
     </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk action bar — appears above the week schedule when ≥1 shift is selected.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BulkActionBar({
+  count,
+  picker,
+  setPicker,
+  onMoveDay,
+  onSetTerritory,
+  onDelete,
+  onClear,
+}: {
+  count: number;
+  picker: 'day' | 'territory' | null;
+  setPicker: (p: 'day' | 'territory' | null) => void;
+  onMoveDay: (day: number) => void;
+  onSetTerritory: (territory: string) => void;
+  onDelete: () => void;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-3 flex-wrap rounded-xl border border-accent/40 bg-accentSoft/40 px-4 py-2.5 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-accent text-surface text-[12px] font-semibold numeric">
+          {count}
+        </span>
+        <span className="text-[13px] font-medium text-ink">
+          shift{count > 1 ? 's' : ''} selected
+        </span>
+      </div>
+
+      <div className="h-5 w-px bg-line2" />
+
+      {/* Move to day */}
+      <div className="relative">
+        <button
+          onClick={() => setPicker(picker === 'day' ? null : 'day')}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-line2 bg-surface text-ink hover:bg-paper transition"
+        >
+          <MoveRight size={13} /> Move to day…
+        </button>
+        {picker === 'day' && (
+          <div className="absolute left-0 top-full mt-1 z-50 bg-surface border border-line2 rounded-lg shadow-xl p-1 flex flex-col min-w-[120px]">
+            {DAY_LABELS.map((d, i) => (
+              <button
+                key={d}
+                onClick={() => {
+                  onMoveDay(i);
+                  setPicker(null);
+                }}
+                className="text-left px-3 py-1.5 rounded text-[12px] text-ink hover:bg-paper"
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Change territory */}
+      <div className="relative">
+        <button
+          onClick={() => setPicker(picker === 'territory' ? null : 'territory')}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-line2 bg-surface text-ink hover:bg-paper transition"
+        >
+          <MapPin size={13} /> Change territory…
+        </button>
+        {picker === 'territory' && (
+          <div className="absolute left-0 top-full mt-1 z-50 bg-surface border border-line2 rounded-lg shadow-xl p-1 flex flex-col min-w-[160px]">
+            {TERRITORIES.map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  onSetTerritory(t);
+                  setPicker(null);
+                }}
+                className="text-left px-3 py-1.5 rounded text-[12px] text-ink hover:bg-paper"
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onDelete}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-rose-300 bg-surface text-rose-600 hover:bg-rose-50 transition"
+      >
+        <Trash2 size={13} /> Delete selected
+      </button>
+
+      <button
+        onClick={onClear}
+        className="ml-auto flex items-center gap-1 text-[12px] font-medium text-muted hover:text-ink transition"
+      >
+        <X size={13} /> Clear
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Template menu — apply / delete saved roster templates.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TemplateMenu({
+  templates,
+  onApply,
+  onDelete,
+}: {
+  templates: RosterTemplate[];
+  onApply: (name: string) => void;
+  onDelete: (name: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(): void {
+      setOpen(false);
+    }
+    document.addEventListener('click', onDoc);
+    return (): void => document.removeEventListener('click', onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-line2 text-muted hover:text-ink hover:bg-paper transition"
+        title="Apply a saved roster template to this week"
+      >
+        <LayoutGrid size={13} />
+        Apply template{templates.length > 0 ? ` (${templates.length})` : ''}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-line2 rounded-lg shadow-xl p-1 flex flex-col min-w-[220px]">
+          {templates.length === 0 ? (
+            <div className="px-3 py-2 text-[12px] text-soft">
+              No templates yet. Use &ldquo;Save as template&rdquo;.
+            </div>
+          ) : (
+            templates.map((t) => (
+              <div
+                key={t.name}
+                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-paper group"
+              >
+                <button
+                  onClick={() => {
+                    onApply(t.name);
+                    setOpen(false);
+                  }}
+                  className="flex-1 text-left"
+                >
+                  <div className="text-[12px] font-medium text-ink truncate">{t.name}</div>
+                  <div className="text-[10px] text-soft">{t.shifts.length} shifts</div>
+                </button>
+                <button
+                  onClick={() => onDelete(t.name)}
+                  aria-label={`Delete template ${t.name}`}
+                  className="opacity-0 group-hover:opacity-100 text-muted hover:text-rose-600 transition"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }

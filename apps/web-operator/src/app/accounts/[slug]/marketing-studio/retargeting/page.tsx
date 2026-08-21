@@ -16,6 +16,7 @@ import { getAccount } from '@/lib/accounts';
 import { getAccountMarketing } from '@/lib/account-marketing';
 import { pickCreativeImage } from '@/lib/creative-images';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account retargeting roundtrip — knock-not-converted → hashed audience →
@@ -24,7 +25,7 @@ import { firstRunSnapshot } from '@/lib/first-run';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const STAGES: Array<{
@@ -78,7 +79,8 @@ const STAGES: Array<{
   },
 ];
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default async function Page({ params: paramsPromise }: PageProps): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 
@@ -156,6 +158,11 @@ export default function Page({ params }: PageProps): JSX.Element {
           </span>
         </Banner>
 
+        <p className="text-[11px] text-muted -mt-2">
+          Demo data — cohort volumes and the 5% rake math are fixture; live wiring lands in Phase
+          1.x.
+        </p>
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label="Audiences"
@@ -232,6 +239,7 @@ export default function Page({ params }: PageProps): JSX.Element {
           title={`Active cohorts · ${data.retargetingCohorts.length}`}
           subtitle={`Per-account audience pipeline · 5% rake auto-routed at conversion · ${data.currency}`}
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           {data.retargetingCohorts.length === 0 ? (
             <div className="text-center py-8 text-[12.5px] text-muted">
@@ -259,7 +267,7 @@ export default function Page({ params }: PageProps): JSX.Element {
                   const theme = data.themes[i % data.themes.length]!;
                   const rake = Math.round(c.revenueCents * 0.05);
                   return (
-                    <tr key={c.id} className="cursor-pointer hover:bg-paper">
+                    <tr key={c.id} className="hover:bg-paper">
                       <td className="!pr-0 w-[60px]">
                         <div className="w-12 h-12 rounded-md overflow-hidden border border-line2 bg-paper">
                           <img

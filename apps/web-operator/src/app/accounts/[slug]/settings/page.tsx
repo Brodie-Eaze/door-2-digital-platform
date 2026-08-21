@@ -1,11 +1,21 @@
+'use client';
+
+import { use } from 'react';
+
 import { Plug, Settings as SettingsIcon } from 'lucide-react';
 import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
-export default function SettingsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function SettingsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account) {
@@ -32,9 +42,12 @@ export default function SettingsPage({ params }: { params: { slug: string } }): 
     <AccountShell accountSlug={params.slug} pageTitle="Settings">
       <div className="space-y-5 max-w-[1400px]">
         <Banner tone="info">
-          <span className="text-[13px]">
-            Account-scoped settings for <span className="font-semibold">{account.name}</span>.
-            Changes audit-logged + pushed to apps within 60s.
+          <span className="text-[13px] flex items-center justify-between gap-3 w-full">
+            <span>
+              Account-scoped settings for <span className="font-semibold">{account.name}</span>.
+              Read-only demo view — editing, audit-logging + 60s push to apps land in Phase 1.x.
+            </span>
+            <DataSourceBadge source="fixture" className="shrink-0" />
           </span>
         </Banner>
 

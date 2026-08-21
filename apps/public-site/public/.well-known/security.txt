@@ -1,0 +1,13 @@
+# Door 2 Digital — security contact and disclosure policy
+# https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:security@door2digital.io
+Expires: 2027-05-31T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://door2digital.io/.well-known/security.txt
+Policy: https://door2digital.io/security
+
+# We welcome good-faith security research. Please give us a reasonable
+# window to remediate before any public disclosure, and avoid accessing,
+# modifying or exfiltrating data that is not your own. We do not pursue
+# researchers who act in good faith and within this policy.

@@ -10,10 +10,48 @@ import { env } from './env';
 
 let _prisma: PrismaClient | undefined;
 
+/**
+ * Build the Prisma datasource URL with connection-pool parameters for
+ * RDS-Proxy / PgBouncer compatibility.
+ *
+ * Scale maths (50k concurrent users target):
+ *   ECS task count (peak) : ~20 tasks (auto-scale on CPU/memory)
+ *   connection_limit/task  : 5  (Prisma's internal pool per instance)
+ *   Total app→PgBouncer    : 20 × 5 = 100 connections
+ *   PgBouncer pool size    : 100 (transaction-mode, multiplexes to ~10 real PG backends)
+ *   RDS max_connections    : 5_000 on db.r6g.large (enough for failover headroom)
+ *
+ * `pgbouncer=true` disables prepared statements so PgBouncer in
+ * transaction mode doesn't try to persist them across connections.
+ * `connect_timeout=10` prevents a slow DB from blocking new requests.
+ * `pool_timeout=5` surfaces connection exhaustion as a fast error (not a
+ * thread-park) so the circuit-breaker fires before the queue backs up.
+ *
+ * IMPORTANT: DATABASE_URL must NOT already contain `?...` params when this
+ * function appends its own. If the env URL carries no query string the code
+ * below is safe; otherwise use DATABASE_URL_POOLED (set by RDS-Proxy) which
+ * is the clean proxy URL without params.
+ */
+function buildDatasourceUrl(): string {
+  const base = env().DATABASE_URL;
+  const sep = base.includes('?') ? '&' : '?';
+  return (
+    base +
+    sep +
+    [
+      'connection_limit=5', // per-instance pool size (see maths above)
+      'pool_timeout=5', // seconds before "no connection available" error
+      'connect_timeout=10', // seconds to establish a new connection
+      'pgbouncer=true', // disable prepared statements for PgBouncer compat
+      'statement_cache_size=0', // redundant safety with pgbouncer=true
+    ].join('&')
+  );
+}
+
 export function prisma(): PrismaClient {
   if (!_prisma) {
     _prisma = new PrismaClient({
-      datasources: { db: { url: env().DATABASE_URL } },
+      datasources: { db: { url: buildDatasourceUrl() } },
       log: env().NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     });
   }
@@ -117,6 +155,78 @@ type FindFirstDelegate = {
   findFirstOrThrow: (args: unknown) => Promise<unknown>;
 };
 
+/**
+ * The effective operation + tenant-scoped args produced by {@link reshapeForTenant}.
+ * `operation` may be rewritten (findUnique → findFirst), so the caller knows
+ * which delegate method to invoke.
+ */
+interface ReshapedOp {
+  operation: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Pure tenant arg-reshaper — the single source of truth shared by BOTH belts:
+ *   • {@link tenantPrisma}   — app-layer injection, no transaction (suspenders)
+ *   • {@link tenantPrismaTx} — same injection wrapped in a GUC-pinned tx (belt)
+ *
+ * Given a Prisma operation + args for an org-scoped model, returns the effective
+ * operation and an args object with `where`/`data` constrained to `orgId` (via
+ * {@link scopeWhere}/{@link stampData}, which throw on a cross-tenant attempt).
+ * Returns `null` for operations we deliberately leave untouched (connection/raw
+ * ops) so the caller can pass them through.
+ *
+ * It does NOT execute anything — each caller dispatches the result against its
+ * own executor (the base client, or a transaction client). Keeping this pure and
+ * shared is what guarantees the two belts can never drift apart and quietly
+ * disagree about what "scoped to this tenant" means.
+ */
+function reshapeForTenant(operation: string, args: unknown, orgId: string): ReshapedOp | null {
+  const a = (args ?? {}) as Record<string, unknown>;
+
+  // findUnique(OrThrow) can't accept a non-unique `orgId` filter, so rewrite to
+  // findFirst(OrThrow), which can — then AND in orgId.
+  if (operation === 'findUnique' || operation === 'findUniqueOrThrow') {
+    const where = a.where as Record<string, unknown> | undefined;
+    return {
+      operation: operation === 'findUnique' ? 'findFirst' : 'findFirstOrThrow',
+      args: { ...a, where: scopeWhere(where, orgId) },
+    };
+  }
+
+  if (whereScopedOps.has(operation)) {
+    const where = a.where as Record<string, unknown> | undefined;
+    return { operation, args: { ...a, where: scopeWhere(where, orgId) } };
+  }
+
+  if (operation === 'create') {
+    const data = a.data as Record<string, unknown> | undefined;
+    return { operation, args: { ...a, data: stampData(data, orgId) } };
+  }
+
+  if (operation === 'createMany' || operation === 'createManyAndReturn') {
+    const data = a.data;
+    const rows = Array.isArray(data)
+      ? data.map((row) => stampData(row as Record<string, unknown>, orgId))
+      : stampData(data as Record<string, unknown> | undefined, orgId);
+    return { operation, args: { ...a, data: rows } };
+  }
+
+  if (operation === 'upsert') {
+    const where = a.where as Record<string, unknown> | undefined;
+    // upsert.where is a unique selector; we can't AND orgId into it (same
+    // constraint as findUnique). We stamp create/update data so a new row lands
+    // in the right tenant, and rely on the stamped `update.data.orgId` matching
+    // (plus RLS WITH CHECK under tenantPrismaTx) to reject a cross-tenant target.
+    const create = stampData(a.create as Record<string, unknown> | undefined, orgId);
+    const update = stampData(a.update as Record<string, unknown> | undefined, orgId);
+    return { operation, args: { ...a, where: where ?? {}, create, update } };
+  }
+
+  // Connection/raw or otherwise non-scopable op — leave it alone.
+  return null;
+}
+
 function buildTenantClient(orgId: string) {
   return prisma().$extends({
     name: 'tenant-scope',
@@ -129,71 +239,29 @@ function buildTenantClient(orgId: string) {
             return query(args);
           }
 
-          // Prisma types `args` as `any` for the catch-all operation; narrow
-          // it to a mutable record we can re-shape before delegating.
-          const a = (args ?? {}) as Record<string, unknown>;
+          // Shared, pure tenant arg-reshaper (also used by tenantPrismaTx).
+          // `null` = an operation we don't touch → pass straight through.
+          const reshaped = reshapeForTenant(operation, args, orgId);
+          if (reshaped === null) return query(args);
 
-          // findUnique(OrThrow) can't accept a non-unique `orgId` filter, so
-          // we rewrite to findFirst(OrThrow), which can — then AND in orgId.
-          // We delegate to the *base* client (not `query`, which is bound to
-          // findUnique) so the rewritten op is honoured; the orgId is already
-          // merged here, so this is not double-scoped and cannot recurse.
+          // findUnique(OrThrow) was rewritten to findFirst(OrThrow) — the bound
+          // `query` is still pinned to the unique op and won't honour it, so we
+          // dispatch to the *base* delegate. orgId is already merged into the
+          // args, so this is not double-scoped and cannot recurse.
           if (operation === 'findUnique' || operation === 'findUniqueOrThrow') {
-            const where = a.where as Record<string, unknown> | undefined;
-            const next = { ...a, where: scopeWhere(where, orgId) };
             const delegates = prisma() as unknown as Record<string, FindFirstDelegate>;
             const delegate = delegates[lowerFirst(model)];
             if (!delegate) return query(args);
-            return operation === 'findUnique'
-              ? delegate.findFirst(next)
-              : delegate.findFirstOrThrow(next);
+            return reshaped.operation === 'findFirst'
+              ? delegate.findFirst(reshaped.args)
+              : delegate.findFirstOrThrow(reshaped.args);
           }
 
-          // Reshaped args are assigned to a `Record<string, unknown>` variable
-          // before being handed to `query`. Prisma types the catch-all
-          // `query` param as `any` (runtime/library.d.ts), but a *fresh object
-          // literal* makes TS resolve the narrower per-model union overload and
-          // reject our generic record shape — passing a typed variable hits the
-          // intended `any` overload. The reshaping is runtime-correct.
-          let next: Record<string, unknown>;
-
-          if (whereScopedOps.has(operation)) {
-            const where = a.where as Record<string, unknown> | undefined;
-            next = { ...a, where: scopeWhere(where, orgId) };
-            return query(next);
-          }
-
-          if (operation === 'create') {
-            const data = a.data as Record<string, unknown> | undefined;
-            next = { ...a, data: stampData(data, orgId) };
-            return query(next);
-          }
-
-          if (operation === 'createMany' || operation === 'createManyAndReturn') {
-            const data = a.data;
-            const rows = Array.isArray(data)
-              ? data.map((row) => stampData(row as Record<string, unknown>, orgId))
-              : stampData(data as Record<string, unknown> | undefined, orgId);
-            next = { ...a, data: rows };
-            return query(next);
-          }
-
-          if (operation === 'upsert') {
-            const where = a.where as Record<string, unknown> | undefined;
-            // upsert.where is a unique selector; we can't AND orgId into it
-            // (same constraint as findUnique). We stamp create/update data so
-            // a new row lands in the right tenant, and rely on the stamped
-            // `update.data.orgId` matching to reject a cross-tenant target.
-            const create = stampData(a.create as Record<string, unknown> | undefined, orgId);
-            const update = stampData(a.update as Record<string, unknown> | undefined, orgId);
-            next = { ...a, where: where ?? {}, create, update };
-            return query(next);
-          }
-
-          // Any other operation on an org-scoped model: pass through. (There
-          // is no remaining read/write that can leak — count/aggregate/etc.
-          // are covered above; the rest are connection/raw ops.)
-          return query(args);
+          // Every other reshaped op keeps its name; feed it the scoped args.
+          // Assigned to a typed variable (not an object literal) so TS resolves
+          // Prisma's catch-all `any` overload instead of the per-model union.
+          const nextArgs: Record<string, unknown> = reshaped.args;
+          return query(nextArgs);
         },
       },
     },
@@ -203,6 +271,55 @@ function buildTenantClient(orgId: string) {
 /** Lowercase the first letter — maps a DMMF model name to its delegate key. */
 function lowerFirst(s: string): string {
   return s.length > 0 ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+}
+
+/**
+ * Build a tenant client whose every org-scoped operation runs inside a
+ * GUC-pinned transaction (the SEC-005 read-side belt). Parameterised on the base
+ * `client` so tests can drive it through the non-owner `d2d_app` role and prove
+ * RLS actually bites; production uses the global `prisma()`.
+ *
+ * Mechanics: reuse {@link reshapeForTenant} to inject `where: { orgId }` (the
+ * suspenders), then dispatch the reshaped op against a {@link runTenantTx}
+ * transaction that has set `app.current_org_id` (the belt). The transaction is
+ * taken from the BASE `client`, so the delegate inside it is un-extended and
+ * cannot recurse back into this callback. findUnique→findFirst is handled by the
+ * reshaper, so the unique-filter constraint never reaches the tx delegate.
+ */
+function buildTenantTxClient(client: PrismaClient, orgId: string) {
+  return client.$extends({
+    name: 'tenant-scope-tx',
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          // Non-tenant models carry no orgId and no RLS policy — run them on the
+          // base connection unchanged (nothing to scope, no GUC required).
+          if (model === undefined || !orgScopedModels.has(model)) {
+            return query(args);
+          }
+          const reshaped = reshapeForTenant(operation, args, orgId) ?? {
+            operation,
+            args: (args ?? {}) as Record<string, unknown>,
+          };
+          // One short GUC-pinned tx per operation. For several reads/writes in
+          // one unit of work, prefer a single tenantTx(orgId, tx => …) instead —
+          // it sets the GUC once and shares one connection.
+          return runTenantTx(client, orgId, async (tx) => {
+            const delegate = (
+              tx as unknown as Record<string, Record<string, (a: unknown) => Promise<unknown>>>
+            )[lowerFirst(model)];
+            const fn = delegate?.[reshaped.operation];
+            if (!fn) {
+              throw new Error(
+                `tenantPrismaTx: unknown delegate ${lowerFirst(model)}.${reshaped.operation}`,
+              );
+            }
+            return fn(reshaped.args);
+          });
+        },
+      },
+    },
+  });
 }
 
 /**
@@ -217,6 +334,43 @@ export function tenantPrisma(orgId: string): TenantPrismaClient {
     throw new Error('tenantPrisma: orgId is required');
   }
   return buildTenantClient(orgId);
+}
+
+/**
+ * Tenant-scoped Prisma whose every operation runs inside a GUC-pinned
+ * transaction — the SEC-005 read-side belt that makes reads work once the app
+ * connects as the non-owner `d2d_app` role. Same `where: { orgId }` injection as
+ * {@link tenantPrisma} (the suspenders) PLUS a per-op
+ * `set_config('app.current_org_id', …)` so Postgres RLS (the belt) admits the
+ * caller's rows. An un-GUC'd read under `d2d_app` matches `"orgId" = NULL` and
+ * returns ZERO rows — deny-by-default — so this wrapper is what every standalone
+ * read path needs after cutover (see docs/runbooks/rls-cutover.md §4b).
+ *
+ * Drop-in for `prisma()` in read paths. Do NOT call inside a tenantTx callback
+ * (it would open a second, independent transaction on another connection) — use
+ * the handed `tx` there.
+ */
+export function tenantPrismaTx(orgId: string): TenantPrismaClient {
+  if (!orgId) {
+    throw new Error('tenantPrismaTx: orgId is required');
+  }
+  return tenantPrismaTxOn(prisma(), orgId);
+}
+
+/**
+ * Seam behind {@link tenantPrismaTx}, parameterised on the client so the RLS
+ * belt test can run it against the non-owner `d2d_app` role (the global
+ * `prisma()` connects as the table owner, which bypasses non-FORCEd RLS).
+ * Production code should call `tenantPrismaTx`. The returned object is a Prisma
+ * `$extends` client with only a `query` extension, so its delegate shape is
+ * structurally identical to {@link TenantPrismaClient}; the cast only erases the
+ * distinct extension *name* in the inferred type.
+ */
+export function tenantPrismaTxOn(client: PrismaClient, orgId: string): TenantPrismaClient {
+  if (!orgId) {
+    throw new Error('tenantPrismaTxOn: orgId is required');
+  }
+  return buildTenantTxClient(client, orgId) as unknown as TenantPrismaClient;
 }
 
 /**

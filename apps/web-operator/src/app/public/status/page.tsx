@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { CheckCircle2, Activity, Globe2, Mail, ShieldCheck } from 'lucide-react';
 import { PublicShell } from '@/components/PublicShell';
+import { SubscribeForm } from './SubscribeForm';
 
 export const metadata = {
   title: 'Status — Door 2 Digital',
@@ -311,7 +312,7 @@ export default function PublicStatusPage(): JSX.Element {
                   All systems operational
                 </h1>
                 <p className="text-[13.5px] text-muted mt-1">
-                  Last refreshed 38 seconds ago · Auto-refresh every 30s
+                  Demo data — live /v1/health aggregator wiring lands in Phase 1.3
                 </p>
               </div>
             </div>
@@ -455,19 +456,7 @@ export default function PublicStatusPage(): JSX.Element {
                 </p>
               </div>
             </div>
-            <form className="flex gap-2 w-full md:w-auto">
-              <input
-                type="email"
-                placeholder="you@team.com"
-                className="flex-1 md:w-72 px-3.5 py-2.5 text-[13px] rounded-md border border-line bg-surface text-ink placeholder:text-muted focus:outline-none focus:border-accent transition"
-              />
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center gap-2 bg-ink text-surface text-[13.5px] font-semibold px-5 py-2.5 rounded-md hover:bg-ink2 transition"
-              >
-                Subscribe
-              </button>
-            </form>
+            <SubscribeForm />
           </div>
         </div>
       </section>

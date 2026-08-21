@@ -1,0 +1,22 @@
+-- PII-vault for VoiceRecording.transcript (ADR-0011).
+--
+-- VoiceRecording.transcript holds the full text transcription of a
+-- door-knock conversation — highly sensitive PII (names, addresses,
+-- financial information, donor motivations). It is written by the ML
+-- pipeline AFTER capture; the API capture endpoint never sets it.
+--
+-- After this migration, the ML pipeline write path (when built) must:
+--   1. Encrypt the transcript into transcriptVault (AES-256-GCM,
+--      AAD = 'VoiceRecording:{id}').
+--   2. Write the sentinel '[vaulted]' to the transcript TEXT column.
+--   3. transcriptVault holds the ciphertext blob.
+--
+-- The read path (VoiceRecordingPublic) already excludes transcript from
+-- the API response — only transcript status is returned. The vault does
+-- not affect the public API surface.
+--
+-- NOTE: transcript is never set by the existing capture endpoint so there
+-- are no service-layer changes required at this migration point. The ML
+-- pipeline integration will write encrypted-only from Day 1.
+
+ALTER TABLE "VoiceRecording" ADD COLUMN "transcriptVault" TEXT;

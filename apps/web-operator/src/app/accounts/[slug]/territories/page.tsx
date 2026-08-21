@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, MapPin, Eye, Plus, Filter, Send, Check, X } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+import { toast } from '@/components/Toaster';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
 import {
@@ -11,6 +12,8 @@ import {
   type ZoneSelection,
 } from '@/components/TerritoryHeatmap';
 import { TerritoriesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { TerritoryAssignments } from '@/components/TerritoryAssignments';
+import { CanvassAreaTool } from '@/components/CanvassAreaTool';
 import { getAccount, type Account } from '@/lib/accounts';
 import { getAccountTerritory } from '@/lib/account-territory-cells';
 import { firstRunSnapshot } from '@/lib/first-run';
@@ -35,10 +38,11 @@ function formatIncomeShort(cents: number, currency: 'AUD' | 'USD'): string {
 }
 
 export default function AccountTerritoriesPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const territory = getAccountTerritory(params.slug);
 
@@ -207,6 +211,13 @@ export default function AccountTerritoriesPage({
           <AccountLiveMap accountSlug={params.slug} />
         </Section>
 
+        {/* Manager canvass-area tool — set the AREA (radius/polygon) reps
+            canvass, guided by the real propensity heatmap; pushes to iOS. */}
+        <CanvassAreaTool slug={params.slug} />
+
+        {/* Live knocker → territory assignment (writes to the iOS map) */}
+        <TerritoryAssignments slug={params.slug} />
+
         {/* Real Leaflet propensity heatmap (replaces the old SVG grid) */}
         <Section
           title={`Propensity heatmap · ${territory?.scopeLabel ?? regionLabel(account.region)}`}
@@ -270,7 +281,16 @@ export default function AccountTerritoriesPage({
           paddedBody={false}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Filter size={13} />}
+                onClick={() =>
+                  toast.info(
+                    'Advanced zone filters — use the status pills above for now; column filters land in Phase 1.2',
+                  )
+                }
+              >
                 Filter
               </Button>
               <Button

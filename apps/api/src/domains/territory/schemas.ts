@@ -44,7 +44,7 @@ export type CreateTerritoryRequest = z.infer<typeof createTerritoryRequestSchema
 export const updateTerritoryRequestSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
-    status: z.enum(['active', 'paused', 'archived']).optional(),
+    status: z.enum(['active', 'paused', 'archived', 'draft']).optional(),
     metadata: territoryMetadataSchema,
     // Trap fields — must NOT be patchable after create.
     polygonWkt: z.never().optional(),
@@ -55,7 +55,7 @@ export const updateTerritoryRequestSchema = z
 export type UpdateTerritoryRequest = z.infer<typeof updateTerritoryRequestSchema>;
 
 export const listTerritoriesQuerySchema = cursorPageQuerySchema.extend({
-  status: z.enum(['active', 'paused', 'archived']).optional(),
+  status: z.enum(['active', 'paused', 'archived', 'draft']).optional(),
   vertical: verticalSchema.optional(),
   campaignId: idSchema.optional(),
 });
@@ -68,6 +68,15 @@ export const createAssignmentRequestSchema = z
   })
   .strict();
 export type CreateAssignmentRequest = z.infer<typeof createAssignmentRequestSchema>;
+
+/** Propose a polygon edit without immediately replacing the live territory. */
+export const draftTerritoryRequestSchema = z
+  .object({
+    polygonWkt: wktPolygonSchema,
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
+export type DraftTerritoryRequest = z.infer<typeof draftTerritoryRequestSchema>;
 
 /** `bbox=west,south,east,north` — four decimals. */
 export const heatmapQuerySchema = z.object({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Heart,
   TrendingUp,
@@ -18,6 +18,8 @@ import {
 import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MembershipsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
@@ -334,7 +336,12 @@ const ACTION_STYLES: Record<
   renewed: { icon: TrendingUp, color: 'text-emerald-700 bg-emerald-50', label: 'Renewed' },
 };
 
-export default function MembershipsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function MembershipsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'at-risk' | 'champion'>(
     'all',
@@ -542,6 +549,7 @@ export default function MembershipsPage({ params }: { params: { slug: string } }
           paddedBody={false}
           action={
             <div className="flex items-center gap-1.5">
+              <DataSourceBadge source="fixture" className="mr-1" />
               <Filter size={12} className="text-soft" />
               {(['all', 'champion', 'active', 'at-risk'] as const).map((s) => (
                 <button
@@ -602,7 +610,12 @@ export default function MembershipsPage({ params }: { params: { slug: string } }
                   <td className="text-[12px] text-muted">{m.joined}</td>
                   <td className="text-[12px] text-muted">{m.lastInteraction}</td>
                   <td>
-                    <button className="text-[11px] text-accent font-medium hover:underline flex items-center gap-1">
+                    <button
+                      onClick={() =>
+                        toast.info(`Reach out to ${m.name} — outreach composer lands in Phase 1.2`)
+                      }
+                      className="text-[11px] text-accent font-medium hover:underline flex items-center gap-1"
+                    >
                       <Mail size={10} /> Reach out
                     </button>
                   </td>

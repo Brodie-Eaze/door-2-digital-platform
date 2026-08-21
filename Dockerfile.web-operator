@@ -38,7 +38,12 @@ RUN apk add --no-cache libc6-compat tini
 WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3011
+# PORT CONTRACT (see docs/STAGING-DEPLOY.md): web-operator = 3000, api = 3010.
+# Next's standalone server.js reads PORT from the environment at runtime.
+# Railway injects its own PORT, which overrides this ENV default — so this
+# value only governs local `docker run` and keeps the surface deterministic
+# (web never defaults onto the API's 3010 again).
+ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 COPY --from=build /repo/apps/web-operator/public ./apps/web-operator/public
@@ -46,7 +51,7 @@ COPY --from=build /repo/apps/web-operator/.next/standalone ./
 COPY --from=build /repo/apps/web-operator/.next/static ./apps/web-operator/.next/static
 
 USER node
-EXPOSE 3011
+EXPOSE 3000
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/web-operator/server.js"]

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
+import { use, useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
 import {
   Phone,
   Mail,
@@ -33,6 +33,8 @@ import {
 import { Banner, Button, KpiCard, Money, StatusPill } from '@d2d/ui-web';
 import { LEAD_STATUS_LABEL, LEAD_STATUS_TONE, type LeadStatus } from '@d2d/ui-tokens/taxonomy';
 import { AccountShell } from '@/components/AccountShell';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { PipelineLeadConversation } from '@/components/PipelineLeadConversation';
 import { PipelineEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { accountData, PIPELINE_STAGES, type LeadRow } from '@/lib/account-fixtures';
@@ -86,7 +88,95 @@ const SAVED_VIEWS = [
   { name: 'AI score > 80', count: 22 },
 ];
 
-export default function PipelinePage({ params }: { params: { slug: string } }): JSX.Element {
+const AI_SUGGESTIONS = [
+  'Call within 24h',
+  'Send impact-story email',
+  'Schedule callback Tue 3pm',
+  'Move to high-priority queue',
+  'Try alternate angle: monthly micro-donation',
+  'Tag for VIP closer',
+] as const;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Live wire: GET /api/pipeline → { orgId, leads, updatedAt }. Lead shape below
+// mirrors src/app/api/pipeline/route.ts exactly. PII: the route NEVER returns
+// plaintext names — `label` ("Lead AB12") + `initials` are id-derived masks.
+// ────────────────────────────────────────────────────────────────────────────
+
+interface ApiPipelineLead {
+  id: string;
+  stage: string;
+  status: string;
+  stageLabel: string;
+  vertical: string;
+  label: string;
+  initials: string;
+  assigneeInitials: string | null;
+  fromDoor: boolean;
+  daysInStage: number;
+  aiScore: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const LEAD_STATUS_VALUES: readonly LeadRow['status'][] = [
+  'new',
+  'contacted',
+  'qualified',
+  'appointment_set',
+  'converted',
+  'lost',
+  'do_not_contact',
+];
+
+function isLeadRowStatus(v: string): v is LeadRow['status'] {
+  return (LEAD_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+/** Same FNV-1a derivation the BFF route uses — stable per id across reloads. */
+function hashId(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+/**
+ * Map a wire lead onto the board's card model. Fields the Lead table doesn't
+ * carry yet (value, suggestion) are derived deterministically from the id —
+ * stable across reloads, never random. Activity counts stay at honest zero
+ * (no activity feed on this wire yet), and address/phone render as "—"
+ * because they are vaulted PII the route never emits.
+ */
+function apiLeadToCard(l: ApiPipelineLead): PipelineLead | null {
+  if (!isLeadRowStatus(l.status)) return null;
+  const h = hashId(l.id);
+  return {
+    id: l.id,
+    name: l.label, // masked, non-PII display label
+    status: l.status,
+    source: l.fromDoor ? 'door' : 'inside_sales',
+    address: '—',
+    phone: '—',
+    assignee: l.assigneeInitials ?? '',
+    tier: l.aiScore >= 80 ? 'high' : l.aiScore >= 60 ? 'medium' : 'low',
+    capturedAt: l.createdAt,
+    valueCents: BigInt((240 + (h % 1200)) * 100),
+    daysInStage: l.daysInStage,
+    aiScore: l.aiScore,
+    aiSuggestion: AI_SUGGESTIONS[h % AI_SUGGESTIONS.length]!,
+    activity: { calls: 0, sms: 0, emails: 0 },
+  };
+}
+
+export default function PipelinePage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const { account, leads: initialLeads } = accountData(params.slug);
 
   const initialEnriched: PipelineLead[] = useMemo(
@@ -96,14 +186,7 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
         valueCents: BigInt((240 + ((i * 137) % 1200)) * 100),
         daysInStage: (i * 3) % 9,
         aiScore: 40 + ((i * 19) % 60),
-        aiSuggestion: [
-          'Call within 24h',
-          'Send impact-story email',
-          'Schedule callback Tue 3pm',
-          'Move to high-priority queue',
-          'Try alternate angle: monthly micro-donation',
-          'Tag for VIP closer',
-        ][i % 6]!,
+        aiSuggestion: AI_SUGGESTIONS[i % AI_SUGGESTIONS.length]!,
         activity: { calls: i % 3, sms: 1 + (i % 4), emails: i % 2 },
       })),
     [initialLeads],
@@ -118,10 +201,45 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [quickAddStage, setQuickAddStage] = useState<string | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddPhone, setQuickAddPhone] = useState('');
+  const [quickAddAddress, setQuickAddAddress] = useState('');
 
   // Track whether the user is mid-drag — used to suppress click events on cards
   // so dropping doesn't accidentally re-open the side panel.
   const justDraggedRef = useRef(false);
+
+  // ── Live data: fetch /api/pipeline once on mount; fall back to seed cards.
+  // `isLive` gates persistence — seed ids don't exist in the DB, so demo-mode
+  // stage moves stay local-only (the DEMO badge makes that honest).
+  const freshness = useDataFreshness('fixture');
+  const [isLive, setIsLive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load(): Promise<void> {
+      try {
+        const res = await fetch('/api/pipeline');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { leads?: ApiPipelineLead[]; updatedAt?: string };
+        if (cancelled || !Array.isArray(data.leads) || data.leads.length === 0) return;
+        const mapped = data.leads.map(apiLeadToCard).filter((l): l is PipelineLead => l !== null);
+        if (mapped.length === 0) return;
+        setLeads(mapped);
+        setIsLive(true);
+        freshness.markFresh();
+      } catch {
+        // Network/API failure — keep seed cards; badge stays DEMO DATA.
+      }
+    }
+
+    void load();
+    return (): void => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = leads.filter((l) => {
     if (sourceFilter !== 'all' && l.source !== sourceFilter) return false;
@@ -200,15 +318,95 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
       setHoverStage(stage);
     };
   }
+  /**
+   * Persist a single-lead stage move via PATCH /api/pipeline/[id] { stage }.
+   * Called AFTER the optimistic local move; on any non-OK / network failure
+   * the move is surgically reverted (only the affected card) and the user is
+   * told. Demo data (isLive=false) never hits the API — those ids aren't real.
+   */
+  async function persistSingleMove(
+    id: string,
+    stage: LeadRow['status'],
+    prev: { status: LeadRow['status']; daysInStage: number },
+  ): Promise<void> {
+    if (!isLive) return;
+    try {
+      const res = await fetch(`/api/pipeline/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Success: the drag/click feedback is enough — no toast. Server is in
+      // sync with what's on screen, so the surface is fresh again.
+      freshness.markFresh();
+    } catch {
+      setLeads((p) =>
+        p.map((l) =>
+          l.id === id ? { ...l, status: prev.status, daysInStage: prev.daysInStage } : l,
+        ),
+      );
+      setSelected((curr) =>
+        curr && curr.id === id
+          ? { ...curr, status: prev.status, daysInStage: prev.daysInStage }
+          : curr,
+      );
+      toast.error('Failed to move lead — reverted');
+    }
+  }
+
+  /** Optimistic single-lead move shared by drag-drop and the side panel. */
+  function moveLeadToStage(lead: PipelineLead, stage: LeadRow['status']): void {
+    if (lead.status === stage) return;
+    const prev = { status: lead.status, daysInStage: lead.daysInStage };
+    setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, status: stage, daysInStage: 0 } : l)));
+    setSelected((curr) =>
+      curr && curr.id === lead.id ? { ...curr, status: stage, daysInStage: 0 } : curr,
+    );
+    void persistSingleMove(lead.id, stage, prev);
+  }
+
+  /** Quick-add: optimistically prepend a new lead card to local state. */
+  function addQuickLead(): void {
+    if (!quickAddStage) return;
+    const name = quickAddName.trim();
+    if (!name) {
+      toast.error('Lead name is required');
+      return;
+    }
+    const stage = quickAddStage as LeadRow['status'];
+    const newLead: PipelineLead = {
+      id: `local_${Date.now().toString(36)}`,
+      name,
+      status: stage,
+      source: sourceFilter !== 'all' ? (sourceFilter as LeadRow['source']) : 'door',
+      address: quickAddAddress.trim(),
+      phone: quickAddPhone.trim(),
+      assignee: 'Unassigned',
+      tier: 'medium',
+      capturedAt: new Date().toISOString(),
+      valueCents: 0n,
+      daysInStage: 0,
+      aiScore: 0,
+      aiSuggestion: AI_SUGGESTIONS[0],
+      activity: { calls: 0, sms: 0, emails: 0 },
+    };
+    setLeads((p) => [newLead, ...p]);
+    setQuickAddName('');
+    setQuickAddPhone('');
+    setQuickAddAddress('');
+    setQuickAddStage(null);
+    toast.success(`Added "${name}" — saved locally; server persistence lands in Phase 1.2`);
+  }
+
   function onDrop(stage: LeadRow['status']) {
     return (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
       const id = e.dataTransfer.getData('text/plain') || dragId;
       if (id) {
-        setLeads((prev) =>
-          prev.map((l) => (l.id === id ? { ...l, status: stage, daysInStage: 0 } : l)),
-        );
+        const moved = leads.find((l) => l.id === id);
+        if (moved) moveLeadToStage(moved, stage);
       }
       setDragId(null);
       setHoverStage(null);
@@ -234,11 +432,56 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
   function clearSelection() {
     setSelectedIds(new Set());
   }
+  /**
+   * Persist a bulk stage move via the collection-level PATCH /api/pipeline
+   * { ids, stage } (one transaction server-side — better than N requests).
+   * On failure every affected card reverts to its prior stage + days.
+   */
+  async function persistBulkMove(
+    ids: string[],
+    stage: LeadRow['status'],
+    prevById: Map<string, { status: LeadRow['status']; daysInStage: number }>,
+  ): Promise<void> {
+    if (!isLive) return;
+    const stageLabel = PIPELINE_STAGES.find((s) => s.status === stage)?.stage ?? stage;
+    try {
+      const res = await fetch('/api/pipeline', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, stage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      freshness.markFresh();
+      toast.success(`Moved ${ids.length} lead${ids.length === 1 ? '' : 's'} to ${stageLabel}`);
+    } catch {
+      setLeads((p) =>
+        p.map((l) => {
+          const prev = prevById.get(l.id);
+          return prev ? { ...l, status: prev.status, daysInStage: prev.daysInStage } : l;
+        }),
+      );
+      toast.error('Failed to move leads — reverted');
+    }
+  }
+
   function bulkMoveStage(stage: LeadRow['status']) {
+    const targets = leads.filter((l) => selectedIds.has(l.id) && l.status !== stage);
+    if (targets.length === 0) {
+      clearSelection();
+      return;
+    }
+    const prevById = new Map<string, { status: LeadRow['status']; daysInStage: number }>(
+      targets.map((l) => [l.id, { status: l.status, daysInStage: l.daysInStage }]),
+    );
     setLeads((prev) =>
-      prev.map((l) => (selectedIds.has(l.id) ? { ...l, status: stage, daysInStage: 0 } : l)),
+      prev.map((l) => (prevById.has(l.id) ? { ...l, status: stage, daysInStage: 0 } : l)),
     );
     clearSelection();
+    void persistBulkMove(
+      targets.map((l) => l.id),
+      stage,
+      prevById,
+    );
   }
 
   useEffect(() => {
@@ -373,6 +616,7 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
               </div>
             </div>
             <div className="flex-1" />
+            <DataSourceBadge source={freshness.source} updatedAt={freshness.updatedAt} />
             <Button variant="ghost" size="sm" leftIcon={<ArrowUpDown size={13} />}>
               Sort
             </Button>
@@ -407,10 +651,24 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
                 ))}
               </div>
               <div className="flex-1" />
-              <button className="hover:bg-surface/10 px-2 py-1 rounded text-[11px]">
+              <button
+                onClick={() =>
+                  toast.info(
+                    `Assign owner isn't wired to the API yet — ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'} left unchanged`,
+                  )
+                }
+                className="hover:bg-surface/10 px-2 py-1 rounded text-[11px]"
+              >
                 Assign owner
               </button>
-              <button className="hover:bg-surface/10 px-2 py-1 rounded text-[11px]">
+              <button
+                onClick={() =>
+                  toast.info(
+                    `Lists aren't wired to the API yet — ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'} left unchanged`,
+                  )
+                }
+                className="hover:bg-surface/10 px-2 py-1 rounded text-[11px]"
+              >
                 Add to list
               </button>
               <button
@@ -704,8 +962,9 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
         )}
 
         <div className="text-[11px] text-muted px-2">
-          Drag-drop native HTML5 · POST <code className="kbd">/v1/leads/:id/transitions</code> with
-          same-TX audit row · Sequence auto-advances · AI scores refresh every 15min.
+          Drag-drop native HTML5 · PATCH <code className="kbd">/api/pipeline/:id</code> persists the
+          stage (optimistic, reverts on failure) · Names stay vaulted — cards show masked labels
+          only.
         </div>
       </div>
 
@@ -862,16 +1121,7 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
                 {PIPELINE_STAGES.map((s) => (
                   <button
                     key={s.status}
-                    onClick={() => {
-                      setLeads((prev) =>
-                        prev.map((l) =>
-                          l.id === selected.id ? { ...l, status: s.status, daysInStage: 0 } : l,
-                        ),
-                      );
-                      setSelected((curr) =>
-                        curr ? { ...curr, status: s.status, daysInStage: 0 } : null,
-                      );
-                    }}
+                    onClick={() => moveLeadToStage(selected, s.status)}
                     className={`px-2 py-1 rounded text-[11px] font-medium transition ${selected.status === s.status ? 'bg-ink text-surface' : 'bg-paper text-muted hover:bg-line2 hover:text-ink'}`}
                   >
                     {s.stage}
@@ -929,21 +1179,39 @@ export default function PipelinePage({ params }: { params: { slug: string } }): 
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Lead name"
                 autoFocus
+                value={quickAddName}
+                onChange={(e) => setQuickAddName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') addQuickLead();
+                }}
               />
               <input
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px] numeric"
                 placeholder="Phone"
+                value={quickAddPhone}
+                onChange={(e) => setQuickAddPhone(e.target.value)}
               />
               <input
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Address"
+                value={quickAddAddress}
+                onChange={(e) => setQuickAddAddress(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2 justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setQuickAddStage(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuickAddName('');
+                  setQuickAddPhone('');
+                  setQuickAddAddress('');
+                  setQuickAddStage(null);
+                }}
+              >
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={() => setQuickAddStage(null)}>
+              <Button variant="primary" size="sm" onClick={addQuickLead}>
                 Add lead
               </Button>
             </div>

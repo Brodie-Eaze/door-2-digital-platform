@@ -58,10 +58,17 @@ export function sessionSigningSecret(): string | null {
  * DEMO_MODE_ENABLED=true opt-in (defaults OFF) so a misconfigured non-prod
  * preview can't accidentally expose hardcoded super-admin credentials.
  *
+ * Also disabled when NEXT_PUBLIC_API_URL is set: that env var means a real
+ * API is wired to this web-operator instance, so issuing synthetic demo tokens
+ * makes no sense and could confuse the auth flow (F-010 defense-in-depth).
+ *
  * Pure + env-driven so it is unit-testable without importing next/server.
  */
 export function isDemoLoginEnabled(): boolean {
   if (process.env.NODE_ENV === 'production') return false;
+  // If a real API is wired, never enable the synthetic-demo path regardless
+  // of the DEMO_MODE_ENABLED flag — a real API won't accept demo tokens.
+  if (process.env.NEXT_PUBLIC_API_URL) return false;
   return process.env.DEMO_MODE_ENABLED === 'true';
 }
 

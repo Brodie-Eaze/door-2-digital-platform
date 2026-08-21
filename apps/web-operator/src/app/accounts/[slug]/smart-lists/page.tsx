@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { use, useState, useMemo } from 'react';
 import {
   ListChecks,
   Plus,
@@ -27,6 +27,8 @@ import { Banner, Button, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { SmartListsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Types + fixtures
@@ -239,7 +241,12 @@ const FIELDS = [
  * Page
  * ───────────────────────────────────────────────────────────────────────── */
 
-export default function SmartListsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function SmartListsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const [selectedId, setSelectedId] = useState<string>('l1');
   const [aiPrompt, setAiPrompt] = useState('');
   const [showPushModal, setShowPushModal] = useState(false);
@@ -310,6 +317,7 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
         <Section
           title="Describe a list — AI will build it"
           subtitle="Plain English · Claude parses intent into rule conditions"
+          action={<DataSourceBadge source="fixture" />}
         >
           <div className="flex items-stretch gap-2">
             <div className="flex-1 relative">
@@ -324,7 +332,18 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                 className="w-full pl-10 pr-3 h-11 bg-paper border border-line2 rounded-xl text-[13px] focus:outline-none focus:border-accent focus:bg-surface"
               />
             </div>
-            <Button variant="primary" size="lg" leftIcon={<Sparkles size={14} />}>
+            <Button
+              variant="primary"
+              size="lg"
+              leftIcon={<Sparkles size={14} />}
+              onClick={() =>
+                toast.info(
+                  aiPrompt.trim()
+                    ? 'Build with AI — list generation lands in Phase 1.2'
+                    : 'Describe the list first, then AI will build it',
+                )
+              }
+            >
               Build with AI
             </Button>
           </div>
@@ -353,7 +372,12 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
               title="Lists library"
               subtitle={`${LISTS.length} lists`}
               action={
-                <Button leftIcon={<Plus size={13} />} variant="primary" size="sm">
+                <Button
+                  leftIcon={<Plus size={13} />}
+                  variant="primary"
+                  size="sm"
+                  onClick={() => toast.info('New list — builder wiring lands in Phase 1.2')}
+                >
                   New list
                 </Button>
               }
@@ -467,18 +491,29 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                   <button
                     className="w-8 h-8 rounded hover:bg-paper flex items-center justify-center"
                     title="Edit"
+                    onClick={() =>
+                      toast.info(`Edit "${selected.name}" — list editor lands in Phase 1.2`)
+                    }
                   >
                     <Edit3 size={14} className="text-muted" />
                   </button>
                   <button
                     className="w-8 h-8 rounded hover:bg-paper flex items-center justify-center"
                     title="Duplicate"
+                    onClick={() =>
+                      toast.info(`Duplicate "${selected.name}" — wiring lands in Phase 1.2`)
+                    }
                   >
                     <Copy size={14} className="text-muted" />
                   </button>
                   <button
                     className="w-8 h-8 rounded hover:bg-paper flex items-center justify-center"
-                    title="Pause"
+                    title={selected.status === 'active' ? 'Pause' : 'Resume'}
+                    onClick={() =>
+                      toast.info(
+                        `${selected.status === 'active' ? 'Pause' : 'Resume'} "${selected.name}" — list control lands in Phase 1.2`,
+                      )
+                    }
                   >
                     {selected.status === 'active' ? (
                       <Pause size={14} className="text-muted" />
@@ -489,6 +524,9 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                   <button
                     className="w-8 h-8 rounded hover:bg-paper flex items-center justify-center"
                     title="Delete"
+                    onClick={() =>
+                      toast.info(`Delete "${selected.name}" — wiring lands in Phase 1.2`)
+                    }
                   >
                     <Trash2 size={14} className="text-rose-600" />
                   </button>
@@ -523,14 +561,39 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                 >
                   Push to campaign
                 </Button>
-                <Button variant="secondary" size="md" leftIcon={<MailPlus size={14} />}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<MailPlus size={14} />}
+                  onClick={() =>
+                    toast.info(`Add "${selected.name}" to drip — wiring lands in Phase 1.2`)
+                  }
+                >
                   Add to drip
                 </Button>
-                <Button variant="secondary" size="md" leftIcon={<Phone size={14} />}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<Phone size={14} />}
+                  onClick={() =>
+                    toast.info(
+                      `Send "${selected.name}" to dialer queue — wiring lands in Phase 1.2`,
+                    )
+                  }
+                >
                   Send to dialer queue
                 </Button>
                 <div className="flex-1" />
-                <Button variant="ghost" size="md" leftIcon={<Eye size={14} />}>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  leftIcon={<Eye size={14} />}
+                  onClick={() =>
+                    toast.info(
+                      `View all ${selected.memberCount} members — member browser lands in Phase 1.2`,
+                    )
+                  }
+                >
                   View all {selected.memberCount}
                 </Button>
               </div>
@@ -541,7 +604,12 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
               title="Rule builder"
               subtitle="Conditions evaluated server-side on every lead create/update"
               action={
-                <Button variant="ghost" size="sm" leftIcon={<Plus size={13} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Plus size={13} />}
+                  onClick={() => toast.info('Add group — rule builder editing lands in Phase 1.2')}
+                >
                   Add group
                 </Button>
               }
@@ -567,7 +635,13 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                             <option>OR</option>
                           </select>
                         </div>
-                        <button className="w-6 h-6 rounded hover:bg-surface flex items-center justify-center">
+                        <button
+                          className="w-6 h-6 rounded hover:bg-surface flex items-center justify-center"
+                          title="Remove group"
+                          onClick={() =>
+                            toast.info('Remove group — rule builder editing lands in Phase 1.2')
+                          }
+                        >
                           <X size={12} className="text-soft" />
                         </button>
                       </div>
@@ -604,12 +678,25 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                               defaultValue={c.value}
                               className="flex-[3] min-w-0 bg-transparent text-[12px] text-ink outline-none font-mono"
                             />
-                            <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center shrink-0">
+                            <button
+                              className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center shrink-0"
+                              title="Remove condition"
+                              onClick={() =>
+                                toast.info(
+                                  'Remove condition — rule builder editing lands in Phase 1.2',
+                                )
+                              }
+                            >
                               <X size={11} className="text-soft" />
                             </button>
                           </div>
                         ))}
-                        <button className="w-full text-[11px] text-accent hover:text-accent-strong py-1.5 flex items-center justify-center gap-1">
+                        <button
+                          onClick={() =>
+                            toast.info('Add condition — rule builder editing lands in Phase 1.2')
+                          }
+                          className="w-full text-[11px] text-accent hover:text-accent-strong py-1.5 flex items-center justify-center gap-1"
+                        >
                           <Plus size={11} /> Add condition
                         </button>
                       </div>
@@ -623,7 +710,14 @@ export default function SmartListsPage({ params }: { params: { slug: string } })
                       </span>{' '}
                       leads match
                     </div>
-                    <Button variant="primary" size="sm" leftIcon={<Filter size={13} />}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<Filter size={13} />}
+                      onClick={() =>
+                        toast.info('Preview members — live count query lands in Phase 1.2')
+                      }
+                    >
                       Preview members
                     </Button>
                   </div>
@@ -937,7 +1031,18 @@ function PushModal({
             <Button variant="ghost" size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<Layers size={13} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Layers size={13} />}
+              disabled={channels.length === 0}
+              onClick={() => {
+                toast.success(
+                  `Queued ${count.toLocaleString()} members from "${listName}" to ${channels.length} channel${channels.length === 1 ? '' : 's'} — delivery wiring lands in Phase 1.2`,
+                );
+                onClose();
+              }}
+            >
               Push to {channels.length} channels
             </Button>
           </div>
