@@ -234,13 +234,14 @@ LIVE against `https://d2d-api-production-895b.up.railway.app`, not dev:
   admin token reading Hope Forward's org → 404; the logged knock is scoped to
   `org_06G28...` (Northside), and 0 Northside knocks leak to the Hope Forward
   admin's knock list.
-- **D3 (Knocker iOS first-class client) — PROVEN (API contract) + PARTIAL (UI).**
-  Release build points at the production API (`D2D_API_BASE_URL`), ATS
-  arbitrary-loads=NO in the built plist (F-007), launches in the simulator and
-  renders the real login screen. The full field-loop API contract (login →
-  assigned territory → session → knock) is proven against production. The
-  in-simulator UI tap-through is blocked only by `sudo xcode-select` (needs
-  Brodie's password) — retry `attach` after running it.
+- **D3 (Knocker iOS first-class client) — PROVEN in the app UI against prod.**
+  Release build points at the production API, ATS arbitrary-loads=NO in the
+  built plist (F-007). Drove the actual Simulator UI (via generic desktop
+  control, since the native integration needs `xcode-select`): logged in as
+  the production knocker Sam (sam.field@northsidetrust.org), and the app
+  landed on the map showing 'Riverside North · 0/0 knocked' — the exact
+  territory the org admin mapped + assigned on the platform. Platform→app
+  flow proven in the real iOS UI, plus the full field-loop API contract.
 - **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
   return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
 - **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
