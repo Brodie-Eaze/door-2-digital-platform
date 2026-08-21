@@ -27,6 +27,8 @@ import { registerMarketing } from '../../src/domains/marketing/routes';
 import { registerContentStudio } from '../../src/domains/content-studio/routes';
 import { registerVoice } from '../../src/domains/voice/routes';
 import { registerDsar } from '../../src/domains/dsar/routes';
+import { registerCommission } from '../../src/domains/commission/routes';
+import { registerPayout } from '../../src/domains/payout/routes';
 import { registerIntegrations } from '../../src/integrations';
 import { prisma, shutdownDb } from '../../src/config/db';
 import { redis } from '../../src/config/redis';
@@ -63,6 +65,8 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
   await app.register(registerVoice, { prefix: '/v1/voice' });
   await app.register(registerDsar, { prefix: '/v1/dsar' });
+  await app.register(registerCommission, { prefix: '/v1/commissions' });
+  await app.register(registerPayout, { prefix: '/v1/payout-batches' });
   await app.ready();
   return app;
 }
