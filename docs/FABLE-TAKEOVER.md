@@ -399,8 +399,16 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   `@@index([endedAt, orgId, startedAt])` (endedAt IS NULL leads — highly
   selective), migration `20260822000000_knocksession_active_index`, DEPLOYED +
   APPLIED to the prod DB (`prisma migrate status` → "Database schema is up to
-  date!"). This is the kind of enterprise-scale hardening that IS in reach
-  without the 50k rig — the load run itself still needs the target infra.
+  date!"). TWO MORE hot-path full-scan risks then found + indexed + applied to
+  prod (migration `20260822010000`): (a) AuditEvent — the audit-shipper polls
+  `WHERE shippedToS3At IS NULL ORDER BY id` every 60s on the highest-volume
+  table (one row per action) with no index on `shippedToS3At` → continuous full
+  scan once off-site shipping is on; added `@@index([shippedToS3At, id])`; (b)
+  Lead — the inbox `WHERE orgId=? ORDER BY createdAt DESC LIMIT 50` had no
+  `[orgId, createdAt]` index → sorted the whole org's leads; added it. All three
+  index migrations are live in the prod DB. This is the kind of enterprise-scale
+  hardening that IS in reach without the 50k rig — the load run itself still
+  needs the target infra.
   The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
   ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
   error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
