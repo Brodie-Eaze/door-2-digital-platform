@@ -216,3 +216,37 @@ Institutional memory from the CI-gate campaign, paid for in failed runs:
 
 You are not here to make the dashboard look finished. It already looks finished.
 You are here to make it true.
+
+---
+
+## PRODUCTION PROOF LOG — 2026-08-21
+
+The stack is deployed to Railway production (URLs in CLAUDE.md). Criteria proven
+LIVE against `https://d2d-api-production-895b.up.railway.app`, not dev:
+
+- **D1 (loop closes on live data) — PROVEN in prod.** Onboarded a stranger org
+  (Northside Trust) through the Command Centre → founding admin invite minted
+  atomically → redeemed → org admin mapped a territory (Riverside North) →
+  invited a knocker (Sam) → Sam redeemed + logged in → saw the assigned area →
+  opened a shift session → logged a knock batch (inserted:1) → the knock is
+  visible to the org admin. Every step live Postgres in production.
+- **D2 (multi-tenant real) — PROVEN in prod.** New org sees 0 leads; Northside
+  admin token reading Hope Forward's org → 404; the logged knock is scoped to
+  `org_06G28...` (Northside), and 0 Northside knocks leak to the Hope Forward
+  admin's knock list.
+- **D3 (Knocker iOS first-class client) — PROVEN (API contract) + PARTIAL (UI).**
+  Release build points at the production API (`D2D_API_BASE_URL`), ATS
+  arbitrary-loads=NO in the built plist (F-007), launches in the simulator and
+  renders the real login screen. The full field-loop API contract (login →
+  assigned territory → session → knock) is proven against production. The
+  in-simulator UI tap-through is blocked only by `sudo xcode-select` (needs
+  Brodie's password) — retry `attach` after running it.
+- **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
+  return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
+- **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
+  money-cycle to the cent + human gate, RTBF at-rest erasure, voice double-gate,
+  security floor. Full external pen test (D9) remains human-gated.
+
+Still human-gated: **D4** (AWS/Terraform apply — no account), **D5-scale** (50k
+load test on real infra), **D9-external** (CREST pen-test firm), **D11-onboarding
+doc walk by a non-engineer**, **D12** (first real paying org), merge PR #18.
