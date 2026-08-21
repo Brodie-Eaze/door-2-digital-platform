@@ -390,6 +390,17 @@ knocks[]}`. Fix: match the real shape, mark items complete off
 - **D5 (backpressure) — PROVEN in prod; 50k harness fire-ready.** 150-request
   burst → 120 pass, 121st+ return 429 + Retry-After + x-ratelimit-remaining:0,
   per-client (TRUST_PROXY_HOPS=2) — the graceful-degradation MECHANISM is proven.
+  SCALE-HARDENING APPLIED (2026-08-22): a real hot-path index gap was found by
+  reviewing the query plans of the new metrics endpoints — the "who is live
+  now" lookups (`/api/fleet`, `/api/metrics/realtime` active-rep count) filter
+  `KnockSession WHERE endedAt IS NULL [+ orgId + startedAt]`, but the table only
+  had `[userId, startedAt]`, so at scale (millions of closed sessions) it would
+  full-scan to find the handful of open ones. Added
+  `@@index([endedAt, orgId, startedAt])` (endedAt IS NULL leads — highly
+  selective), migration `20260822000000_knocksession_active_index`, DEPLOYED +
+  APPLIED to the prod DB (`prisma migrate status` → "Database schema is up to
+  date!"). This is the kind of enterprise-scale hardening that IS in reach
+  without the 50k rig — the load run itself still needs the target infra.
   The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
   ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
   error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
