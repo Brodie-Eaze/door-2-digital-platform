@@ -255,9 +255,10 @@ final class KnockFlowViewModel {
         appState.knocksToday += 1
         if disposition == .convertedSale || disposition == .convertedDonation {
             appState.conversionsToday += 1
-            if let service = selectedService {
-                appState.commissionCentsToday += Int64(service.priceCents)
-            }
+            // NOTE: do NOT bump commissionCentsToday by the sale price here — the
+            // rep's commission is a fraction of the price computed by the
+            // server-side commission plan, not the gross amount. The real figure
+            // is pulled from daily-stats (see ProfileViewModel.load).
         }
 
         NotificationCenter.default.post(name: .knockRecorded, object: nil)
