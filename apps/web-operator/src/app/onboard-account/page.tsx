@@ -139,6 +139,11 @@ export default function OnboardAccountPage(): JSX.Element {
   const [activateError, setActivateError] = useState<string | null>(null);
   const [provisionDone, setProvisionDone] = useState(false);
   const [newAccountSlug, setNewAccountSlug] = useState<string | null>(null);
+  const [adminInvite, setAdminInvite] = useState<{
+    email: string;
+    inviteToken: string;
+    expiresAt: string;
+  } | null>(null);
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [form, setForm] = useState<FormState>({
     legalName: '',
@@ -232,6 +237,8 @@ export default function OnboardAccountPage(): JSX.Element {
   // checklist, in which case we let them drive.
   useEffect(() => {
     if (!provisionDone || !newAccountSlug) return undefined;
+    // A one-time admin invite is on screen — never auto-navigate away from it.
+    if (adminInvite) return undefined;
     redirectTimer.current = setTimeout(() => {
       router.push(`/accounts/${newAccountSlug}/today`);
       router.refresh();
@@ -239,7 +246,7 @@ export default function OnboardAccountPage(): JSX.Element {
     return () => {
       if (redirectTimer.current) clearTimeout(redirectTimer.current);
     };
-  }, [provisionDone, newAccountSlug, router]);
+  }, [provisionDone, newAccountSlug, adminInvite, router]);
 
   function cancelAutoRedirect(): void {
     if (redirectTimer.current) {
@@ -280,6 +287,15 @@ export default function OnboardAccountPage(): JSX.Element {
       uiVertical: form.vertical,
       regionCode: form.region,
       brandCode: 'd2d',
+      // Founding org_admin — minted atomically with the org from the primary
+      // contact so the account is never born ownerless.
+      ...(form.contactEmail && {
+        admin: {
+          email: form.contactEmail,
+          givenName: form.contactName.trim().split(/\s+/)[0] || 'Admin',
+          familyName: form.contactName.trim().split(/\s+/).slice(1).join(' ') || 'User',
+        },
+      }),
       brandKit: {
         displayName: form.displayName || form.shortName,
         ...(form.avatarBg && { primaryColor: form.avatarBg }),
@@ -332,7 +348,12 @@ export default function OnboardAccountPage(): JSX.Element {
       return;
     }
 
-    const json = (await res.json()) as { orgId: string; slug: string | null };
+    const json = (await res.json()) as {
+      orgId: string;
+      slug: string | null;
+      adminInvite?: { email: string; inviteToken: string; expiresAt: string };
+    };
+    if (json.adminInvite) setAdminInvite(json.adminInvite);
     const newSlug = json.slug ?? slugify(form.shortName) ?? 'new-account';
 
     // Staged narrative for visual feedback — the actual write is already
@@ -451,6 +472,7 @@ export default function OnboardAccountPage(): JSX.Element {
             }}
             error={activateError}
             done={provisionDone}
+            adminInvite={adminInvite}
             newSlug={newAccountSlug}
             onOpenWorkspace={openWorkspace}
             onChecklistInteract={cancelAutoRedirect}
@@ -1062,6 +1084,48 @@ function NumberCard({
 // Step 5 — Review & activate
 // ─────────────────────────────────────────────────────────────────────────────
 
+function AdminInviteCard({
+  invite,
+}: {
+  invite: { email: string; inviteToken: string; expiresAt: string };
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const orgAppOrigin = process.env.NEXT_PUBLIC_ORG_APP_URL ?? '';
+  const link = orgAppOrigin
+    ? `${orgAppOrigin}/accept-invite?token=${invite.inviteToken}`
+    : invite.inviteToken;
+  const expires = new Date(invite.expiresAt).toLocaleDateString();
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 space-y-2">
+      <div className="text-[12px] font-semibold text-amber-900">
+        Admin invite for {invite.email} — shown once, copy it now
+      </div>
+      <div className="text-[11px] text-amber-800">
+        Send this {orgAppOrigin ? 'link' : 'invite token'} to the account admin so they can set
+        their password{orgAppOrigin ? '' : ' via the accept-invite page'}. Expires {expires}. It is
+        not stored anywhere and cannot be shown again.
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-white border border-amber-200 px-2 py-1.5 text-[11px] text-ink font-mono">
+          {link}
+        </code>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            void navigator.clipboard.writeText(link).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Step5Review({
   form,
   monogram,
@@ -1071,6 +1135,7 @@ function Step5Review({
   onActivate,
   error,
   done,
+  adminInvite,
   newSlug,
   onOpenWorkspace,
   onChecklistInteract,
@@ -1083,6 +1148,7 @@ function Step5Review({
   onActivate: () => void;
   error: string | null;
   done: boolean;
+  adminInvite: { email: string; inviteToken: string; expiresAt: string } | null;
   newSlug: string | null;
   onOpenWorkspace: () => void;
   onChecklistInteract: () => void;
@@ -1219,6 +1285,7 @@ function Step5Review({
           </Section>
           {done && newSlug && (
             <>
+              {adminInvite && <AdminInviteCard invite={adminInvite} />}
               <DayOneChecklist slug={newSlug} onInteract={onChecklistInteract} />
               <div className="flex items-center justify-between gap-3">
                 <div className="text-[11px] text-muted">
