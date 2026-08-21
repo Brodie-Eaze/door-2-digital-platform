@@ -110,7 +110,13 @@ async function buildServer() {
     // ever reach this process directly — the socket peer can't be spoofed by
     // an external caller, only header *content* can, which hop-limiting
     // still defeats.
-    trustProxy: (_address, hop) => hop === (e.TRUST_PROXY_HOPS ?? 0),
+    // proxy-addr semantics: return true to KEEP trusting (walk further left);
+    // trusting the first N hops means `hop < N`. N counts trusted proxies in
+    // front (Railway edge chain = 2; ECS/ALB = 1). req.ip becomes the entry
+    // just past the trusted proxies — the real client. Railway sanitises
+    // client-injected X-Forwarded-For (verified: an injected value never
+    // reaches a trusted position), so a caller cannot forge this bucket key.
+    trustProxy: (_address, hop) => hop < (e.TRUST_PROXY_HOPS ?? 1),
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
   });
