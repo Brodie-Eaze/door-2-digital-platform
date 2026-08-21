@@ -344,10 +344,16 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   is `@/lib/first-run` (29 consumers) — a cosmetic empty-state proxy that
   decides "show the onboarding banner?" + a display name; for a real org it
   returns the prettified slug + the correct first-run state, so it fabricates
-  NO metrics or content shown as real. **Remaining for the D1 sign-off:** deploy
-  web-operator with these changes and walk the loop end-to-end on a fresh org
-  (the code is committed + build-green; the running Railway build is still the
-  old one). The leaf surfaces that had their OWN demo _content_ beyond account
+  NO metrics or content shown as real. **DEPLOYED (2026-08-22):** web-operator
+  was redeployed to Railway (service `D2D`,
+  https://d2d-production-1fab.up.railway.app) with all of the above — the build
+  compiled, the new endpoints are live (`/api/accounts/stats`,
+  `/api/accounts/list`, `/api/metrics/rollup` return 307 auth-redirects, not
+  404, proving the new code shipped) and `/login` serves the Command Centre, so
+  the de-fixtured operator is the LIVE build. **Remaining for the D1 sign-off:**
+  a recorded end-to-end walkthrough on a fresh org through the deployed UI (the
+  legs are already proven live — onboard, territory, app-knock sync, tenant
+  isolation). The leaf surfaces that had their OWN demo _content_ beyond account
   fields (e.g. generated task lists) now render live account identity + honest
   empty/degraded states; wiring dedicated tasks/invoices/etc. models where a
   surface needs richer live content is genuine product build-out, tracked
