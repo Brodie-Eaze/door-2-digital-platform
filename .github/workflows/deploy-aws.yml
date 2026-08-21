@@ -41,7 +41,7 @@ jobs:
     environment:
       name: production # manual approval gate (repo Settings -> Environments)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Resolve image tag
         id: tag
