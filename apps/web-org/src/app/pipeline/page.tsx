@@ -28,7 +28,11 @@ export default async function PipelinePage(): Promise<JSX.Element> {
           {PIPELINE_STAGES.map((stage) => {
             const stageLeads = leads.filter((lead) => lead.status === stage.status);
             return (
-              <div key={stage.status} className="card !p-0 flex flex-col" style={{ minHeight: 480 }}>
+              <div
+                key={stage.status}
+                className="card !p-0 flex flex-col"
+                style={{ minHeight: 480 }}
+              >
                 <div className="px-4 py-3 border-b border-line2 flex items-center justify-between">
                   <div>
                     <div className="text-[13px] font-semibold text-ink tracking-tight">
@@ -50,7 +54,9 @@ export default async function PipelinePage(): Promise<JSX.Element> {
                         {lead.givenName} {lead.familyName}
                       </div>
                       <div className="text-[10px] text-muted truncate mt-0.5">
-                        {lead.addressId ? `Address ${shortId(lead.addressId)}` : 'No address linked'}
+                        {lead.addressId
+                          ? `Address ${shortId(lead.addressId)}`
+                          : 'No address linked'}
                       </div>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="tag !text-[10px]">{leadSource(lead)}</span>
@@ -78,7 +84,9 @@ export default async function PipelinePage(): Promise<JSX.Element> {
           })}
         </div>
         {leadPage.nextCursor && (
-          <div className="text-[11px] text-muted">More leads are available after this first page.</div>
+          <div className="text-[11px] text-muted">
+            More leads are available after this first page.
+          </div>
         )}
         <div className="text-[11px] text-muted">
           Drag-drop stage moves wire in Phase 1.3 via <code className="kbd">@dnd-kit</code> with
