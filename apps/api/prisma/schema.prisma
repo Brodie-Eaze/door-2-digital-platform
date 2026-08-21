@@ -495,6 +495,11 @@ model KnockSession {
   knocks Knock[]
 
   @@index([userId, startedAt])
+  // "Active sessions" hot path (fleet map + realtime active-rep count):
+  // WHERE endedAt IS NULL [+ orgId + startedAt]. endedAt IS NULL is highly
+  // selective (few open sessions among many closed), so lead with it — without
+  // this the query full-scans KnockSession at scale.
+  @@index([endedAt, orgId, startedAt])
 }
 
 model Knock {
