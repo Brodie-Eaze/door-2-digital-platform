@@ -112,7 +112,11 @@ export default async function TodayPage(): Promise<JSX.Element> {
 
           {/* Side rail */}
           <div className="space-y-4">
-            <Section title="Live leaderboard" subtitle="Top conversion contributors" paddedBody={false}>
+            <Section
+              title="Live leaderboard"
+              subtitle="Top conversion contributors"
+              paddedBody={false}
+            >
               <div className="divide-y divide-line2">
                 {contributors.map((contributor, i) => (
                   <div key={contributor.id} className="flex items-center gap-3 px-5 py-3">
@@ -123,7 +127,9 @@ export default async function TodayPage(): Promise<JSX.Element> {
                     </div>
                     <span className="mono">{shortId(contributor.id)}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] text-ink truncate">User {shortId(contributor.id)}</div>
+                      <div className="text-[13px] text-ink truncate">
+                        User {shortId(contributor.id)}
+                      </div>
                       <div className="text-[11px] text-muted numeric">
                         {contributor.conversions} conv. ·{' '}
                         <Money cents={contributor.revenueCents} region="US" />
@@ -133,9 +139,7 @@ export default async function TodayPage(): Promise<JSX.Element> {
                   </div>
                 ))}
                 {contributors.length === 0 && (
-                  <div className="text-[11px] text-soft text-center py-8">
-                    No conversions yet.
-                  </div>
+                  <div className="text-[11px] text-soft text-center py-8">No conversions yet.</div>
                 )}
               </div>
             </Section>

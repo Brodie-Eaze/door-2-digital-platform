@@ -39,30 +39,10 @@ export default async function LeadsPage(): Promise<JSX.Element> {
 
         {/* Source breakdown */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard
-            label="In inbox"
-            value={leads.length}
-            hint="first page"
-            animate={false}
-          />
-          <KpiCard
-            label="Door"
-            value={door}
-            hint="linked to a knock"
-            animate={false}
-          />
-          <KpiCard
-            label="Assigned"
-            value={assigned}
-            hint="has an owner"
-            animate={false}
-          />
-          <KpiCard
-            label="Unassigned"
-            value={unassigned}
-            hint="needs routing"
-            animate={false}
-          />
+          <KpiCard label="In inbox" value={leads.length} hint="first page" animate={false} />
+          <KpiCard label="Door" value={door} hint="linked to a knock" animate={false} />
+          <KpiCard label="Assigned" value={assigned} hint="has an owner" animate={false} />
+          <KpiCard label="Unassigned" value={unassigned} hint="needs routing" animate={false} />
         </div>
 
         <Section
@@ -94,7 +74,10 @@ export default async function LeadsPage(): Promise<JSX.Element> {
         </Section>
 
         {/* CRM flow diagram */}
-        <Section title="How a lead flows through the CRM" subtitle="From capture to converted donor">
+        <Section
+          title="How a lead flows through the CRM"
+          subtitle="From capture to converted donor"
+        >
           <div className="flex items-center justify-between gap-2 py-2 flex-wrap">
             {[
               {
