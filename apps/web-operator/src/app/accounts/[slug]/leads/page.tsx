@@ -3,8 +3,8 @@
  *
  * Server component. Reads the shared Prisma singleton directly; PII is
  * masked at the read boundary (`maskEmail`/`maskPhone`) so cross-tenant
- * visibility never leaks raw contact details. The fixture leads remain
- * accessible only when the DB read fails (graceful degrade for demos).
+ * visibility never leaks raw contact details. On a DB read failure it shows
+ * an honest "Live data unavailable" state — never fabricated lead rows.
  *
  * Authorization mirrors the API route handler:
  *   - super_admin → any org
