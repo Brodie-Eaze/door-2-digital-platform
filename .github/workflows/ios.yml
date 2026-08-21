@@ -33,11 +33,14 @@ jobs:
       - name: Build + test
         run: |
           set -o pipefail
+          # Runners ship different simulator sets — pick the first available iPhone.
+          DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone [^(]+' | head -1 | sed 's/ *$//')
+          echo "Using simulator: $DEVICE"
           xcodebuild \
             -project D2DKnocker.xcodeproj \
             -scheme D2DKnocker \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO \
             test | tail -80
 
@@ -62,7 +65,7 @@ jobs:
             -scheme D2DKnocker \
             -configuration Release \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             -derivedDataPath /tmp/dd-release \
             build | tail -40

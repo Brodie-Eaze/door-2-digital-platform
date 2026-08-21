@@ -252,12 +252,13 @@ function LoginPageInner(): JSX.Element {
             operator surface, fully audited.
           </p>
 
-          {/* Stats */}
+          {/* Capability strip — true-source law: no fabricated figures on a
+              login page (real numbers live behind auth). Capabilities only. */}
           <div className="flex items-start gap-10">
             {[
-              { v: '420+', l: 'Knockers' },
-              { v: '8.4K', l: 'MTD conv.' },
-              { v: '4', l: 'Accounts' },
+              { v: 'Field', l: 'capture' },
+              { v: 'CRM', l: 'pipeline' },
+              { v: 'Audited', l: 'end to end' },
             ].map((m, i) => (
               <div key={m.l} className="flex items-start gap-10">
                 {i > 0 && <div className="w-px h-9 bg-surface/10 self-start mt-0.5 -ml-10" />}

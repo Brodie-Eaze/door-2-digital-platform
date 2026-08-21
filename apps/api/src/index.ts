@@ -183,8 +183,9 @@ async function buildServer() {
       return {
         // statusCode drives the HTTP status @fastify/rate-limit sets. Without
         // it the reply fell through as 500 — clients saw a server error, not a
-        // 429 with Retry-After (found by the k6 smoke). Keep both fields:
-        // statusCode for the plugin, status for RFC 7807 consumers.
+        // 429 with Retry-After (found by the k6 smoke: 250 "500"s that were
+        // all rate-limit refusals). Keep both fields: statusCode for the
+        // plugin, status for RFC 7807 consumers.
         statusCode: 429,
         type: 'https://docs.d2d.io/problems/rate-limited',
         title: 'Rate limited',

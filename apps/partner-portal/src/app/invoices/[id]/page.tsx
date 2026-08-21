@@ -29,13 +29,14 @@ function fmtPeriod(inv: InvoicePublic): string {
 export default async function InvoiceDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<JSX.Element> {
+  const { id } = await params;
   const { user, org } = await getSession();
 
   let invoice: InvoicePublic;
   try {
-    invoice = await apiFetch<InvoicePublic>(`/billing/invoices/${params.id}`);
+    invoice = await apiFetch<InvoicePublic>(`/billing/invoices/${id}`);
   } catch (err) {
     if (isApiErrorStatus(err, 404)) notFound();
     throw err;

@@ -18,9 +18,10 @@ function formatWhen(iso: string): string {
 export default async function LeadDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<JSX.Element> {
-  const { lead } = await apiFetch<LeadDetailResponse>(`/leads/${params.id}`);
+  const { id } = await params;
+  const { lead } = await apiFetch<LeadDetailResponse>(`/leads/${id}`);
 
   return (
     <OrgShell pageTitle="Lead">
