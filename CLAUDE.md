@@ -20,7 +20,7 @@ Operator-first (D2D's own knocker team runs campaigns for client orgs), SaaS-sel
 - **Monorepo**: pnpm 9 + Turbo. TypeScript 5.5 **ESM-only, strict, `noUncheckedIndexedAccess`**.
 - **API** (`apps/api`): NestJS-style on **Fastify** + **Prisma** + **Postgres 16 + PostGIS**. Domain-driven (`src/domains/*/{routes,service,schemas}.ts`).
 - **Web** (`apps/web-operator` = Command Centre, `apps/web-org`, `apps/public-site`, `apps/partner-portal`): **Next.js 16** (App Router, RSC). `web-operator` is the main operator surface.
-- **Mobile**: native iOS (Swift/SwiftUI) — `knocker-ios` (scaffold).
+- **Mobile**: native iOS (Swift/SwiftUI) — `apps/knocker-ios` (real app on the recovery branch: 55 Swift files, Keychain auth, offline sync, 21 wired endpoints).
 - **Infra**: Redis 7 + BullMQ; AWS (ECS Fargate, Aurora Serverless v2, RDS Proxy, ElastiCache, ALB, CloudFront, WAF) via Terraform in `infra/terraform`. Railway for current demo deploys.
 - **Money is always `BigInt` cents.** Use `<Money>` / `libs/shared-utils/money.ts`. Never floats.
 
@@ -40,13 +40,16 @@ Operator-first (D2D's own knocker team runs campaigns for client orgs), SaaS-sel
 - **Multi-tenant**: every regulated row carries `orgId`, `regionCode`, `brandCode`. Postgres RLS belt enforces tenant isolation.
 - Money / regulator / customer comms = **human-only**, queued, never autonomous.
 
-## Current state (2026-06-07)
+## Current state (2026-08-21)
 
-- **11 PRs open (`Brodie-Eaze/door-2-digital-platform/pulls`), NONE merged**: PR #9 (independent: menu fix + M2 IaC + M3 scale) → PR #1 (SOC2 floor) → #2…#8 (hardening) → #10 (final WARNs + SEC-010 + Next 16) → #11 (docs: CLAUDE.md + PRD + intelligence strategy). Merge **#9 first**, then #1→#10 in order, #11 independently. One 2-line `apps/api/src/index.ts` conflict to hand-resolve at #10.
-- **Security**: ~25 audit findings closed + a final adversarial review caught + fixed 4 BLOCKERs. Floor = RLS + token-revocation epoch + invite/role guards + demo-token rejection + SAML replay defence + login lockout + rate limits.
-- **AWS**: IaC is `terraform validate`-clean but **not applied** (no AWS account yet). Deploy steps in `infra/terraform/README.md` + the 6 human-only clicks.
-- **Backend wiring**: ~20% end-to-end. Many web-operator screens still on mock/seed data; M5 wired ~10 to live Prisma. Real production needs: AWS account → apply → MiCamp creds → domain → load test.
-- **Not done (human-gated)**: merge the PRs, AWS apply, MiCamp creds, domain, PII key rotation, external pen-test, SOC 2 auditor, lawyer, live 50k load test.
+- **History warning: main was reset after 14 Jun 2026.** GitHub shows PRs #2/#3/#5/#7/#10 as merged, but their merge commits are NOT in main's history; #4/#6/#8 were closed unmerged. Their content was stranded on local branches until recovered.
+- **PR #12 (`recover/hardening-stack`) is the recovery** — PR #9's green base + the local `staging` lineage merged in: 9 additional API domains (roster, catalog, field-signup, photo, voice, propensity, satellite, analytics, payment — 35 total, 15 workers), the real 10k-LOC Knocker iOS app, login lockout + unlock, Next 16 (web-operator), k6 load tests, M5 screen wiring, SEC blocker fixes. **Merge #12 (supersedes #9).** All previously local-only branches are backed up on origin: `staging`, `elevate/knocker-app`, `fix/soc2-security-floor-local`, `experiment/next15-upgrade`.
+- **Security floor** (on the recovery branch): RLS belt + tenant-scoped Prisma (`tenantPrismaTx`/`tenantTx` — never raw `prisma()` for tenant data), token-revocation epoch, invite/role guards, demo-token rejection, SAML replay defence, login lockout + admin unlock, SEC-010 IP-only rate keying, SEC-006 trustProxy=1, voice consent gate (`D2D_VOICE_ENABLED` + `consentObtained`, default off).
+- **Knocker iOS** (`apps/knocker-ios` on the recovery branch): real app, builds via `BUILD.md` xcodebuild runbook. Known Tier-0 gaps in `elevate/knocker-elevation.md` (fake commission display, consentGiven hardcoded false, sign-out deletes unsynced queue, placebo Sync-now). No CI for iOS yet.
+- **Backend wiring**: web-operator ~65 of 93 routes still on fixtures (`src/lib/seed/*`, `account-*.ts`, `fixtures.ts`); web-org has zero backend contact; partner-portal 100% `portal-data.ts`. The full route-by-route inventory is in the mock-data audit (see PR #12 description / docs/FABLE-TAKEOVER.md).
+- **AWS**: IaC `terraform validate`-clean, **not applied** (no AWS account yet). Runbook: `infra/terraform/README.md` + 6 human-only clicks.
+- **Gate gotchas**: PATCH routes never take `withIdempotency` (RFC 5789); Next 16 removed `next lint` (web-operator lints via direct eslint, eslint-config-next pinned 14.x while workspace is eslint 8); `_`-prefix doesn't silence no-unused-vars for args unless configured; vitest packages with no tests need `--passWithNoTests`; Semgrep blocks TLS < 1.2 in Terraform.
+- **Not done (human-gated)**: merge PR #12, AWS account + apply, MiCamp creds, domain, PII key rotation, external pen-test, SOC 2 auditor, lawyer, live 50k load test.
 
 ## Key docs
 
