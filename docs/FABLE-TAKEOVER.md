@@ -394,21 +394,21 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   money-cycle to the cent + human gate, RTBF at-rest erasure, voice double-gate,
   security floor. Full external pen test (D9) remains human-gated.
 
-**Known finding (tracked, low-severity) — "knocks today" counter divergence.**
-Visual verification of the deployed command-centre showed the top KPI "Knocks
-today" (`/api/metrics/realtime`, all users) reading a different value than the
-fleet-map panel "N knocks today" (`HQLiveMapImpl`, summing `/api/fleet`'s
-per-rep `knocksToday`, active-session users only). Both filter
-`capturedAt >= setHours(0,0,0,0)` computed at request time, so the divergence is
-a "today"-window/scope interaction (the Railway container runs UTC; the two
-polls resolve the day boundary at slightly different moments, and one is the
-all-users total vs the other the active-session subset). It is a DISPLAY
-consistency nuance, not a data-correctness bug — the underlying knock rows are
-correct. Proper fix: make "today" a single shared, timezone-explicit definition
-(e.g. a `startOfDayUTC()` helper both endpoints import, or org-local day) so the
-two counters can never disagree. Deferred rather than patched blind — it needs a
-query against the deployed DB + container clock to verify, which shouldn't be
-guessed at.
+**Finding FIXED + verified live — fleet/active-rep duplicate-session inflation.**
+Live visual verification of the deployed command-centre showed the top KPI
+"Knocks today" (3) diverging from the fleet-map panel "knocks today" (15). Root
+cause (found by comparing `/api/metrics/realtime` and `/api/fleet` at the same
+moment): a knocker can hold several open `KnockSession` rows (an app restart or
+re-login that never sets `endedAt`). `/api/fleet` mapped ONE ROW PER SESSION, so
+one rep with 3 knocks and 5 open sessions rendered as 5 duplicate map pins and
+summed 5×3 = 15; `/api/metrics/realtime` counted open SESSIONS (5) as "active
+iPads" rather than distinct knockers (1). Fix (commit `51fdf98`): `/api/fleet`
+collapses to one row per user (keeping the session with the most recent knock);
+`/api/metrics/realtime` counts distinct session users via `groupBy`. Deployed +
+verified: both now read `knocksToday: 3, activeReps: 1`, fleet returns a single
+row summing to 3 — the counters reconcile. (Note: the underlying stale-open-
+session data is a separate hygiene item — the app/a cleanup job should close
+sessions on clock-out; the endpoints are now robust to it regardless.)
 
 Still human-gated: **D4** (AWS/Terraform apply — no account), **D5-scale** (50k
 load test on real infra), **D9-external** (CREST pen-test firm), **D11-onboarding
