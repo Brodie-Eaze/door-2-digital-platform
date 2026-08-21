@@ -305,6 +305,27 @@ knocks[]}`. Fix: match the real shape, mark items complete off
      a real device the default access group makes this work; and pure-offline shift
      start (never online to open a session) still needs the local→server session-id
      reconcile path.
+- **D1 (loop on live data) — write path proven (see D3); web surfaces being
+  de-fixtured.** The knock→platform leg is proven live (D3). Web-operator
+  page-route mock/seed audit went from 5 fixture-wired routes to 2:
+  `/overview` and `/accounts/[slug]/leads` now show honest "Live data
+  unavailable" states instead of fabricated fixtures on DB failure, and the
+  leads list derives source/assignee from real fields (no more round-robin /
+  hardcoded-name fabrication); `/command-centre` (the main operator surface) is
+  now fully live — a new `/api/metrics/rollup` endpoint feeds the week/MTD/
+  revenue/roster/territory KPIs straight from Prisma, KPIs render `—` until
+  their live source answers, all fabricated deltas removed, and zero-activity
+  now reads as a live answer (a real org no longer borrows another org's demo
+  numbers). Remaining: the two `/planning` routes still render the
+  `PlanningSurface` from `account-planning` fixtures — that's an AI
+  forecasting feature with no live backing model yet (same category as the
+  command-centre AI-zones/anomalies, which already show honest empty states).
+  Both now carry a visible `fixture` DataSourceBadge so no operator mistakes a
+  demo forecast for a real staffing rec. DECISION FOR BRODIE: build a real
+  planning/forecast model, or replace the planning demo with an honest
+  "arrives with the propensity engine" empty state. The `grep`-clean D1 proof
+  isn't met until that's resolved and the web changes are deployed + walked
+  end-to-end on a fresh org.
 - **D2 (multi-tenant isolation) — PROVEN in suite AND live in prod.** The full
   integration suite is 374/374 green (28 files), including the dedicated
   `cross-tenant-isolation` suite (9), `tenant-prisma` read/write isolation (12),
