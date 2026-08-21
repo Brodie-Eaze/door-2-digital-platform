@@ -69,7 +69,12 @@ async function shipBatch(): Promise<void> {
   for (const [regionCode, regionRows] of byRegion) {
     const now = new Date();
     const key = buildS3Key(regionCode, now);
-    const body = regionRows.map((r) => JSON.stringify(r)).join('\n');
+    // BigInt-safe: audit rows can carry money (cents) as BigInt, which
+    // JSON.stringify rejects. Serialize BigInt as a decimal string — the
+    // codebase's money-on-the-wire convention (ADR-0007).
+    const body = regionRows
+      .map((r) => JSON.stringify(r, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
+      .join('\n');
 
     await s3.send(
       new PutObjectCommand({
