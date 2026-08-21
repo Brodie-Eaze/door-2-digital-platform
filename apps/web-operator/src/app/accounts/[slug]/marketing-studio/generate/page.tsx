@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Wand2,
   Sparkles,
@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Lock,
-  Eye,
   ShieldAlert,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, Skeleton, StatusPill } from '@d2d/ui-web';
@@ -20,21 +19,16 @@ import { AccountShell } from '@/components/AccountShell';
 import { DataSourceBadge, type DataSource } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
-import { MarketingStudioEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
-import { firstRunSnapshot } from '@/lib/first-run';
-import {
-  getAccountMarketing,
-  CHANNEL_LABEL,
-  type Channel,
-  type Format,
-} from '@/lib/account-marketing';
+import { CHANNEL_LABEL, type Channel, type Format } from '@/lib/marketing-taxonomy';
 import { pickCreativeImage, type CreativeTheme } from '@/lib/creative-images';
 
 /**
- * Per-account creative generator — same 3-pane layout as HQ but the brief is
- * pre-populated with this account's vertical, region, brand voice, and only
- * shows channels/formats the account actually runs.
+ * Per-account creative generator. The brief is pre-loaded with this
+ * account's real vertical/region (from Org) and the channels it actually
+ * has a connected provider for — not a fixture registry. Generation calls
+ * the real platform BFF (/api/marketing/generate, /api/marketing/queue);
+ * when the upstream isn't configured it falls back to disclosed sample
+ * variants (never silently, always via the DataSourceBadge + a banner).
  */
 
 interface PageProps {
@@ -53,174 +47,23 @@ interface Variant {
   status: 'preview' | 'approved' | 'rejected';
 }
 
-const ACCOUNT_BRIEF_DEFAULTS: Record<
-  string,
-  {
-    audience: string;
-    headlineGoal: string;
-    brandKit: string;
-  }
-> = {
-  'hope-forward': {
-    audience: 'TX-based households · age 35-65 · prior charitable givers · $50k+ HHI',
-    headlineGoal: 'Drive recurring $5/wk sponsorship via ACH',
-    brandKit: 'Hope Forward · navy + gold · Inter · 4-star Charity Navigator',
-  },
-  'world-vision': {
-    audience: 'AU households · age 35-65 · NSW/VIC SEIFA-9 · prior child sponsors',
-    headlineGoal: 'Drive AUD $50/mo child sponsorship via direct debit',
-    brandKit: 'World Vision AU · orange + navy · Inter · ACNC-registered',
-  },
-  pestmax: {
-    audience: 'TX + AZ homeowners · age 30-60 · single-family detached · pest pain past 90d',
-    headlineGoal: 'Drive same-week annual pest plan signups · $48/mo',
-    brandKit: 'PestMax · green + black · Inter · TX-CPM 8845 · OPM 9112',
-  },
-  'gold-coast-hospital': {
-    audience:
-      'QLD high-income · age 50-75 · GCH catchment · prior major donors / bequest prospects',
-    headlineGoal: 'Drive monthly capital-campaign pledge or bequest enquiry',
-    brandKit: 'GCH Foundation · navy + teal · Inter · ACNC · AHPRA-compliant',
-  },
-};
+interface OrgBrief {
+  tradingName: string;
+  regionCode: 'AU' | 'US' | 'SG';
+  vertical: 'charity' | 'commercial' | null;
+  channels: Channel[];
+}
 
-const SEED_HEADLINES: Record<string, Array<{ headline: string; copy: string }>> = {
-  'hope-forward': [
-    {
-      headline: 'Five dollars covers a meal — every Tuesday.',
-      copy: 'Hope Forward · TX recurring giving · $5/wk · ACH or card · tax-deductible.',
-    },
-    {
-      headline: 'Sponsor a child for $5/week — start in 2 minutes.',
-      copy: 'Recurring monthly · cancel anytime · 4-star Charity Navigator · 92¢ to programs.',
-    },
-    {
-      headline: 'Help feed 50 Texas families this month.',
-      copy: 'Hope Forward · TX hunger relief · $25 covers a family · tax receipt by email.',
-    },
-    {
-      headline: 'Texas wildfires · your gift goes 100% to recovery.',
-      copy: 'Hope Forward emergency · matched 2:1 by board · gifts processed in 2 hours.',
-    },
-    {
-      headline: 'A Hope Forward dollar lasts longer.',
-      copy: '92¢ of every dollar to programs · tax-deductible · EIN 47-8821334.',
-    },
-    {
-      headline: 'Renew your faith in giving — Hope Forward 2026.',
-      copy: 'Annual giving day · 7 May 2026 · matched 2:1 by anonymous donor.',
-    },
-    {
-      headline: 'Clean water for a Houston classroom · $40.',
-      copy: 'Hope Forward water · one classroom = 28 kids drinking safely for a year.',
-    },
-    {
-      headline: 'Our nurses thank you for your monthly gift.',
-      copy: 'Hope Forward medical · mobile clinics across TX · $30/mo funds one visit.',
-    },
-  ],
-  'world-vision': [
-    {
-      headline: 'Sponsor a child in Cebu — AUD $50/month.',
-      copy: 'World Vision AU · child sponsorship · ACNC-registered · tax-deductible · cancel anytime.',
-    },
-    {
-      headline: 'For every child sponsored in Cebu, a Knocker plants a tree.',
-      copy: 'World Vision AU · ACNC-registered · paid solicitor licensed VIC + NSW.',
-    },
-    {
-      headline: '3 in 5 Aussie families need help this winter.',
-      copy: 'World Vision AU · winter appeal · SEIFA decile-9 targeting · tax-deductible.',
-    },
-    {
-      headline: '1L of clean water for a Khmer village · $20.',
-      copy: 'World Vision AU water · Cambodia · ACNC · tax-deductible · 100% to wells.',
-    },
-    {
-      headline: 'EOFY · double your tax refund · donate before 30 June.',
-      copy: 'World Vision AU · End of Financial Year giving · ACNC · receipt by email.',
-    },
-    {
-      headline: 'A nurse in Khmer reaches your sponsored child every month.',
-      copy: 'World Vision AU · child sponsorship · medical reach · ACNC · tax-deductible.',
-    },
-    {
-      headline: 'Bushfire recovery · $40 funds a family for a week.',
-      copy: 'World Vision AU · disaster relief · NSW/VIC bushfire recovery · ACNC.',
-    },
-    {
-      headline: 'Aussie kids on the line · sponsor a child in NT today.',
-      copy: 'World Vision AU · NT remote programs · ACNC · paid solicitor WA0118.',
-    },
-  ],
-  pestmax: [
-    {
-      headline: "Don't share your meal with roaches · Texas-licensed.",
-      copy: 'PestMax · Houston + Austin · same-day service · TX-CPM 8845.',
-    },
-    {
-      headline: 'Year-round pest protection · free re-treat included.',
-      copy: 'PestMax annual plan $48/mo · TX-licensed CPM 8845 · EPA-registered.',
-    },
-    {
-      headline: 'AZ termite season starts in May · we knock at 9am.',
-      copy: 'PestMax · AZ termite specialists · OPM 9112 · EPA · same-week service.',
-    },
-    {
-      headline: 'Bedbug? We come tonight. PestMax 24/7.',
-      copy: 'PestMax bedbug emergency · TX-CPM 8845 · same-night response · 90-day guarantee.',
-    },
-    {
-      headline: 'Roach-free in 1 visit or we come back free.',
-      copy: 'PestMax · TX + AZ · EPA-registered · CPM 8845 / OPM 9112 · contract terms.',
-    },
-    {
-      headline: 'Warranty renewal · $39/mo locks in 2026 rates.',
-      copy: 'PestMax loyalty renewal · prior customers · TX + AZ · CPM 8845.',
-    },
-    {
-      headline: 'PestMax · we live where you live.',
-      copy: 'Local techs · TX + AZ · CPM 8845 · OPM 9112 · neighborhood field crews.',
-    },
-    {
-      headline: 'Mosquito-free yard · before your BBQ.',
-      copy: 'PestMax mosquito service · 21-day window · EPA · same-week appt.',
-    },
-  ],
-  'gold-coast-hospital': [
-    {
-      headline: 'Help fund the new oncology wing · Gold Coast Hospital.',
-      copy: 'Gold Coast Hospital Foundation · capital campaign · tax-deductible · ACNC.',
-    },
-    {
-      headline: 'One pledge a month feeds research at GCH.',
-      copy: 'Gold Coast Hospital Foundation · monthly giving · ACNC · TGA-compliant.',
-    },
-    {
-      headline: 'Our nurses thank you for your bequest.',
-      copy: 'Gold Coast Hospital Foundation · bequest program · ACNC · solicitor referral inside.',
-    },
-    {
-      headline: 'New oncology wing · open 2027 · be part of it.',
-      copy: 'GCH Foundation · capital campaign · ACNC · TGA · AHPRA-compliant.',
-    },
-    {
-      headline: 'GCH paediatric wing · meet the team.',
-      copy: 'GCH Foundation · paediatric appeal · ACNC · TGA-compliant content.',
-    },
-    {
-      headline: 'Capital campaign · we are 74% there.',
-      copy: 'GCH Foundation · capital campaign · progress update · ACNC.',
-    },
-    {
-      headline: 'Every bequest builds a wing.',
-      copy: 'GCH Foundation · bequest program · ACNC · solicitor referrals listed.',
-    },
-    {
-      headline: 'GCH paediatric · sponsor a hospital room.',
-      copy: 'GCH Foundation · room-naming opportunity · major gifts · ACNC.',
-    },
-  ],
+interface ApiProvider {
+  kind: string;
+  status: string;
+}
+
+const PROVIDER_TO_CHANNEL: Record<string, Channel> = {
+  meta_marketing: 'meta',
+  google_ads: 'google',
+  tiktok_marketing: 'tiktok',
+  youtube: 'youtube',
 };
 
 function djb2(s: string): number {
@@ -230,80 +73,99 @@ function djb2(s: string): number {
 }
 
 /**
- * Plain-language explanation of why a variant failed safety. In production the
- * Fastify safety scanner returns a structured reason; until that field is wired
- * we derive a deterministic, human-readable reason from the variant content so
- * the "View issue" panel is never empty and never generic.
+ * Disclosed sample variants shown ONLY when the upstream AI service isn't
+ * reachable — echoes the operator's own brief instead of inventing
+ * account-specific marketing claims (license numbers, stats, EINs).
  */
-function safetyIssueReason(v: { headline: string; copy: string }): string {
-  const text = `${v.headline} ${v.copy}`.toLowerCase();
-  if (/guarantee|guaranteed|100%|risk-free|or we come back free/.test(text)) {
-    return 'Flagged for an absolute claim ("guaranteed"/"100%"/"free re-do") — efficacy promises need substantiation under the account rule pack before this can run.';
-  }
-  if (/\d+\s*in\s*\d+|\d+¢|double your|\d+%/.test(text)) {
-    return 'Flagged for an unsourced statistic or financial claim — the figure needs a cited source before this can run under the fundraising/advertising code.';
-  }
-  return "Flagged by the safety scanner against this account's vertical rule pack — a claim requires substantiation or a sensitive-targeting review. A human must resolve the flag before this variant can be approved.";
-}
-
-function buildSeedVariants(slug: string, themes: CreativeTheme[]): Variant[] {
-  const seeds = SEED_HEADLINES[slug] ?? SEED_HEADLINES['hope-forward']!;
+function buildSampleVariants(headlineGoal: string, theme: CreativeTheme): Variant[] {
   const caps: Array<Variant['capability']> = ['image', 'image', 'carousel', 'video'];
-  return seeds.slice(0, 8).map((s, i) => {
-    const themeIdx = djb2(`${slug}-${i}`) % themes.length;
-    const cap = caps[i % caps.length]!;
+  return Array.from({ length: 4 }).map((_, i) => {
+    const id = `sample_${(i + 1).toString().padStart(2, '0')}`;
     return {
-      id: `${slug}_var_${(i + 1).toString().padStart(2, '0')}`,
-      headline: s.headline,
-      copy: s.copy,
-      theme: themes[themeIdx]!,
-      capability: cap,
-      safetyPass: i !== 4, // simulate one safety flag for variety
-      cost: 0.32 + i * 0.04,
-      c2paId: `c2pa-${slug.slice(0, 2)}${(9421 + i).toString(16)}`,
-      status: 'preview',
+      id,
+      headline: headlineGoal || 'Sample headline — edit the brief and generate',
+      copy: 'Sample variant — AI generation is not connected in this environment.',
+      theme,
+      capability: caps[i % caps.length]!,
+      safetyPass: true,
+      cost: 0,
+      c2paId: `sample-${djb2(id).toString(16)}`,
+      status: 'preview' as const,
     };
   });
 }
 
+function safetyIssueReason(): string {
+  return 'Flagged by the safety scanner — a claim requires substantiation or a sensitive-targeting review. A human must resolve the flag before this variant can be approved.';
+}
+
 export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
-  const data = getAccountMarketing(params.slug);
-  const briefDefaults =
-    ACCOUNT_BRIEF_DEFAULTS[params.slug] ?? ACCOUNT_BRIEF_DEFAULTS['hope-forward']!;
-  const themes = data?.themes ?? [];
-  const channels = data?.channels ?? ['meta'];
 
-  const [audience, setAudience] = useState(briefDefaults.audience);
-  const [headlineGoal, setHeadlineGoal] = useState(briefDefaults.headlineGoal);
-  const [channel, setChannel] = useState<Channel>(channels[0] ?? 'meta');
+  const [org, setOrg] = useState<OrgBrief | null>(null);
+  const [orgLoadError, setOrgLoadError] = useState<string | null>(null);
+
+  const [audience, setAudience] = useState('');
+  const [headlineGoal, setHeadlineGoal] = useState('');
+  const [channel, setChannel] = useState<Channel>('meta');
   const [format, setFormat] = useState<Format>('image');
-  const [brandKit, setBrandKit] = useState(briefDefaults.brandKit);
+  const [brandKit, setBrandKit] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  // Empty state before the first generation — no pre-seeded variants. The
-  // operator sees their pre-loaded brief and an honest "nothing generated yet".
   const [variants, setVariants] = useState<Variant[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Has the user run a generation this session? Controls the empty state +
-  // whether the data-source badge is meaningful yet.
   const [hasGenerated, setHasGenerated] = useState(false);
-  // Honest data-source signal: 'live' when the API returned real variants,
-  // 'fixture' when we fell back to sample variants.
   const [dataSource, setDataSource] = useState<DataSource>('fixture');
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-  // Honest failure surface: when the upstream call fails we keep the brief and
-  // show this banner rather than pretending the generation succeeded.
   const [genError, setGenError] = useState<string | null>(null);
-  // "Still working…" hint once a generation passes 30s.
   const [slowHint, setSlowHint] = useState(false);
-  // View-issue panel for safety-failed variants.
   const [issueVariantId, setIssueVariantId] = useState<string | null>(null);
-  // In-flight controller so a new generate (or unmount) aborts the previous.
   const abortRef = useRef<AbortController | null>(null);
 
   const GENERATE_TIMEOUT_MS = 90_000;
   const SLOW_HINT_MS = 30_000;
+
+  useEffect(() => {
+    // W3 fix: no longer gated on the fixture-keyed firstRunSnapshot — see
+    // brand-safety/page.tsx for the full rationale.
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/orgs/${encodeURIComponent(params.slug)}/marketing/providers`,
+          { credentials: 'include' },
+        );
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const json = (await res.json()) as {
+          providers: ApiProvider[];
+          org: {
+            tradingName: string;
+            regionCode: 'AU' | 'US' | 'SG';
+            vertical: 'charity' | 'commercial' | null;
+          };
+        };
+        if (cancelled) return;
+        const channels = Array.from(
+          new Set(
+            json.providers
+              .filter((p) => p.status === 'connected' && PROVIDER_TO_CHANNEL[p.kind])
+              .map((p) => PROVIDER_TO_CHANNEL[p.kind]!),
+          ),
+        );
+        const brief: OrgBrief = { ...json.org, channels };
+        setOrg(brief);
+        setChannel(channels[0] ?? 'meta');
+        setBrandKit(json.org.tradingName);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[generate] org load failed:', err);
+          setOrgLoadError('Could not load this account — please retry.');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.slug]);
 
   const availableFormats: Array<{ value: Format; label: string }> = useMemo(() => {
     const formats: Format[] =
@@ -311,24 +173,11 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
     return formats.map((f) => ({ value: f, label: f.charAt(0).toUpperCase() + f.slice(1) }));
   }, [channel]);
 
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account || !data || firstRun.isFirstRun) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Generator">
-        <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <MarketingStudioEmpty slug={params.slug} accountName={firstRun.accountName} />
-        </div>
-      </AccountShell>
-    );
-  }
+  const theme: CreativeTheme = org?.vertical === 'charity' ? 'charity_food' : 'business_b2b';
 
   async function handleGenerate(): Promise<void> {
-    if (!account || !data) return; // narrowed above, but TS can't carry it into this closure
+    if (!org) return;
 
-    // Cancel any prior in-flight generation.
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -341,14 +190,9 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
     const slowTimer = setTimeout(() => setSlowHint(true), SLOW_HINT_MS);
     const timeoutTimer = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
 
-    // Seed fallback shared by every non-live path — shown honestly, never silently.
     const seedFallback = (): void => {
-      const seeds = buildSeedVariants(params.slug, themes).map((v) => ({
-        ...v,
-        status: 'preview' as const,
-      }));
-      setVariants(seeds);
-      setSelectedId(seeds[0]?.id ?? null);
+      setVariants(buildSampleVariants(headlineGoal, theme));
+      setSelectedId(`sample_01`);
       setDataSource('fixture');
     };
 
@@ -358,16 +202,14 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
         headers: { 'content-type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          // BFF schema only accepts charity | commercial — healthcare maps to commercial.
-          vertical: data.vertical === 'charity' ? 'charity' : 'commercial',
-          region: data.region,
-          audience: data.scopeLabel,
-          headlineGoal: themes.length > 0 ? themes.join(', ') : 'brand awareness',
+          vertical: org.vertical === 'charity' ? 'charity' : 'commercial',
+          region: org.regionCode,
+          audience: audience || org.tradingName,
+          headlineGoal: headlineGoal || 'brand awareness',
           channel,
           format,
-          brandKit: account.shortName,
+          brandKit,
           orgId: params.slug,
-          themes,
           variantCount: variants.length || 8,
         }),
       });
@@ -375,26 +217,19 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
       if (res.ok) {
         const json = (await res.json()) as { variants?: Variant[] };
         if (Array.isArray(json.variants) && json.variants.length > 0) {
-          // Sync result: real AI variants from the upstream service. Guard the
-          // theme field — live variants may not carry one yet.
-          const fallbackTheme: CreativeTheme = themes[0] ?? 'business_b2b';
-          const live = json.variants.map((v) => ({ ...v, theme: v.theme ?? fallbackTheme }));
+          const live = json.variants.map((v) => ({ ...v, theme: v.theme ?? theme }));
           setVariants(live);
           setSelectedId(live[0]?.id ?? null);
           setDataSource('live');
           setGeneratedAt(new Date());
         } else {
-          // 200 but no variants yet (async job). The brief was accepted but no
-          // creatives are ready — show samples and say so honestly.
           seedFallback();
           setGenError(
             'Generation was accepted as an async job — no AI variants are ready yet, so these are sample variants. Your brief is saved.',
           );
         }
       } else {
-        // API error (e.g. NEXT_PUBLIC_API_URL not set in this environment).
-        // Show sample variants but never let the user believe the call succeeded.
-        console.warn('[generate] API returned', res.status, '— using seed variants');
+        console.warn('[generate] API returned', res.status, '— using sample variants');
         seedFallback();
         setGenError(
           "AI generation isn't connected in this environment — showing sample variants. Your brief is saved.",
@@ -419,8 +254,6 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
   }
 
   function approve(id: string): void {
-    // SAFETY HARD-BLOCK: a safety-failed variant can never be approved, no
-    // matter which control invoked approve(). Open its issue panel instead.
     const target = variants.find((v) => v.id === id);
     if (target && !target.safetyPass) {
       setIssueVariantId(id);
@@ -436,8 +269,6 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
   }
 
   function regenerate(id: string): void {
-    // The image is keyed by variant id, so re-id to swap the creative — and
-    // follow the selection/issue pointers so the panel doesn't lose its target.
     const newId = `${id}-r${Date.now() % 1000}`;
     setVariants((vs) =>
       vs.map((v) => (v.id === id ? { ...v, id: newId, status: 'preview' as const } : v)),
@@ -447,7 +278,6 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
   }
 
   async function sendToQueue(ids: string[]): Promise<void> {
-    // Defence in depth: never queue a safety-failed variant even if one slips in.
     const safe = ids.filter((id) => variants.find((v) => v.id === id)?.safetyPass);
     if (safe.length === 0) {
       toast.error('No queue-eligible variants — safety-failed creatives are blocked.');
@@ -462,7 +292,6 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
       if (res.ok) {
         const json = (await res.json()) as { queued?: number };
         const n = typeof json.queued === 'number' ? json.queued : safe.length;
-        // Mark the queued variants approved so the UI reflects the action.
         setVariants((vs) =>
           vs.map((v) => (safe.includes(v.id) ? { ...v, status: 'approved' as const } : v)),
         );
@@ -476,22 +305,43 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
     }
   }
 
+  if (orgLoadError) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Generator">
+        <div className="card card-pad text-center py-8 max-w-[1400px]">
+          <div className="text-[13px] text-ink mb-2" role="alert">
+            {orgLoadError}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+        </div>
+      </AccountShell>
+    );
+  }
+
+  if (!org) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Generator">
+        <div className="card card-pad text-center py-10 text-[12px] text-muted max-w-[1400px]">
+          Loading account…
+        </div>
+      </AccountShell>
+    );
+  }
+
   const selected = variants.find((v) => v.id === selectedId);
   const issueVariant = variants.find((v) => v.id === issueVariantId && !v.safetyPass);
   const approvedCount = variants.filter((v) => v.status === 'approved').length;
   const rejectedCount = variants.filter((v) => v.status === 'rejected').length;
   const safetyPassCount = variants.filter((v) => v.safetyPass).length;
   const totalCost = variants.reduce((s, v) => s + v.cost, 0);
-  // Variants eligible to queue: safety-passed, not already rejected.
   const queueableIds = variants
     .filter((v) => v.safetyPass && v.status !== 'rejected')
     .map((v) => v.id);
 
   return (
-    <AccountShell
-      accountSlug={params.slug}
-      pageTitle={`Marketing Studio · ${account.shortName} · Generator`}
-    >
+    <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Generator">
       <div className="space-y-4 max-w-[1700px]">
         <MarketingStudioTabs slug={params.slug} active="generate" />
 
@@ -532,7 +382,7 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
             <ShieldAlert size={16} className="text-danger shrink-0 mt-0.5" />
             <div className="flex-1 text-[12.5px] text-ink leading-snug">
               <span className="font-semibold">{issueVariant.id} failed safety review.</span>{' '}
-              {safetyIssueReason(issueVariant)}
+              {safetyIssueReason()}
             </div>
             <button
               type="button"
@@ -549,26 +399,18 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
           <span className="text-[13px] flex items-center gap-2">
             <Wand2 size={14} className="text-accent" />
             <span>
-              <span className="font-semibold">{data.scopeLabel}</span> generator · pre-loaded with
-              this account&apos;s vertical ({data.vertical}), region ({data.region}), brand voice,
-              and the {data.channels.length} channels you actually run. Every output is
-              moderation-scanned and brand-safety-checked against your account&apos;s rule pack
-              before it leaves this surface.
+              <span className="font-semibold">{org.tradingName}</span> generator · pre-loaded with
+              this account&apos;s vertical ({org.vertical ?? 'unset'}), region ({org.regionCode}),
+              and the {org.channels.length} channel{org.channels.length === 1 ? '' : 's'} you have a
+              connected provider for. Every output is moderation-scanned before it leaves this
+              surface.
             </span>
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard
-            label="Variants this brief"
-            value={variants.length}
-            hint={`${data.themes.length} themes × ${data.channels.length} channels`}
-          />
-          <KpiCard
-            label="Safety pass"
-            value={`${safetyPassCount} / ${variants.length}`}
-            hint={`${data.brandRules.length} rules applied`}
-          />
+          <KpiCard label="Variants this brief" value={variants.length} />
+          <KpiCard label="Safety pass" value={`${safetyPassCount} / ${variants.length}`} />
           <KpiCard
             label="Approved · queued"
             value={approvedCount}
@@ -585,14 +427,15 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* LEFT — Brief form */}
           <div className="lg:col-span-3">
-            <Section title="Brief" subtitle={`${account.shortName} · ${data.region}`}>
+            <Section title="Brief" subtitle={`${org.tradingName} · ${org.regionCode}`}>
               <div className="space-y-3">
-                <Readonly label="Vertical" value={data.vertical} />
-                <Readonly label="Region" value={data.region} />
+                <Readonly label="Vertical" value={org.vertical ?? 'unset'} />
+                <Readonly label="Region" value={org.regionCode} />
                 <Field label="Audience">
                   <textarea
                     className="w-full text-[12px] border border-line2 rounded-md px-2.5 py-2 bg-paper text-ink resize-none leading-snug"
                     rows={3}
+                    placeholder="Describe who this brief targets"
                     value={audience}
                     onChange={(e) => setAudience(e.target.value)}
                   />
@@ -600,16 +443,24 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
                 <Field label="Headline goal">
                   <input
                     className="w-full text-[12px] border border-line2 rounded-md px-2.5 py-2 bg-paper text-ink"
+                    placeholder="What should the headline drive?"
                     value={headlineGoal}
                     onChange={(e) => setHeadlineGoal(e.target.value)}
                   />
                 </Field>
-                <Field label={`Channel · ${data.channels.length} available`}>
-                  <PillToggle
-                    value={channel}
-                    options={data.channels.map((c) => ({ value: c, label: CHANNEL_LABEL[c] }))}
-                    onChange={(v) => setChannel(v)}
-                  />
+                <Field label={`Channel · ${org.channels.length} connected`}>
+                  {org.channels.length === 0 ? (
+                    <div className="text-[11px] text-muted">
+                      No ad provider connected yet — connect one in Integrations to unlock channel
+                      targeting.
+                    </div>
+                  ) : (
+                    <PillToggle
+                      value={channel}
+                      options={org.channels.map((c) => ({ value: c, label: CHANNEL_LABEL[c] }))}
+                      onChange={(v) => setChannel(v)}
+                    />
+                  )}
                 </Field>
                 <Field label="Format">
                   <PillToggle
@@ -639,22 +490,8 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
                   }
                   className="w-full"
                 >
-                  {isGenerating ? 'Generating variants…' : 'Generate 8 variants'}
+                  {isGenerating ? 'Generating variants…' : 'Generate variants'}
                 </Button>
-                <div className="pt-2 border-t border-line2">
-                  <div className="text-[10px] uppercase tracking-wider text-muted font-medium mb-1.5">
-                    Pipeline · estimated
-                  </div>
-                  <div className="space-y-1 text-[11px]">
-                    <BriefMeta label="Compose" value="claude-3-5-sonnet · ~$0.04" />
-                    <BriefMeta label="Image gen" value="flux-1.1-pro · ~$0.32" />
-                    <BriefMeta
-                      label="Safety scan"
-                      value={`${data.brandRules.length} rules · ~$0.02`}
-                    />
-                    <BriefMeta label="C2PA sign" value="ed25519 · $0.00" />
-                  </div>
-                </div>
               </div>
             </Section>
           </div>
@@ -663,7 +500,6 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
           <div className="lg:col-span-6">
             <Section
               title={`Preview · ${variants.length} variants`}
-              subtitle="Themes drawn from your account's brand voice"
               action={
                 hasGenerated ? (
                   <DataSourceBadge source={dataSource} updatedAt={generatedAt} />
@@ -700,9 +536,8 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
                   </div>
                   <div className="text-[13px] font-semibold text-ink mb-1">No variants yet</div>
                   <div className="text-[12px] text-muted leading-snug max-w-sm mx-auto mb-4">
-                    Your brief is pre-loaded with {account.shortName}&apos;s vertical, region, and
-                    brand voice. Generate to see 8 brand-safe variants — every output is
-                    moderation-scanned before it lands here.
+                    Fill in the brief and generate — every output is moderation-scanned before it
+                    lands here.
                   </div>
                   <Button
                     variant="primary"
@@ -710,7 +545,7 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
                     leftIcon={<Sparkles size={12} />}
                     onClick={handleGenerate}
                   >
-                    Generate 8 variants
+                    Generate variants
                   </Button>
                 </div>
               ) : (
@@ -742,49 +577,29 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
                 <div className="space-y-3 text-[12px]">
                   <SafetyRow
                     icon={<ShieldCheck size={13} className="text-success" />}
-                    label="Anthropic moderation"
+                    label="Moderation scan"
                     pass={selected.safetyPass}
                     detail={
                       selected.safetyPass
-                        ? 'All categories below threshold.'
-                        : 'Flagged for review against vertical rule pack.'
-                    }
-                  />
-                  <SafetyRow
-                    icon={<Sparkles size={13} className="text-accent" />}
-                    label={`Vertical rules (${data.vertical}/${data.region})`}
-                    pass={selected.safetyPass}
-                    detail={
-                      selected.safetyPass
-                        ? `${data.brandRules.length} rules passed · ${data.region}-specific code applied.`
-                        : 'Substantiation required for one efficacy/impact claim.'
+                        ? 'Passed the moderation scan.'
+                        : 'Flagged for review — a human must resolve this before approval.'
                     }
                   />
                   <SafetyRow
                     icon={<Lock size={13} className="text-accent" />}
-                    label="Image safety (Sightengine)"
-                    pass={true}
-                    detail="NSFW 0.01 · violence 0.00 · brand-logo collision 0.02 (clear)."
-                  />
-                  <SafetyRow
-                    icon={<AlertTriangle size={13} className="text-warn" />}
-                    label="Legal-hold flag"
-                    pass={true}
-                    detail="No legal-hold record matched account or program names."
+                    label="Approval status"
+                    pass={selected.status !== 'rejected'}
+                    detail={`Status: ${selected.status}.`}
                   />
                   <div className="pt-3 border-t border-line2">
                     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted font-medium mb-1.5">
-                      <FileCheck2 size={11} className="text-accent" /> C2PA manifest preview
+                      <FileCheck2 size={11} className="text-accent" /> C2PA manifest
                     </div>
                     <div className="bg-paper border border-line2 rounded-md p-2.5 font-mono text-[10px] leading-relaxed text-ink space-y-0.5">
                       <div>
                         manifest_id: <span className="text-accent">{selected.c2paId}</span>
                       </div>
                       <div>account: {params.slug}</div>
-                      <div>vertical: {data.vertical}</div>
-                      <div>region: {data.region}</div>
-                      <div>model: anthropic/claude-3.5-sonnet</div>
-                      <div>image_model: flux-1.1-pro</div>
                       <div>cost_cents: {Math.round(selected.cost * 100)}</div>
                       <div>
                         safety_scan:{' '}
@@ -1080,30 +895,9 @@ function VariantCard({
             >
               <RefreshCw size={11} />
             </button>
-            <button
-              type="button"
-              className="w-5 h-5 rounded hover:bg-paper flex items-center justify-center text-soft"
-              title={variant.safetyPass ? 'Inspect in safety panel' : 'View safety issue'}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (variant.safetyPass) onSelect();
-                else onViewIssue();
-              }}
-            >
-              <Eye size={11} />
-            </button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function BriefMeta({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted">{label}</span>
-      <span className="text-ink font-mono">{value}</span>
     </div>
   );
 }

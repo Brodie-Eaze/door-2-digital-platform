@@ -71,7 +71,7 @@ export function ConversionsLedger({
       subtitle="Reverse-chronological · click any row for the full audit chain"
       action={
         <div className="flex items-center gap-3">
-          <DataSourceBadge source="fixture" />
+          <DataSourceBadge source="live" />
           <span className="text-[11px] text-muted numeric">
             Total visible:{' '}
             <Money cents={ledgerTotalCents} region={region} className="!text-[12px]" />
@@ -82,7 +82,7 @@ export function ConversionsLedger({
     >
       <div className="px-5 pt-3 -mb-1">
         <p className="text-[11px] text-muted">
-          Demo data — live audit-chain wiring lands in Phase 1.2
+          Live from Postgres — full audit-chain drill-down lands in Phase 1.2
         </p>
       </div>
       <div className="max-h-[760px] overflow-y-auto">

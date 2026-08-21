@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState, useEffect, useRef, type DragEvent } from 'react';
+import { use, useState, useEffect, useRef, type DragEvent } from 'react';
 import {
   Phone,
   Mail,
@@ -36,9 +36,39 @@ import { AccountShell } from '@/components/AccountShell';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 import { PipelineLeadConversation } from '@/components/PipelineLeadConversation';
-import { PipelineEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { accountData, PIPELINE_STAGES, type LeadRow } from '@/lib/account-fixtures';
-import { firstRunSnapshot } from '@/lib/first-run';
+import { PipelineEmpty } from '@/components/AccountEmptyStates';
+
+// Stage config — NOT fixture data, just the fixed Kanban column definitions
+// (LeadStatus enum → display label + column blurb). Lives here so this page
+// no longer imports anything from the fixture layer.
+type LeadRowStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'appointment_set'
+  | 'converted'
+  | 'lost'
+  | 'do_not_contact';
+
+interface LeadRow {
+  id: string;
+  name: string;
+  status: LeadRowStatus;
+  source: 'door' | 'inside_sales' | 'retargeting';
+  address: string;
+  phone: string;
+  assignee: string;
+  tier: 'high' | 'medium' | 'low';
+  capturedAt: string;
+}
+
+const PIPELINE_STAGES: { stage: string; status: LeadRow['status']; description: string }[] = [
+  { stage: 'New', status: 'new', description: 'Just captured · awaiting first touch' },
+  { stage: 'Contacted', status: 'contacted', description: 'First SMS / call attempted' },
+  { stage: 'Qualified', status: 'qualified', description: 'Interest confirmed' },
+  { stage: 'Appointment', status: 'appointment_set', description: 'Call/meeting scheduled' },
+  { stage: 'Converted', status: 'converted', description: 'Donated / purchased' },
+];
 
 interface PipelineLead extends LeadRow {
   valueCents: bigint;
@@ -177,21 +207,8 @@ export default function PipelinePage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const { account, leads: initialLeads } = accountData(params.slug);
 
-  const initialEnriched: PipelineLead[] = useMemo(
-    () =>
-      initialLeads.map((l, i) => ({
-        ...l,
-        valueCents: BigInt((240 + ((i * 137) % 1200)) * 100),
-        daysInStage: (i * 3) % 9,
-        aiScore: 40 + ((i * 19) % 60),
-        aiSuggestion: AI_SUGGESTIONS[i % AI_SUGGESTIONS.length]!,
-        activity: { calls: i % 3, sms: 1 + (i % 4), emails: i % 2 },
-      })),
-    [initialLeads],
-  );
-  const [leads, setLeads] = useState<PipelineLead[]>(initialEnriched);
+  const [leads, setLeads] = useState<PipelineLead[]>([]);
   const [activePipeline, setActivePipeline] = useState<PipelineKey>('donation');
   const [dragId, setDragId] = useState<string | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
@@ -204,33 +221,52 @@ export default function PipelinePage({
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddPhone, setQuickAddPhone] = useState('');
   const [quickAddAddress, setQuickAddAddress] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [region, setRegion] = useState<'AU' | 'US'>('US');
+  const [orgName, setOrgName] = useState(params.slug);
 
   // Track whether the user is mid-drag — used to suppress click events on cards
   // so dropping doesn't accidentally re-open the side panel.
   const justDraggedRef = useRef(false);
 
-  // ── Live data: fetch /api/pipeline once on mount; fall back to seed cards.
-  // `isLive` gates persistence — seed ids don't exist in the DB, so demo-mode
-  // stage moves stay local-only (the DEMO badge makes that honest).
-  const freshness = useDataFreshness('fixture');
-  const [isLive, setIsLive] = useState(false);
+  // Live data only — no fixture seed. Quick-add cards get a `local_` id and
+  // are never sent to the API (persistSingleMove/persistBulkMove skip them).
+  const freshness = useDataFreshness('live');
 
   useEffect(() => {
     let cancelled = false;
 
     async function load(): Promise<void> {
       try {
-        const res = await fetch('/api/pipeline');
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { leads?: ApiPipelineLead[]; updatedAt?: string };
-        if (cancelled || !Array.isArray(data.leads) || data.leads.length === 0) return;
-        const mapped = data.leads.map(apiLeadToCard).filter((l): l is PipelineLead => l !== null);
-        if (mapped.length === 0) return;
+        const [pipelineRes, orgsRes] = await Promise.all([
+          fetch('/api/pipeline'),
+          fetch('/api/orgs'),
+        ]);
+        if (cancelled) return;
+        if (!pipelineRes.ok) throw new Error(`HTTP ${pipelineRes.status}`);
+        const data = (await pipelineRes.json()) as { leads?: ApiPipelineLead[] };
+        const mapped = Array.isArray(data.leads)
+          ? data.leads.map(apiLeadToCard).filter((l): l is PipelineLead => l !== null)
+          : [];
         setLeads(mapped);
-        setIsLive(true);
         freshness.markFresh();
-      } catch {
-        // Network/API failure — keep seed cards; badge stays DEMO DATA.
+
+        if (orgsRes.ok) {
+          const orgsData = (await orgsRes.json()) as {
+            orgs?: { slug: string | null; regionCode: string; tradingName: string }[];
+          };
+          const org = orgsData.orgs?.find((o) => o.slug === params.slug);
+          if (org && !cancelled) {
+            setRegion(org.regionCode === 'AU' ? 'AU' : 'US');
+            setOrgName(org.tradingName);
+          }
+        }
+      } catch (err) {
+        if (!cancelled)
+          setLoadError(err instanceof Error ? err.message : 'Failed to load pipeline');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -239,7 +275,7 @@ export default function PipelinePage({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [params.slug]);
 
   const filtered = leads.filter((l) => {
     if (sourceFilter !== 'all' && l.source !== sourceFilter) return false;
@@ -322,14 +358,15 @@ export default function PipelinePage({
    * Persist a single-lead stage move via PATCH /api/pipeline/[id] { stage }.
    * Called AFTER the optimistic local move; on any non-OK / network failure
    * the move is surgically reverted (only the affected card) and the user is
-   * told. Demo data (isLive=false) never hits the API — those ids aren't real.
+   * told. A locally-added quick-add card (`local_` id) isn't a real DB row
+   * yet, so it never hits the API.
    */
   async function persistSingleMove(
     id: string,
     stage: LeadRow['status'],
     prev: { status: LeadRow['status']; daysInStage: number },
   ): Promise<void> {
-    if (!isLive) return;
+    if (id.startsWith('local_')) return;
     try {
       const res = await fetch(`/api/pipeline/${encodeURIComponent(id)}`, {
         method: 'PATCH',
@@ -442,17 +479,21 @@ export default function PipelinePage({
     stage: LeadRow['status'],
     prevById: Map<string, { status: LeadRow['status']; daysInStage: number }>,
   ): Promise<void> {
-    if (!isLive) return;
+    // Quick-add cards (`local_` ids) aren't real DB rows yet — never persist them.
+    const realIds = ids.filter((id) => !id.startsWith('local_'));
+    if (realIds.length === 0) return;
     const stageLabel = PIPELINE_STAGES.find((s) => s.status === stage)?.stage ?? stage;
     try {
       const res = await fetch('/api/pipeline', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, stage }),
+        body: JSON.stringify({ ids: realIds, stage }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       freshness.markFresh();
-      toast.success(`Moved ${ids.length} lead${ids.length === 1 ? '' : 's'} to ${stageLabel}`);
+      toast.success(
+        `Moved ${realIds.length} lead${realIds.length === 1 ? '' : 's'} to ${stageLabel}`,
+      );
     } catch {
       setLeads((p) =>
         p.map((l) => {
@@ -496,22 +537,41 @@ export default function PipelinePage({
     return () => document.removeEventListener('keydown', k);
   }, []);
 
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account || initialLeads.length === 0) {
+  if (loading) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Pipeline">
+        <div className="space-y-5 max-w-[1500px] px-2 py-16 text-center text-[12px] text-soft">
+          Loading live pipeline…
+        </div>
+      </AccountShell>
+    );
+  }
+
+  if (loadError) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Pipeline">
         <div className="space-y-5 max-w-[1500px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <PipelineEmpty slug={params.slug} accountName={firstRun.accountName} />
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              Could not load the pipeline: {loadError}. Refresh to retry.
+            </span>
+          </Banner>
+        </div>
+      </AccountShell>
+    );
+  }
+
+  if (leads.length === 0) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Pipeline">
+        <div className="space-y-5 max-w-[1500px]">
+          <PipelineEmpty slug={params.slug} accountName={orgName} />
         </div>
       </AccountShell>
     );
   }
 
   const PipelineIcon = PIPELINES[activePipeline].icon;
-  const region = account.region === 'AU' ? 'AU' : 'US';
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Pipeline">

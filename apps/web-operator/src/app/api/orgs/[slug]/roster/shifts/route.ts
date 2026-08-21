@@ -1,6 +1,10 @@
 /**
  * /api/orgs/[slug]/roster/shifts — roster a real knocker to a real territory.
  *
+ * GET   List KnockerShift rows for the org, optionally scoped to a single
+ *       `?weekStart=YYYY-MM-DD`, so the roster grid renders real shifts
+ *       instead of a generated planning seed.
+ *
  * POST  Create a KnockerShift assigned to a specific `userId` (a real knocker)
  *       and a `territoryId`, so the iOS app's `GET /v1/roster/shifts/mine`
  *       returns it and can open the map onto the rostered territory.
@@ -36,6 +40,49 @@ import { newShiftId, writeAudit } from '@/lib/db-helpers';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+export async function GET(
+  req: NextRequest,
+  { params: paramsPromise }: { params: Promise<{ slug: string }> },
+): Promise<Response> {
+  const params = await paramsPromise;
+  const sessionOrErr = await requireSession();
+  if (sessionOrErr instanceof Response) return sessionOrErr;
+  const session = sessionOrErr;
+
+  const orgOrErr = await resolveAccountOrg(params.slug, session);
+  if (orgOrErr instanceof Response) return orgOrErr;
+  const org = orgOrErr;
+
+  const weekStart = req.nextUrl.searchParams.get('weekStart');
+
+  try {
+    const shifts = await db.knockerShift.findMany({
+      where: { orgId: org.id, ...(weekStart ? { weekStart } : {}) },
+      orderBy: [{ weekStart: 'asc' }, { day: 'asc' }, { start: 'asc' }],
+      select: {
+        id: true,
+        userId: true,
+        territoryId: true,
+        repInitials: true,
+        repName: true,
+        territory: true,
+        weekStart: true,
+        day: true,
+        start: true,
+        end: true,
+        lunch: true,
+        status: true,
+      },
+    });
+
+    return ok({ orgId: org.id, shifts });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[api/orgs/:slug/roster/shifts GET] failed:', err);
+    return internal('Failed to load shifts');
+  }
+}
 
 // Field names + validators mirror apps/api domains/roster/schemas.createShiftRequestSchema.
 const createShiftSchema = z
