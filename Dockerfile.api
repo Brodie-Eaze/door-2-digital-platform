@@ -29,7 +29,6 @@ WORKDIR /repo
 COPY apps/api ./apps/api
 COPY packages ./packages
 RUN pnpm --filter api db:generate
-RUN pnpm --filter api build
 
 # ── runner ────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS runner
@@ -50,7 +49,8 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 COPY --from=build /repo/package.json /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 COPY --from=build /repo/apps/api/package.json ./apps/api/
 COPY --from=build /repo/packages ./packages
-COPY --from=build /repo/apps/api/dist ./apps/api/dist
+COPY --from=build /repo/apps/api/src ./apps/api/src
+COPY --from=build /repo/apps/api/tsconfig.json ./apps/api/
 COPY --from=build /repo/apps/api/prisma ./apps/api/prisma
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/api/node_modules ./apps/api/node_modules
@@ -59,4 +59,7 @@ USER node
 EXPOSE 3010
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "apps/api/dist/apps/api/src/index.js"]
+# tsx, not tsc-emitted JS: the codebase is ESM with extensionless TS imports,
+# which compiled output cannot load under Node ESM. tsx resolves them exactly
+# as dev + the CI boot-smoke gate do.
+CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/index.ts"]
