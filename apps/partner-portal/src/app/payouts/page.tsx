@@ -1,111 +1,129 @@
-import { PartnerShell } from '@/components/PartnerShell';
-import { Section, StatusPill, KpiCard } from '@d2d/ui-web';
-import { Download } from 'lucide-react';
-import { PAYOUT_STATEMENTS } from '@/lib/fixtures';
+import { EmptyState, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { PortalShell } from '@/components/PortalShell';
+import { payoutLabel, payoutTone } from '@/lib/status';
+import { apiFetch, getSession, sumWireCents, wireCents, type PayoutBatchPublic } from '@/lib/api';
 
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
-function statusLabel(s: string): string {
-  if (s === 'acknowledged') return 'Acknowledged';
-  if (s === 'instructed') return 'Instructed';
-  return 'Ready';
-}
+const DOWNLOADABLE: PayoutBatchPublic['status'][] = ['ready_to_pay', 'instructed'];
 
-function statusTone(s: string): 'success' | 'warn' | 'muted' {
-  if (s === 'acknowledged') return 'success';
-  if (s === 'instructed') return 'warn';
-  return 'muted';
-}
+export default async function PayoutsPage(): Promise<JSX.Element> {
+  const { user, org } = await getSession();
+  const { batches } = await apiFetch<{ batches: PayoutBatchPublic[]; nextCursor: string | null }>(
+    '/payout-batches?limit=50',
+  );
 
-export default function PayoutsPage() {
-  const total = PAYOUT_STATEMENTS.reduce((a, p) => a + p.totalCents, 0);
-  const latestKnockers = PAYOUT_STATEMENTS[0]!.knockerCount;
+  const totalCents = sumWireCents(batches, (b) => b.totalCents);
+  const latest = batches[0] ?? null;
 
   return (
-    <PartnerShell pageTitle="Payout statements">
+    <PortalShell
+      pageTitle="Payout statements"
+      orgName={org.tradingName}
+      userName={`${user.givenName} ${user.familyName}`}
+      userEmail={user.email}
+      userRole={user.role}
+    >
       <div className="space-y-6">
         <Section title="Overview">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <KpiCard
-              label="YTD payout total"
-              value={formatCents(total)}
-              hint="Across all periods"
+              label="Total across batches"
+              value={<Money cents={totalCents} region={org.regionCode} />}
+              hint={`${batches.length} batch${batches.length === 1 ? '' : 'es'}`}
+              animate={false}
             />
             <KpiCard
-              label="Active knockers"
-              value={String(latestKnockers)}
-              hint="Last pay period"
+              label="Latest batch"
+              value={latest ? payoutLabel(latest.status) : '—'}
+              hint={latest ? fmtDate(latest.periodStart) : 'no batches yet'}
             />
-            <KpiCard label="Pay schedule" value="Fortnightly" hint="1st + 16th of each month" />
+            <KpiCard
+              label="Commission lines"
+              value={latest ? String(latest.lineCount) : '—'}
+              hint="latest batch"
+            />
           </div>
         </Section>
 
-        <Section title="Payout statement history">
-          <div className="tbl-wrapper">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th>Generated</th>
-                  <th>Status</th>
-                  <th className="text-right">Knockers</th>
-                  <th className="text-right">Total</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {PAYOUT_STATEMENTS.map((ps) => (
-                  <tr key={ps.id}>
-                    <td className="font-medium">{ps.period}</td>
-                    <td className="text-muted">{ps.generatedDate}</td>
-                    <td>
-                      <StatusPill tone={statusTone(ps.status)}>{statusLabel(ps.status)}</StatusPill>
-                    </td>
-                    <td className="text-right mono">{ps.knockerCount}</td>
-                    <td className="text-right mono font-medium">{formatCents(ps.totalCents)}</td>
-                    <td>
-                      <button
-                        className="flex items-center gap-1 text-xs text-accent hover:underline"
-                        onClick={() =>
-                          alert(
-                            `Download CSV for ${ps.id} — wired to /v1/payout-batches/${ps.id}/instruction-file`,
-                          )
-                        }
-                      >
-                        <Download size={12} />
-                        CSV
-                      </button>
-                    </td>
+        <Section title="Payout batch history" paddedBody={batches.length === 0}>
+          {batches.length === 0 ? (
+            <EmptyState
+              title="No payout batches yet"
+              description="Batches appear here once D2D generates a payout run from accrued commissions."
+            />
+          ) : (
+            <div className="tbl-wrapper">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th>Status</th>
+                    <th className="text-right">Lines</th>
+                    <th className="text-right">Total</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {batches.map((b) => (
+                    <tr key={b.id}>
+                      <td className="font-medium">
+                        {fmtDate(b.periodStart)} – {fmtDate(b.periodEnd)}
+                      </td>
+                      <td>
+                        <StatusPill tone={payoutTone(b.status)}>{payoutLabel(b.status)}</StatusPill>
+                      </td>
+                      <td className="text-right mono">{b.lineCount}</td>
+                      <td className="text-right mono font-medium">
+                        <Money cents={wireCents(b.totalCents)} region={org.regionCode} />
+                      </td>
+                      <td className="text-right">
+                        {DOWNLOADABLE.includes(b.status) ? (
+                          <a
+                            href={`/proxy/api/payout-batches/${b.id}/instruction-file`}
+                            className="text-[12px] text-accent hover:underline"
+                          >
+                            Download CSV
+                          </a>
+                        ) : (
+                          <span className="text-[12px] text-soft">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Section>
 
         <Section title="Important — payout process">
           <div className="card p-5 text-sm text-muted leading-relaxed max-w-3xl space-y-3">
             <p>
               <strong className="text-ink">D2D never auto-debits.</strong> Payout batches are
-              generated by the platform and downloaded as a CSV instruction file. Brodie at D2D
-              executes each transfer manually via the banking portal.
+              generated by the platform and downloaded as a CSV instruction file. D2D executes each
+              transfer manually via the banking portal — the platform only ever instructs, never
+              moves funds itself.
             </p>
             <p>
-              <strong className="text-ink">Timing:</strong> batches are generated on the 1st and
-              16th of each month covering the prior two-week period. Knockers receive funds within 2
-              business days of the batch being acknowledged.
+              <strong className="text-ink">Lifecycle:</strong> a batch moves draft → ready to pay →
+              instructed (once the instruction file is downloaded) → acknowledged.
             </p>
             <p>
-              <strong className="text-ink">Disputes:</strong> knockers can dispute their statement
-              within 7 days of generation. Contact{' '}
-              <span className="text-accent">payouts@door2digital.io</span> with your batch ID and
-              the specific line item in question.
+              <strong className="text-ink">Questions:</strong> contact{' '}
+              <span className="text-accent">payouts@door2digital.io</span> with the batch ID and the
+              line item in question.
             </p>
           </div>
         </Section>
       </div>
-    </PartnerShell>
+    </PortalShell>
   );
 }

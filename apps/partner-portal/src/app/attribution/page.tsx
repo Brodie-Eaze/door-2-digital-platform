@@ -1,21 +1,37 @@
-import { KpiCard, Money, Section } from '@d2d/ui-web';
+import { EmptyState, KpiCard, Money, Section } from '@d2d/ui-web';
+import type { AttributionSource } from '@d2d/shared-types';
 import { PortalShell } from '@/components/PortalShell';
 import {
-  BILLING_PERIODS,
-  BUCKET_DESCRIPTION,
-  BUCKET_LABEL,
-  CLIENT,
-  CURRENT_PERIOD,
-  RAKE_BPS,
-  type AttributionBucket,
-  blendedTakeRate,
-  bucketRake,
-  conversionCount,
-  grossCents,
-  totalRakeCents,
-} from '@/lib/portal-data';
+  apiFetch,
+  getSession,
+  sumWireCents,
+  wireCents,
+  type ConversionPublic,
+  type PageResponse,
+} from '@/lib/api';
 
-const BUCKETS: AttributionBucket[] = ['door', 'insideSales', 'retargeting'];
+const BUCKETS: { source: AttributionSource; label: string; description: string }[] = [
+  { source: 'door', label: 'Door-closed', description: 'Closed at the door by a D2D knocker.' },
+  {
+    source: 'inside_sales',
+    label: 'Inside-sales',
+    description: 'Closed by the inside-sales desk after a warm field lead.',
+  },
+  {
+    source: 'retargeting',
+    label: 'Retargeting',
+    description: 'Closed via an AI-retargeting ad after a knocked-not-converted visit.',
+  },
+];
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
 
 /** Share of a part within a whole as a 0–100 number, for bar widths only. */
 function sharePct(part: bigint, whole: bigint): number {
@@ -23,107 +39,141 @@ function sharePct(part: bigint, whole: bigint): number {
   return Math.round((Number(part) / Number(whole)) * 1000) / 10;
 }
 
-export default function AttributionPage(): JSX.Element {
-  const totalGross = grossCents(CURRENT_PERIOD);
+export default async function AttributionPage(): Promise<JSX.Element> {
+  const { user, org } = await getSession();
+  const { data: conversions } =
+    await apiFetch<PageResponse<ConversionPublic>>('/conversions?limit=100');
+
+  const totalGross = sumWireCents(conversions, (c) => c.amountCents);
+  const totalRake = sumWireCents(conversions, (c) => c.d2dRakeCents);
+
+  const buckets = BUCKETS.map((b) => {
+    const rows = conversions.filter((c) => c.attributionSource === b.source);
+    return {
+      ...b,
+      count: rows.length,
+      grossCents: sumWireCents(rows, (c) => c.amountCents),
+      rakeCents: sumWireCents(rows, (c) => c.d2dRakeCents),
+    };
+  });
+
+  const recent = [...conversions]
+    .sort((a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime())
+    .slice(0, 15);
 
   return (
-    <PortalShell pageTitle="Attribution">
+    <PortalShell
+      pageTitle="Attribution"
+      orgName={org.tradingName}
+      userName={`${user.givenName} ${user.familyName}`}
+      userEmail={user.email}
+      userRole={user.role}
+    >
       <div className="space-y-6 max-w-[1400px]">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            label="Conversions"
-            value={conversionCount(CURRENT_PERIOD)}
-            hint={CURRENT_PERIOD.label}
-          />
+          <KpiCard label="Conversions loaded" value={conversions.length} hint="latest 100" />
           <KpiCard
             label="Gross value"
-            value={<Money cents={totalGross} region={CLIENT.region} />}
+            value={<Money cents={totalGross} region={org.regionCode} />}
             animate={false}
           />
           <KpiCard
             label="D2D rake"
-            value={<Money cents={totalRakeCents(CURRENT_PERIOD)} region={CLIENT.region} />}
+            value={<Money cents={totalRake} region={org.regionCode} />}
             animate={false}
           />
-          <KpiCard label="Blended take rate" value={blendedTakeRate(CURRENT_PERIOD)} />
+          <KpiCard
+            label="Blended take rate"
+            value={
+              totalGross === 0n
+                ? '—'
+                : `${((Number(totalRake) / Number(totalGross)) * 100).toFixed(2)}%`
+            }
+          />
         </div>
 
-        <Section
-          title={`Attribution mix — ${CURRENT_PERIOD.label}`}
-          subtitle="Each conversion is attributed to exactly one bucket, which sets its rake rate. Share is by gross value."
-        >
-          <div className="space-y-5">
-            {BUCKETS.map((b) => {
-              const share = sharePct(CURRENT_PERIOD.buckets[b].grossCents, totalGross);
-              return (
-                <div key={b}>
-                  <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                    <div className="min-w-0">
-                      <span className="text-[13px] font-medium text-ink">{BUCKET_LABEL[b]}</span>
-                      <span className="ml-2 text-[11px] text-muted">{RAKE_BPS[b] / 100}% rake</span>
-                    </div>
-                    <div className="text-[12px] text-muted shrink-0">
-                      <span className="numeric">{CURRENT_PERIOD.buckets[b].count}</span> conv ·{' '}
-                      <Money cents={CURRENT_PERIOD.buckets[b].grossCents} region={CLIENT.region} />{' '}
-                      · <span className="numeric font-medium text-ink">{share}%</span>
-                    </div>
-                  </div>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{ width: `${share}%` }} />
-                  </div>
-                  <div className="mt-1.5 text-[11px] text-muted">{BUCKET_DESCRIPTION[b]}</div>
-                </div>
-              );
-            })}
-          </div>
-        </Section>
-
-        <Section
-          title="Per-bucket trend"
-          subtitle="Conversions and D2D rake by attribution bucket across recent periods."
-          paddedBody={false}
-        >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Period</th>
-                {BUCKETS.map((b) => (
-                  <th key={b} className="text-right">
-                    {BUCKET_LABEL[b]}
-                  </th>
-                ))}
-                <th className="text-right">Total conv</th>
-                <th className="text-right">Total rake</th>
-              </tr>
-            </thead>
-            <tbody>
-              {BILLING_PERIODS.map((p) => {
-                const r = bucketRake(p);
+        {conversions.length === 0 ? (
+          <Section title="Attribution mix">
+            <EmptyState
+              title="No conversions yet"
+              description="Attribution buckets fill in as knockers, inside sales, and retargeting close conversions."
+            />
+          </Section>
+        ) : (
+          <Section
+            title="Attribution mix"
+            subtitle="Each conversion is attributed to exactly one bucket, which sets its rake rate. Share is by gross value."
+          >
+            <div className="space-y-5">
+              {buckets.map((b) => {
+                const share = sharePct(b.grossCents, totalGross);
+                const takeRate =
+                  b.grossCents === 0n ? 0 : (Number(b.rakeCents) / Number(b.grossCents)) * 100;
                 return (
-                  <tr key={p.id}>
-                    <td className="font-medium text-ink">{p.label}</td>
-                    {BUCKETS.map((b) => (
-                      <td key={b} className="text-right">
-                        <div className="numeric">{p.buckets[b].count}</div>
-                        <div className="text-[11px] text-muted">
-                          <Money cents={r[b]} region={CLIENT.region} />
-                        </div>
-                      </td>
-                    ))}
-                    <td className="text-right numeric font-medium">{conversionCount(p)}</td>
-                    <td className="text-right font-medium text-ink">
-                      <Money cents={totalRakeCents(p)} region={CLIENT.region} />
-                    </td>
-                  </tr>
+                  <div key={b.source}>
+                    <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-medium text-ink">{b.label}</span>
+                        <span className="ml-2 text-[11px] text-muted">
+                          {takeRate.toFixed(1)}% rake
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-muted shrink-0">
+                        <span className="numeric">{b.count}</span> conv ·{' '}
+                        <Money cents={b.grossCents} region={org.regionCode} /> ·{' '}
+                        <span className="numeric font-medium text-ink">{share}%</span>
+                      </div>
+                    </div>
+                    <div className="bar-track">
+                      <div className="bar-fill" style={{ width: `${share}%` }} />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-muted">{b.description}</div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </Section>
+            </div>
+          </Section>
+        )}
+
+        {recent.length > 0 && (
+          <Section
+            title="Recent conversions"
+            subtitle="Latest signed conversions, most recent first."
+            paddedBody={false}
+          >
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Bucket</th>
+                  <th className="text-right">Gross</th>
+                  <th className="text-right">D2D rake</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((c) => (
+                  <tr key={c.id}>
+                    <td className="text-muted">{fmtDate(c.signedAt)}</td>
+                    <td className="font-medium text-ink">
+                      {BUCKETS.find((b) => b.source === c.attributionSource)?.label ??
+                        c.attributionSource}
+                    </td>
+                    <td className="text-right">
+                      <Money cents={wireCents(c.amountCents)} region={org.regionCode} />
+                    </td>
+                    <td className="text-right">
+                      <Money cents={wireCents(c.d2dRakeCents)} region={org.regionCode} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+        )}
 
         <Section
           title="How retargeting closes the loop"
-          subtitle="The 5% bucket exists because of the field-to-ad attribution chain."
+          subtitle="The lowest-rake bucket exists because of the field-to-ad attribution chain."
         >
           <ol className="space-y-2.5 text-[13px] text-ink2">
             <li className="flex gap-3">
@@ -144,8 +194,7 @@ export default function AttributionPage(): JSX.Element {
               <span className="tag shrink-0">3</span>
               <span>
                 The resident clicks through and converts online. The conversion returns tagged{' '}
-                <span className="mono">attributionSource = retargeting</span> and is billed at the{' '}
-                {RAKE_BPS.retargeting / 100}% rate — the lowest of the three buckets.
+                <span className="mono">attributionSource = retargeting</span>.
               </span>
             </li>
           </ol>

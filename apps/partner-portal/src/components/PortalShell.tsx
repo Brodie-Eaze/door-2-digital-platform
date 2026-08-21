@@ -10,7 +10,6 @@ import {
   Wallet,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
-import { CLIENT } from '@/lib/portal-data';
 
 const NAV: NavGroup[] = [
   { label: 'Overview', items: [{ href: '/', label: 'Overview', icon: LayoutDashboard }] },
@@ -41,12 +40,24 @@ const NAV: NavGroup[] = [
 interface PortalShellProps {
   children: React.ReactNode;
   pageTitle?: string;
+  /** Org trading name — always derived server-side from the session, never hardcoded. */
+  orgName: string;
+  /** Signed-in user, for the top-bar identity chip. */
+  userName: string;
+  userEmail: string;
+  userRole: string;
 }
 
-export function PortalShell({ children, pageTitle }: PortalShellProps): JSX.Element {
+export function PortalShell({
+  children,
+  pageTitle,
+  orgName,
+  userName,
+  userEmail,
+  userRole,
+}: PortalShellProps): JSX.Element {
   const env = process.env.NEXT_PUBLIC_ENV ?? 'local';
-  const contact = CLIENT.portalContact;
-  const initials = contact.name
+  const initials = userName
     .split(' ')
     .map((w) => w.charAt(0))
     .join('')
@@ -57,14 +68,14 @@ export function PortalShell({ children, pageTitle }: PortalShellProps): JSX.Elem
     <AppShell
       sidebar={
         <Sidebar
-          appName={CLIENT.tradingName}
+          appName={orgName}
           appTagline="PARTNER PORTAL"
           homeHref="/"
           groups={NAV}
           footer={
             <>
               <div>powered by D2D · {env}</div>
-              <div className="truncate">{contact.email}</div>
+              <div className="truncate">{userEmail}</div>
             </>
           }
         />
@@ -77,10 +88,8 @@ export function PortalShell({ children, pageTitle }: PortalShellProps): JSX.Elem
             <div className="flex items-center gap-2">
               <span className="mono">{initials}</span>
               <div className="text-xs leading-tight hidden sm:block">
-                <div className="font-medium text-ink truncate max-w-[180px]">{contact.name}</div>
-                <div className="text-muted text-[10px] uppercase tracking-wider">
-                  {contact.role}
-                </div>
+                <div className="font-medium text-ink truncate max-w-[180px]">{userName}</div>
+                <div className="text-muted text-[10px] uppercase tracking-wider">{userRole}</div>
               </div>
             </div>
           }
