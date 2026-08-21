@@ -398,6 +398,13 @@ struct KnockSheetView: View {
             let region = [pm.locality, pm.administrativeArea, pm.postalCode].compactMap { $0 }.joined(separator: " ")
             let joined = [street, region].filter { !$0.isEmpty }.joined(separator: ", ")
             viewModel.addressLine = joined.isEmpty ? coordFallback : joined
+            // Keep the structured components too — the server's rawAddress needs
+            // them (a flat line 400s). buildPayload reads these at save time.
+            viewModel.addrStreet = street
+            viewModel.addrLocality = pm.locality ?? ""
+            viewModel.addrRegion = pm.administrativeArea ?? ""
+            viewModel.addrPostcode = pm.postalCode ?? ""
+            viewModel.addrCountry = pm.isoCountryCode ?? ""
         }
     }
 }

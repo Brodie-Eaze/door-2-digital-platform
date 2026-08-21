@@ -242,14 +242,69 @@ LIVE against `https://d2d-api-production-895b.up.railway.app`, not dev:
   authenticated against PRODUCTION and the map showed 'Riverside North · 0/0
   knocked', the exact territory the org admin mapped + assigned on the
   platform. The knock-capture UI works (real reverse-geocoded address +
-  disposition grid + save). HONEST GAP: the captured knock saved to the local
-  offline queue but did NOT sync back to production — the API logs show no
-  POST /v1/knocks/batch arrived. This is the app's known offline-sync
-  limitation (elevate/knocker-elevation.md Tier-0 'Sync now is a no-op'),
-  being addressed by the T2-1 task — NOT a platform defect. So D3's read path
-  - auth + capture UI are proven in the real UI against prod; the write-back
-    sync remains the tracked iOS-side gap. The full field-loop write path IS
-    proven end-to-end via the API contract (curl) against production.
+  disposition grid + save). WRITE-BACK SYNC — root-caused end-to-end through
+  FOUR distinct client bugs; three fixed + verified live (each advanced the
+  server-observed failure: `noToken → 400 → 401 → "session not found"`), the
+  fourth (session lifecycle) specified but not yet built:
+  1. FIXED + VERIFIED — token source. `SyncEngine` read its bearer token only
+     from the Keychain, but the app authenticates the rest of its traffic off
+     the in-memory `AppState` token (set at login). On this build the Keychain
+     write is silently rejected (no keychain-access-group entitlement →
+     `SecItemAdd` fails; cold-launch drops to the login screen — proof the
+     Keychain never persisted), so `keychain.accessToken` read nil and every
+     queued knock died at `.noToken` before any HTTP call. Fix:
+     `SyncEngine.authTokenOverride`, kept in lockstep with
+     `appState.accessToken` by ContentView; drain prefers it, Keychain
+     fallback. VERIFIED: error moved `Not authenticated → HTTP 400`; the API
+     log then showed `POST /v1/knocks/batch` arriving from the app.
+  2. FIXED + VERIFIED — payload contract. `buildPayload`/`KnockPayload` were
+     written against an older shape. The deployed `knockBatchRequestSchema` is
+     `.strict()`: it wants `geo:{lat,lng}` + structured `rawAddress`, and
+     rejects the extras the app sent (`orgId,userId,latitude,longitude,
+addressLine,clientOffsetMs`). Fix: emit the server shape, deriving
+     `rawAddress` from the CLPlacemark components the reverse-geocoder already
+     extracts (with dead-zone fallbacks), drop the rejected keys. VERIFIED:
+     the stored payload is now exactly the server shape; error moved
+     `400 → 401`.
+  3. FIXED + VERIFIED — response parse. `KnockBatchResponse` expected a
+     `processed[]` field; the server returns `{inserted,deduped,errors,
+knocks[]}`. Fix: match the real shape, mark items complete off
+     `knocks[].idempotencyKey`, and (defensive) count per-knock `errors[]` as
+     attempts so a rejected knock surfaces its message instead of re-POSTing
+     forever at attempts=0. VERIFIED via curl: the exact app payload with a
+     REAL server sessionId returns 201 and PERSISTS in prod
+     (`knk_01M0JC5TP…`); the parse now succeeds.
+  4. FIXED + VERIFIED — session lifecycle (the last blocker). The app logged
+     knocks with `appState.sessionId ?? UUID().uuidString` — a client UUID
+     never registered server-side (`startShift` built only a LOCAL
+     `KnockSession`; the drain's `.startSession` op was a no-op), so the batch
+     201'd but every knock landed in `errors[]`
+     (`"KnockSession <uuid> not found"`, inserted:0). `StartSessionRequest`
+     (client DTO) was also drifted from `startSessionRequestSchema`. Fix:
+     `KnockFlowViewModel.saveKnock` now ensures a REAL server session before
+     recording a knock — if `appState.sessionId` isn't a `sess_…` id and the
+     rep is online with an assigned territory (`MapViewModel` now exports
+     `appState.assignedTerritoryId`), it `POST /v1/sessions` and stores the
+     returned `sess_…` id; the DTOs (`StartSessionRequest`/`Response`) now
+     match the server, and the idempotency key is kept ≤64 chars (the full
+     deviceId+territory overflowed the server's key limit → its own 400).
+     VERIFIED END-TO-END against prod from the app UI: `POST /v1/sessions →
+     201` (sess_01M0JDHDJNK0…) then `POST /v1/knocks/batch → 201`; the knock
+     (`knock-939148fe…`, captured 15:02:57) now PERSISTS in production tied to
+     that real session, and the local queue item is marked complete
+     (`completed=1, attempts=0, no error`) — the "Syncing" banner clears.
+     D3 IS NOW PROVEN END-TO-END from the real app UI against production: platform
+     assigns territory → app shows it → knocker logs a knock → app opens a server
+     session → knock POSTs → server persists it, tenant-scoped to the org → client
+     confirms + clears. The write-back that was the open gap is closed. Client fixes
+     live in the tree (SyncEngine.swift, ContentView.swift, KnockFlowViewModel.swift,
+     DTOs.swift, KnockSheetView.swift, APIClient.swift, AppState.swift,
+     MapViewModel.swift) — uncommitted, Release build green (`/tmp/dd-rel8`).
+     Known follow-ups (non-blocking): the Keychain doesn't persist on this sim build
+     (no keychain-access-group entitlement) so a cold launch requires re-login — on
+     a real device the default access group makes this work; and pure-offline shift
+     start (never online to open a session) still needs the local→server session-id
+     reconcile path.
 - **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
   return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
 - **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):

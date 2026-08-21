@@ -16,9 +16,19 @@ actor AttestationService {
     /// Returns an attestation token for the given challenge string, or nil if
     /// attestation is unavailable (simulator, DeviceCheck unsupported).
     func attestationToken(for challenge: String) async -> String? {
+        #if targetEnvironment(simulator)
+        // App Attest is unavailable on the simulator, but DCAppAttestService can
+        // report isSupported=true and then HANG in generateKey/generateAssertion,
+        // stalling the entire knock-sync drain forever. Skip it entirely here —
+        // the server treats X-App-Attest as an optional defence-in-depth header,
+        // so an unattested knock from a simulator still syncs. Real devices
+        // attest normally via the path below.
+        return nil
+        #else
         guard DCAppAttestService.shared.isSupported else {
             return simulatorFallback()
         }
+        #endif
         do {
             let kid = try await ensureKeyId()
             let challengeData = Data(challenge.utf8)

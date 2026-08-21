@@ -72,6 +72,8 @@ final class MapViewModel {
         do {
             let assigned = try await apiClient.fetchAssignedTerritories()
             applyAssigned(assigned)
+            // Expose the assigned territory so a knock can start a server session.
+            appState.assignedTerritoryId = assignedTerritoryId
         } catch {
             // No live territory available. Fall back to a DEBUG-only demo
             // territory so the simulator map isn't blank during development;

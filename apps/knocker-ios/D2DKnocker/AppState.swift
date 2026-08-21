@@ -18,6 +18,9 @@ final class AppState {
     var isOnShift: Bool = false
     var shiftStartedAt: Date?
     var orgId: String = ""
+    /// The knocker's assigned territory (set by MapViewModel when it loads).
+    /// Needed to start a server-side KnockSession before knocks can sync.
+    var assignedTerritoryId: String?
 
     // MARK: - Daily stats (refreshed from API on login + foreground)
 

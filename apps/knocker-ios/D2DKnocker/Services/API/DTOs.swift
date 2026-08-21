@@ -44,37 +44,56 @@ struct UserProfileDTO: Decodable {
 
 // MARK: - Session
 
+// Matches the server `startSessionRequestSchema` (.strict): territoryId +
+// deviceId + startGeo{lat,lng}. org/user come from the JWT server-side. Nil
+// appVersion/osVersion are omitted by the encoder, so the strict schema passes.
 struct StartSessionRequest: Encodable {
-    let orgId: String
-    let userId: String
-    let territoryId: String?
-    let startLatitude: Double
-    let startLongitude: Double
+    let territoryId: String
     let deviceId: String
-    let idempotencyKey: String
+    let startGeo: GeoPoint
+    var appVersion: String?
+    var osVersion: String?
 }
 
+// Server responds `{ session: { id, ... } }` (SessionPublic), not a bare id.
 struct StartSessionResponse: Decodable {
-    let id: String
+    let session: SessionInfo
+    struct SessionInfo: Decodable { let id: String }
 }
 
 // MARK: - Knock
 
+/// Mirrors the server's `geoPointSchema` / `rawAddressSchema` — the knock batch
+/// endpoint validates against these exact nested shapes (`.strict()`).
+struct GeoPoint: Codable {
+    let lat: Double
+    let lng: Double
+    var accuracyM: Double? = nil
+}
+
+struct RawAddress: Codable {
+    let formatted: String
+    let street: String
+    let locality: String
+    let region: String
+    let postcode: String
+    let countryCode: String
+}
+
 struct KnockPayload: Codable {
     let sessionId: String
-    let orgId: String
-    let userId: String
     let territoryId: String?
-    let addressLine: String
-    let latitude: Double
-    let longitude: Double
     let disposition: String
+    let geo: GeoPoint
+    let rawAddress: RawAddress
     let capturedAt: String      // ISO8601
-    let clientOffsetMs: Int?     // optional so a missing key never fails the whole batch decode
     let idempotencyKey: String
     let notes: String?
     let signatureKey: String?
     let photoKey: String?
+    // NOTE: org + user are derived server-side from the bearer token; latitude/
+    // longitude/addressLine/clientOffsetMs are NOT part of the wire contract
+    // (the server schema is strict and rejects unknown keys).
 }
 
 // MARK: - Sale (sign-up)
@@ -105,12 +124,23 @@ struct KnockBatchRequest: Encodable {
     let knocks: [KnockPayload]
 }
 
+/// Mirrors the server batch result: `{ inserted, deduped, errors, knocks }`.
+/// `knocks` carries every successfully-handled knock (inserted OR deduped) with
+/// its `idempotencyKey`, so the drain marks those queue items complete; anything
+/// in `errors` is left pending to retry.
 struct KnockBatchResponse: Decodable {
-    let processed: [ProcessedKnock]
+    let inserted: Int
+    let deduped: Int
+    let errors: [BatchError]
+    let knocks: [ProcessedKnock]
     struct ProcessedKnock: Decodable {
+        let id: String
         let idempotencyKey: String
-        let serverId: String
-        let status: String      // "created" | "duplicate"
+    }
+    struct BatchError: Decodable {
+        let index: Int
+        let idempotencyKey: String?
+        let message: String
     }
 }
 

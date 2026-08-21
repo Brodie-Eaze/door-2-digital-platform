@@ -66,7 +66,15 @@ final class APIClient {
     // MARK: - Session
 
     func startSession(_ req: StartSessionRequest) async throws -> StartSessionResponse {
-        return try await post(path: "/sessions", body: req)
+        // The route enforces withIdempotency; key on device+territory so a retry
+        // of the same shift-start dedupes to one server session. The server caps
+        // the key at 64 chars [a-zA-Z0-9._-], so use an 8-char device prefix
+        // (the full deviceId UUID + territoryId overflows 64).
+        return try await post(
+            path: "/sessions",
+            body: req,
+            idempotencyKey: "session-\(req.deviceId.prefix(8))-\(req.territoryId)"
+        )
     }
 
     // MARK: - Knocks
@@ -86,7 +94,18 @@ final class APIClient {
             headers["X-App-Attest"] = token
             headers["X-App-Attest-Challenge"] = challenge
         }
-        return try await post(path: "/knocks/batch", body: req, headers: headers.isEmpty ? nil : headers)
+        // The batch endpoint enforces Idempotency-Key (server withIdempotency).
+        // Derive it deterministically from the batch's first per-knock key so a
+        // retry of the same batch dedups at the HTTP layer; each knock's own
+        // idempotencyKey is the inner per-row dedup. Without this the server
+        // 400s and the knock never leaves the offline queue.
+        let batchKey = "batch_" + (req.knocks.first?.idempotencyKey ?? "empty")
+        return try await post(
+            path: "/knocks/batch",
+            body: req,
+            idempotencyKey: batchKey,
+            headers: headers.isEmpty ? nil : headers
+        )
     }
 
     // MARK: - Leads
