@@ -3,9 +3,9 @@
  *
  * Server component. Reads directly from the shared Prisma client (no
  * round-trip through /api/orgs) so the first paint already has data,
- * cookies pass through implicitly via getSession(). If the DB is
- * unreachable (e.g. Railway env var missing) we degrade gracefully to
- * the static ACCOUNTS fixture so the demo doesn't blank.
+ * cookies pass through implicitly via getSession(). There is no fixture
+ * fallback — a DB error renders an honest error banner, and an org with
+ * no field activity yet shows real zeros, never invented numbers.
  *
  * Authorization:
  *   - super_admin: all non-archived orgs
@@ -13,7 +13,7 @@
  */
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ArrowRight, Plus, UserPlus, Database, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Plus, UserPlus, Database } from 'lucide-react';
 import {
   Banner,
   Button,
@@ -27,22 +27,44 @@ import {
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
 import { AccountsEmpty } from '@/components/AccountEmptyStates';
-import { ACCOUNTS, type Account } from '@/lib/accounts';
 import { getSession } from '@/lib/session';
 import { isCrossTenantOperator } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Local, structurally-compatible stand-in for lib/accounts' `Account` type
+// (AccountAvatar/AccountAvatar's prop accepts it via TS structural typing) —
+// this page must not import the fixture module at all.
+interface Account {
+  slug: string;
+  name: string;
+  shortName: string;
+  vertical: 'charity' | 'commercial' | 'healthcare';
+  region: 'AU' | 'US' | 'SG';
+  avatarBg: string;
+  avatarFg: string;
+  plan: 'Enterprise' | 'Growth' | 'Trial';
+  health: 'healthy' | 'attention' | 'critical';
+  knockers: number;
+  insideSalesReps: number;
+  territoriesActive: number;
+  leadsInboxToday: number;
+  conversionsMTD: number;
+  revenueCentsMTD: bigint;
+  ltvCentsMTD: bigint;
+  contractedAt: string;
+  notes: string;
+}
+
 interface PortfolioEntry {
   account: Account;
-  fromDb: boolean;
   leadsToday: number;
 }
 
 interface PortfolioData {
   entries: PortfolioEntry[];
-  source: 'database' | 'fixture-fallback';
+  source: 'database' | 'error';
   error?: string;
 }
 
@@ -50,7 +72,7 @@ async function loadPortfolio(): Promise<PortfolioData> {
   const session = await getSession();
   if (!session) {
     // Middleware should redirect; defensive guard for direct API misuse.
-    return { entries: [], source: 'fixture-fallback', error: 'no session' };
+    return { entries: [], source: 'error', error: 'no session' };
   }
 
   try {
@@ -65,31 +87,55 @@ async function loadPortfolio(): Promise<PortfolioData> {
         ? { id: session.orgId, status: { not: 'archived' as const }, slug: { not: null } }
         : { id: '__no_org__' };
 
-    const orgs = await db.org.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
-      include: { billing: { select: { currency: true } } },
-    });
+    const orgs = await db.org.findMany({ where, orderBy: { createdAt: 'asc' } });
+    const orgIds = orgs.map((o) => o.id);
 
-    // Lead counts per org (today) — single grouped query, no N+1.
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const leadCounts = await db.lead.groupBy({
-      by: ['orgId'],
-      where: {
-        orgId: { in: orgs.map((o) => o.id) },
-        createdAt: { gte: todayStart },
-      },
-      _count: { _all: true },
-    });
+    const mtdStart = new Date();
+    mtdStart.setDate(1);
+    mtdStart.setHours(0, 0, 0, 0);
+
+    // Real per-org aggregates — one grouped query per metric, no N+1.
+    const [leadCounts, knockerCounts, insideSalesCounts, territoryCounts, conversionAgg] =
+      await Promise.all([
+        db.lead.groupBy({
+          by: ['orgId'],
+          where: { orgId: { in: orgIds }, createdAt: { gte: todayStart } },
+          _count: { _all: true },
+        }),
+        db.user.groupBy({
+          by: ['orgId'],
+          where: { orgId: { in: orgIds }, role: 'knocker', status: { not: 'archived' } },
+          _count: { _all: true },
+        }),
+        db.user.groupBy({
+          by: ['orgId'],
+          where: { orgId: { in: orgIds }, role: 'inside_sales', status: { not: 'archived' } },
+          _count: { _all: true },
+        }),
+        db.territory.groupBy({
+          by: ['orgId'],
+          where: { orgId: { in: orgIds }, status: 'active' },
+          _count: { _all: true },
+        }),
+        db.conversion.groupBy({
+          by: ['orgId'],
+          where: { orgId: { in: orgIds }, signedAt: { gte: mtdStart } },
+          _count: { _all: true },
+          _sum: { amountCents: true },
+        }),
+      ]);
+
     const leadCountByOrg = new Map(leadCounts.map((r) => [r.orgId, r._count._all]));
+    const knockerCountByOrg = new Map(knockerCounts.map((r) => [r.orgId, r._count._all]));
+    const insideSalesCountByOrg = new Map(insideSalesCounts.map((r) => [r.orgId, r._count._all]));
+    const territoryCountByOrg = new Map(territoryCounts.map((r) => [r.orgId, r._count._all]));
+    const convCountByOrg = new Map(conversionAgg.map((r) => [r.orgId, r._count._all]));
+    const revenueByOrg = new Map(conversionAgg.map((r) => [r.orgId, r._sum.amountCents ?? 0n]));
 
     const entries: PortfolioEntry[] = orgs.map((o) => {
-      // Reuse the fixture for cosmetic colours/notes when the slug matches;
-      // otherwise synthesize from DB columns. The DB is the source of truth
-      // for legalName / regionCode / status; the fixture only loans the
-      // avatar palette + the legacy narrative for known demo orgs.
-      const fixture = o.slug ? ACCOUNTS.find((a) => a.slug === o.slug) : undefined;
+      const revenueCentsMTD = revenueByOrg.get(o.id) ?? 0n;
       const account: Account = {
         slug: o.slug ?? o.id,
         name: o.legalName,
@@ -100,30 +146,33 @@ async function loadPortfolio(): Promise<PortfolioData> {
           : o.regionCode === 'SG'
             ? 'SG'
             : 'US') as Account['region'],
-        avatarBg: fixture?.avatarBg ?? '#0F172A',
-        avatarFg: fixture?.avatarFg ?? '#FFFFFF',
-        plan: fixture?.plan ?? 'Growth',
-        health: fixture?.health ?? 'healthy',
-        knockers: fixture?.knockers ?? 0,
-        insideSalesReps: fixture?.insideSalesReps ?? 0,
-        territoriesActive: fixture?.territoriesActive ?? 0,
+        // Cosmetic-only — no plan-tier / health-score model in the schema yet.
+        avatarBg: '#0F172A',
+        avatarFg: '#FFFFFF',
+        plan: 'Growth',
+        health: 'healthy',
+        knockers: knockerCountByOrg.get(o.id) ?? 0,
+        insideSalesReps: insideSalesCountByOrg.get(o.id) ?? 0,
+        territoriesActive: territoryCountByOrg.get(o.id) ?? 0,
         leadsInboxToday: leadCountByOrg.get(o.id) ?? 0,
-        conversionsMTD: fixture?.conversionsMTD ?? 0,
-        revenueCentsMTD: fixture?.revenueCentsMTD ?? 0n,
-        ltvCentsMTD: fixture?.ltvCentsMTD ?? 0n,
+        conversionsMTD: convCountByOrg.get(o.id) ?? 0,
+        revenueCentsMTD,
+        // ponytail: no LTV model yet — floor at MTD revenue rather than
+        // fabricate a multiplier; upgrade when Donation.frequency rollups land.
+        ltvCentsMTD: revenueCentsMTD,
         contractedAt: o.createdAt.toISOString().slice(0, 10),
-        notes: fixture?.notes ?? `${o.tradingName} sub-account.`,
+        notes: `${o.tradingName} sub-account.`,
       };
-      return { account, fromDb: true, leadsToday: leadCountByOrg.get(o.id) ?? 0 };
+      return { account, leadsToday: leadCountByOrg.get(o.id) ?? 0 };
     });
 
     return { entries, source: 'database' };
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[accounts] DB load failed, falling back to fixture:', err);
+    console.error('[accounts] DB load failed:', err);
     return {
-      entries: ACCOUNTS.map((a) => ({ account: a, fromDb: false, leadsToday: a.leadsInboxToday })),
-      source: 'fixture-fallback',
+      entries: [],
+      source: 'error',
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -148,6 +197,21 @@ export default async function AccountsPage({
   const totalLeadsToday = entries.reduce((s, e) => s + e.leadsToday, 0);
   const totalRevenue = accounts.reduce((s, a) => s + a.revenueCentsMTD, 0n);
 
+  if (source === 'error') {
+    return (
+      <PlatformShell pageTitle="Accounts">
+        <div className="space-y-5 max-w-[1400px]">
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              Could not load accounts from the database{error ? `: ${error}` : ''}. Refresh to
+              retry.
+            </span>
+          </Banner>
+        </div>
+      </PlatformShell>
+    );
+  }
+
   if (accounts.length === 0) {
     return (
       <PlatformShell pageTitle="Accounts">
@@ -171,21 +235,12 @@ export default async function AccountsPage({
               <span>
                 {accounts.length} businesses live · {totalKnockers} knockers active across portfolio
               </span>
-              {source === 'database' ? (
-                <span
-                  className="inline-flex items-center gap-1 text-success text-[10px] uppercase tracking-wider font-semibold"
-                  title="Loaded from Postgres"
-                >
-                  <Database size={10} /> Live
-                </span>
-              ) : (
-                <span
-                  className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold"
-                  title={error ? `DB error: ${error}` : 'Showing fixture data'}
-                >
-                  <AlertTriangle size={10} /> Fixture
-                </span>
-              )}
+              <span
+                className="inline-flex items-center gap-1 text-success text-[10px] uppercase tracking-wider font-semibold"
+                title="Loaded from Postgres"
+              >
+                <Database size={10} /> Live
+              </span>
             </div>
           </div>
           <Link href="/onboard-account">
@@ -216,23 +271,12 @@ export default async function AccountsPage({
 
         <Reveal delay={0} className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Accounts" value={accounts.length} hint="charity + commercial" />
-          <KpiCard
-            label="Knockers active"
-            value={totalKnockers}
-            delta="+18 vs yest."
-            deltaTone="positive"
-          />
-          <KpiCard
-            label="Leads today (all accts)"
-            value={totalLeadsToday}
-            delta="real-time"
-            deltaTone="positive"
-          />
+          <KpiCard label="Knockers active" value={totalKnockers} hint="roster, live" />
+          <KpiCard label="Leads today (all accts)" value={totalLeadsToday} hint="real-time" />
           <KpiCard
             label="MTD revenue"
             value={<Money cents={totalRevenue} region="US" />}
-            delta="+18.4%"
-            deltaTone="positive"
+            hint="month-to-date"
           />
         </Reveal>
 

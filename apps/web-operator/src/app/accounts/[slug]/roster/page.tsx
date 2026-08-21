@@ -1,8 +1,3 @@
-// TODO(M5): needs a Shift / ShiftSchedule model — no backing table yet.
-// KnockSession tracks field sessions but not advance scheduling. Roster
-// drag-and-drop scheduling requires a new Shift model (userId, day, start,
-// end, territory, status). Remaining on buildRoster() seed until that
-// migration lands.
 'use client';
 
 import { use, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
@@ -22,11 +17,15 @@ import {
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
-import { RosterEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { RosterEmpty } from '@/components/AccountEmptyStates';
 import { toast } from '@/components/Toaster';
-import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
-import { buildRoster } from '@/lib/seed/roster';
-import { firstRunSnapshot } from '@/lib/first-run';
+
+/** 2-letter monogram from a trading name — mirrors lib/accounts.accountMonogram. */
+function accountMonogram(shortName: string): string {
+  const parts = shortName.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
+  return (parts[0]?.slice(0, 2) ?? '??').toUpperCase();
+}
 
 // Live knocker + territory rows fetched from the per-account BFF. A real shift
 // must reference a real userId + territoryId so the iOS app's
@@ -56,6 +55,10 @@ type ShiftStatus = 'scheduled' | 'active' | 'lunch' | 'missed' | 'completed';
 
 interface Shift {
   id: string;
+  /** Real DB linkage when the shift was rostered live — undefined for legacy
+   *  planning-matrix-only rows created before a knocker/territory existed. */
+  userId?: string;
+  territoryId?: string;
   repInitials: string;
   repName: string;
   day: number;
@@ -67,75 +70,12 @@ interface Shift {
 }
 
 interface Rep {
+  id: string;
   initials: string;
   name: string;
 }
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-function buildReps(account: Account): Rep[] {
-  // Use the seeded roster — top 30 by tenure × on-shift bias so the schedule
-  // matrix shows a representative cross-section. The DOM still caps at 30 for
-  // readability; the headline KPI shows the full roster size.
-  const SEED_MAX = 30;
-  const roster = buildRoster({ slug: account.slug });
-  // Prefer reps who are actually on-shift today; backfill with offline so
-  // the matrix has a stable size when the calendar lands on a weekend.
-  const onShift = roster.filter((k) => k.status !== 'offline').slice(0, SEED_MAX);
-  if (onShift.length >= SEED_MAX) {
-    return onShift.map((k) => ({ initials: k.initials, name: k.name }));
-  }
-  const backfill = roster.filter((k) => k.status === 'offline').slice(0, SEED_MAX - onShift.length);
-  return [...onShift, ...backfill].map((k) => ({ initials: k.initials, name: k.name }));
-}
-
-function buildTerritories(account: Account): string[] {
-  if (account.region === 'AU') {
-    return ['Melbourne North', 'Sydney West', 'Brisbane Central', 'Perth East', 'Adelaide South'];
-  }
-  if (account.region === 'SG') {
-    return ['Singapore Central', 'Singapore West'];
-  }
-  // US — vary by vertical
-  if (account.vertical === 'commercial') {
-    return ['Dallas Metro', 'Houston SE', 'Austin South', 'Phoenix West'];
-  }
-  return ['Austin East', 'Dallas Metro', 'Houston SE', 'Phoenix West', 'Atlanta North'];
-}
-
-function buildSeed(reps: Rep[], territories: string[]): Shift[] {
-  const out: Shift[] = [];
-  let id = 0;
-  reps.forEach((r, ri) => {
-    // Each rep gets 3-5 shifts/week (varied)
-    const shiftCount = 3 + ((ri + 1) % 3);
-    const territory = territories[ri % territories.length]!;
-    for (let d = 0; d < shiftCount; d++) {
-      const day = (d + (ri % 2)) % 5; // Mon-Fri mostly
-      const start = ri % 3 === 0 ? '08:00' : '09:00';
-      const end = ri % 3 === 0 ? '16:00' : '17:00';
-      let status: ShiftStatus = 'scheduled';
-      if (day === 0) {
-        if (ri === 0) status = 'lunch';
-        else if (ri === 1) status = 'missed';
-        else status = 'active';
-      }
-      const shift: Shift = {
-        id: `sh_${id++}`,
-        repInitials: r.initials,
-        repName: r.name,
-        day,
-        start,
-        end,
-        territory,
-        status,
-        lunch: status === 'lunch' ? '12:30-CURRENT' : undefined,
-      };
-      out.push(shift);
-    }
-  });
-  return out;
-}
 
 function hoursOf(shift: Shift): number {
   const [sh, sm] = shift.start.split(':').map(Number) as [number, number];
@@ -159,14 +99,9 @@ export default function AccountRosterPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
-  const reps = useMemo<Rep[]>(() => (account ? buildReps(account) : []), [account]);
-  const territories = useMemo<string[]>(
-    () => (account ? buildTerritories(account) : []),
-    [account],
-  );
+  const [orgName, setOrgName] = useState(params.slug);
+  const [orgLoaded, setOrgLoaded] = useState(false);
 
-  const [shifts, setShifts] = useState<Shift[]>(() => buildSeed(reps, territories));
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [dayIndex, setDayIndex] = useState(0);
@@ -176,16 +111,31 @@ export default function AccountRosterPage({
   const [quickAddKey, setQuickAddKey] = useState<string | null>(null);
   const [clockedOut, setClockedOut] = useState<Record<string, string>>({});
 
-  // Live knockers + territories for the "assign shift to a real rep" flow.
+  // Live knockers + territories — the roster grid's rows/columns AND the
+  // "assign shift to a real rep" flow both read from these; there is no
+  // seed fallback.
   const [liveKnockers, setLiveKnockers] = useState<LiveKnocker[]>([]);
   const [liveTerritories, setLiveTerritories] = useState<LiveTerritory[]>([]);
+  const reps = useMemo<Rep[]>(
+    () =>
+      liveKnockers.map((k) => ({
+        id: k.id,
+        initials: k.initials,
+        name: `${k.givenName} ${k.familyName}`.trim() || k.givenName,
+      })),
+    [liveKnockers],
+  );
+  const territories = useMemo<string[]>(
+    () => liveTerritories.map((t) => t.name),
+    [liveTerritories],
+  );
 
   useEffect(() => {
-    if (!account) return;
     let cancelled = false;
     void (async (): Promise<void> => {
       try {
-        const [kRes, tRes] = await Promise.all([
+        const [orgsRes, kRes, tRes] = await Promise.all([
+          fetch('/api/orgs', { credentials: 'include' }),
           fetch(`/api/orgs/${encodeURIComponent(params.slug)}/knockers`, {
             credentials: 'include',
           }),
@@ -193,23 +143,87 @@ export default function AccountRosterPage({
             credentials: 'include',
           }),
         ]);
-        if (!cancelled && kRes.ok) {
+        if (cancelled) return;
+        if (orgsRes.ok) {
+          const data = (await orgsRes.json()) as {
+            orgs?: { slug: string | null; tradingName: string }[];
+          };
+          const org = data.orgs?.find((o) => o.slug === params.slug);
+          if (org) setOrgName(org.tradingName);
+        }
+        if (kRes.ok) {
           const data = (await kRes.json()) as { knockers: LiveKnocker[] };
           setLiveKnockers(data.knockers.filter((k) => k.status !== 'archived'));
         }
-        if (!cancelled && tRes.ok) {
+        if (tRes.ok) {
           const data = (await tRes.json()) as { territories: LiveTerritory[] };
           setLiveTerritories(data.territories);
         }
       } catch {
-        // Non-fatal: the matrix still renders from the seed; the Add-shift modal
-        // simply won't offer live reps/territories until the fetch succeeds.
+        // Non-fatal — the grid renders empty until the next mount/retry.
+      } finally {
+        if (!cancelled) setOrgLoaded(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [account, params.slug]);
+  }, [params.slug]);
+
+  const dates = useMemo(() => weekDates(weekOffset), [weekOffset]);
+  const weekStartValue = useMemo(() => weekStartIso(dates[0] ?? new Date()), [dates]);
+
+  // Real shifts for the visible week — no synthetic planning seed. Re-fetches
+  // whenever the operator pages to a different week.
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch(
+          `/api/orgs/${encodeURIComponent(params.slug)}/roster/shifts?weekStart=${encodeURIComponent(weekStartValue)}`,
+          { credentials: 'include' },
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          shifts: {
+            id: string;
+            userId: string | null;
+            territoryId: string | null;
+            repInitials: string;
+            repName: string;
+            territory: string;
+            day: number;
+            start: string;
+            end: string;
+            lunch: string | null;
+            status: ShiftStatus;
+          }[];
+        };
+        if (cancelled) return;
+        setShifts(
+          data.shifts.map((s) => ({
+            id: s.id,
+            userId: s.userId ?? undefined,
+            territoryId: s.territoryId ?? undefined,
+            repInitials: s.repInitials,
+            repName: s.repName,
+            day: s.day,
+            start: s.start,
+            end: s.end,
+            territory: s.territory,
+            lunch: s.lunch ?? undefined,
+            status: s.status,
+          })),
+        );
+      } catch {
+        // Non-fatal — keep whatever was already loaded for this week.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.slug, weekStartValue]);
 
   // Persist a real shift to the iOS-reachable roster (userId + territoryId).
   async function persistShift(input: {
@@ -227,7 +241,7 @@ export default function AccountRosterPage({
         body: JSON.stringify({
           userId: input.userId,
           territoryId: input.territoryId,
-          weekStart: weekStartIso(dates[0] ?? new Date()),
+          weekStart: weekStartValue,
           day: input.day,
           start: input.start,
           end: input.end,
@@ -250,7 +264,6 @@ export default function AccountRosterPage({
   const justDraggedRef = useRef(false);
   const [hoverCell, setHoverCell] = useState<string | null>(null);
 
-  const dates = useMemo(() => weekDates(weekOffset), [weekOffset]);
   const weekLabel = useMemo(() => {
     const start = dates[0]!;
     return `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
@@ -357,15 +370,21 @@ export default function AccountRosterPage({
 
   const editingShift = shifts.find((s) => s.id === editShiftId) ?? null;
 
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (!orgLoaded) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Roster & shifts">
+        <div className="max-w-[1400px] px-2 py-16 text-center text-[12px] text-soft">
+          Loading roster…
+        </div>
+      </AccountShell>
+    );
+  }
+
+  if (reps.length === 0) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Roster & shifts">
         <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <RosterEmpty slug={params.slug} accountName={firstRun.accountName} />
+          <RosterEmpty slug={params.slug} accountName={orgName} />
         </div>
       </AccountShell>
     );
@@ -376,10 +395,10 @@ export default function AccountRosterPage({
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Rostering for <span className="font-semibold">{account.shortName}</span>&apos;s{' '}
-            {account.knockers.toLocaleString()} Knockers (top {reps.length} shown). Hours
-            auto-logged from Knocker iOS clock-in. Drag shifts between cells to reassign. Click any
-            shift to edit. Pushes changes instantly to the knocker&apos;s iPad.
+            Rostering for <span className="font-semibold">{orgName}</span>&apos;s{' '}
+            {reps.length.toLocaleString()} Knockers. Hours auto-logged from Knocker iOS clock-in.
+            Drag shifts between cells to reassign. Click any shift to edit. Pushes changes instantly
+            to the knocker&apos;s iPad.
           </span>
         </Banner>
 
@@ -462,7 +481,7 @@ export default function AccountRosterPage({
 
         {view === 'week' && (
           <Section
-            title={`Week schedule · ${account.shortName}`}
+            title={`Week schedule · ${orgName}`}
             subtitle="Drag any shift to reassign · click to edit"
             paddedBody={false}
           >
@@ -504,7 +523,7 @@ export default function AccountRosterPage({
                             <span className="mono">{r.initials}</span>
                             <div>
                               <div className="text-[13px] font-medium text-ink">{r.name}</div>
-                              <div className="text-[10px] text-muted">{account.shortName}</div>
+                              <div className="text-[10px] text-muted">{orgName}</div>
                             </div>
                           </div>
                         </td>
@@ -724,8 +743,7 @@ export default function AccountRosterPage({
         </Section>
 
         <div className="text-[11px] text-muted">
-          Account scope · {accountMonogram(account.shortName)} · {account.shortName} · {reps.length}{' '}
-          of {account.knockers} knockers shown
+          Account scope · {accountMonogram(orgName)} · {orgName} · {reps.length} knockers shown
         </div>
       </div>
 
