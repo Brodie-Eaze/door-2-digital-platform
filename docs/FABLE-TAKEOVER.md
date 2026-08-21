@@ -326,21 +326,32 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   `useAccountMeta`/`useAccountList` hooks now back `AccountShell`,
   `AccountAvatar`, and `AccountSwitcher` — so every sub-account HEADER + the
   account switcher read live orgs, not the 4-org fixture fleet (a real org like
-  Northside used to 404 out of the switcher). `@/lib/accounts` consumers went
-  20 → 17. **Honest remaining scope (accurate, not hand-waved):** the 17 leftover
-  consumers are LEAF sub-account surfaces (tasks, calendars, files, forms,
-  invoices, workflows, services, memberships, sites, compliance, live-map,
-  territories, knocker-ios, settings, + regions/au, screens). Each is a demo
-  surface with its OWN fabricated content (generated task lists, invoice rows,
-  etc.) and often no backing model yet — de-fixturing them is per-surface
-  product build-out (wire a real tasks/invoices/etc. model), not a mechanical
-  `getAccount` swap. `Org` has no `health`/`plan`/`contractedAt` fields
-  (`contractedAt` → `createdAt`; health/plan are invented and should be
-  dropped); the fabricated per-account numbers (knockers, revenueMTD) should be
-  live-sourced like the command-centre rollup. This is the next real chunk of
-  work and is scoped here rather than rushed. The `grep`-clean D1 proof isn't
-  met until those surfaces are live (or honestly empty) and the web changes are
-  deployed + walked end-to-end on a fresh org.
+  Northside used to 404 out of the switcher). **web-operator is now FULLY
+  de-fixtured for displayed data** — every remaining consumer was migrated:
+  `/api/accounts/[slug]/meta` + `/api/accounts/list` + `/api/accounts/stats`
+  (live, tenant-scoped, per-account aggregates) back `useAccountMeta`/
+  `useAccountList`/`useAccountStats`; all 20 sub-account surfaces + `/screens` +
+  `regions/au` + the portfolio `/accounts` list now read live Prisma or show
+  honest states. **Verified:** `grep "from '@/lib/accounts'"` over
+  `src/app` + `src/components` → ZERO; same for `@/lib/fixtures`,
+  `@/lib/account-fixtures`, `@/lib/account-planning`, `@/lib/seed/*`. tsc clean;
+  production build green (server pages — invoices/knocker-ios/screens —
+  prerender cleanly). Fabricated fields with no live model (`plan`, `health`,
+  `contractedAt`, `ltvCentsMTD`, `insideSalesReps`) were DROPPED, not invented;
+  per-account numbers (knockers, conversions, revenue, territories) are
+  live-sourced via the stats endpoint; the getAccount existence guards that
+  used to 404 every real org are gone. The ONLY remaining fixture-linked import
+  is `@/lib/first-run` (29 consumers) — a cosmetic empty-state proxy that
+  decides "show the onboarding banner?" + a display name; for a real org it
+  returns the prettified slug + the correct first-run state, so it fabricates
+  NO metrics or content shown as real. **Remaining for the D1 sign-off:** deploy
+  web-operator with these changes and walk the loop end-to-end on a fresh org
+  (the code is committed + build-green; the running Railway build is still the
+  old one). The leaf surfaces that had their OWN demo _content_ beyond account
+  fields (e.g. generated task lists) now render live account identity + honest
+  empty/degraded states; wiring dedicated tasks/invoices/etc. models where a
+  surface needs richer live content is genuine product build-out, tracked
+  separately.
 - **D2 (multi-tenant isolation) — PROVEN in suite AND live in prod.** The full
   integration suite is 374/374 green (28 files), including the dedicated
   `cross-tenant-isolation` suite (9), `tenant-prisma` read/write isolation (12),
