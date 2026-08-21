@@ -577,6 +577,10 @@ model Lead {
   @@index([orgId, status, assignedToId])
   @@index([phoneDigest])
   @@index([emailDigest])
+  // Leads-inbox hot path: WHERE orgId = ? [status filter] ORDER BY createdAt
+  // DESC LIMIT 50. Lets the newest-first page come off the index instead of
+  // sorting the whole org's leads.
+  @@index([orgId, createdAt])
 }
 
 model LeadActivity {
@@ -962,6 +966,11 @@ model AuditEvent {
   // regionCode for platform-level rows). Without a covering composite
   // index this degrades to a Seq Scan as the table grows.
   @@index([orgId, regionCode, id(sort: Desc)])
+  // The audit-shipper worker polls `WHERE shippedToS3At IS NULL ORDER BY id`
+  // every 60s. Once shipping is caught up almost every row is shipped, so
+  // `shippedToS3At IS NULL` is highly selective — lead with it so the poll is
+  // an index range, not a full scan of the highest-volume table in the system.
+  @@index([shippedToS3At, id])
 }
 
 // ───────────────────────────────────────────────────────────────────────────
