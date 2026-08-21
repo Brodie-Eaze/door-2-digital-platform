@@ -5,3 +5,4 @@ node_modules
 .git
 apps/knocker-ios/DerivedData
 **/dist
+infra/railway
