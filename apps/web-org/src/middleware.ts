@@ -3,7 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
-  if (pathname === '/login' || pathname.startsWith('/proxy/api/')) {
+  if (
+    pathname === '/login' ||
+    pathname === '/accept-invite' ||
+    pathname.startsWith('/proxy/api/') ||
+    pathname.startsWith('/v1/auth/')
+  ) {
     return NextResponse.next();
   }
 
