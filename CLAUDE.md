@@ -61,11 +61,18 @@ Operator-first (D2D's own knocker team runs campaigns for client orgs), SaaS-sel
 - `docs/adr/` — ADRs 0001–0030
 - `infra/terraform/README.md` — AWS deploy runbook
 
-## Live URLs (current demo — pre-hardening build)
+## Live URLs (Railway production environment — full hardened stack, deployed 2026-08-21)
 
+- API (Fastify 5, 35 domains): https://d2d-api-production-895b.up.railway.app
+- Operator Command Centre: https://d2d-production-1fab.up.railway.app
+- Org console (web-org): https://d2d-web-org-production.up.railway.app
+- Partner portal: https://d2d-partner-portal-production.up.railway.app
 - Public site: https://public-site-production-8e0b.up.railway.app (+ `/platform`)
-- Operator Command Centre (demo login): https://d2d-production-1fab.up.railway.app
-- These run the OLD build; the PR-stack changes are not deployed.
+- Postgres + Redis are Railway plugins in the D2D project; migrations run
+  in-container via `railway ssh` (see deploy commits on the tip branch).
+- Demo logins are seeded (seed-demo.ts / seed-demo-leads.ts); production
+  secrets were freshly generated and live only in Railway variables —
+  shared-secret law applied across API + web-operator.
 
 ## What NOT to do
 
