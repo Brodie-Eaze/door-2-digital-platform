@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { AccountMeta } from '@/app/api/accounts/[slug]/meta/route';
 import type { AccountListItem } from '@/app/api/accounts/list/route';
+import type { AccountStat } from '@/app/api/accounts/stats/route';
 
 // Pure formatters live in a plain (non-client) module so server components can
 // use them too; re-exported here for the client consumers that already import
@@ -60,4 +61,46 @@ export function useAccountList(): AccountListItem[] {
     };
   }, []);
   return accounts;
+}
+
+/**
+ * Live per-account stats keyed by slug, from /api/accounts/stats. `null` until
+ * the first answer so callers can show "—" rather than a fabricated number.
+ * `revenueCentsMTD` is parsed to bigint from the wire string.
+ */
+export interface AccountStatParsed {
+  knockers: number;
+  conversionsMTD: number;
+  revenueCentsMTD: bigint;
+  territoriesActive: number;
+}
+export function useAccountStats(): Record<string, AccountStatParsed> | null {
+  const [stats, setStats] = useState<Record<string, AccountStatParsed> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/accounts/stats');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { stats?: AccountStat[] };
+        if (cancelled || !Array.isArray(data.stats)) return;
+        const map: Record<string, AccountStatParsed> = {};
+        for (const s of data.stats) {
+          map[s.slug] = {
+            knockers: s.knockers,
+            conversionsMTD: s.conversionsMTD,
+            revenueCentsMTD: BigInt(s.revenueCentsMTD),
+            territoriesActive: s.territoriesActive,
+          };
+        }
+        if (!cancelled) setStats(map);
+      } catch {
+        // Keep null; callers render "—".
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+  return stats;
 }

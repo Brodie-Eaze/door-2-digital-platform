@@ -16,13 +16,7 @@ import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 import { RegistrationsEmpty, CoolingOffEmpty } from '@/components/RegionEmptyStates';
-import { ACCOUNTS } from '@/lib/accounts';
-
-// The per-account listing table below is still fixture-backed — `lib/accounts.ts`
-// is a separate, out-of-scope migration (used by ~28 other files). Only the KPI
-// rollup above it was fabricated by deriving from that fixture; that rollup now
-// comes from GET /api/regions/AU/overview instead.
-const AU_ACCOUNTS = ACCOUNTS.filter((a) => a.region === 'AU');
+import { useAccountList, useAccountStats } from '@/lib/use-account-meta';
 
 interface RegionOverview {
   activeOrgs: number;
@@ -75,6 +69,11 @@ const ABS_REFERENCE_SOURCES = [
 ];
 
 export default function AuRegionPage(): JSX.Element {
+  // Live account list + per-account stats (replaces the AU slice of the fixture
+  // fleet). auAccounts is the AU-region subset; stats is a slug→numbers map.
+  const accounts = useAccountList();
+  const accountStats = useAccountStats();
+  const auAccounts = accounts.filter((a) => a.region === 'AU');
   const [overview, setOverview] = useState<RegionOverview | null>(null);
   const [compliance, setCompliance] = useState<ComplianceResponse | null>(null);
   const [billing, setBilling] = useState<BillingResponse | null>(null);
@@ -137,8 +136,8 @@ export default function AuRegionPage(): JSX.Element {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <KpiCard
             label="Active AU accounts"
-            value={overview?.activeOrgs ?? AU_ACCOUNTS.length}
-            hint={`of ${ACCOUNTS.length} portfolio`}
+            value={overview?.activeOrgs ?? auAccounts.length}
+            hint={`of ${accounts.length} portfolio`}
           />
           <KpiCard
             label="AU Knockers deployed"
@@ -391,56 +390,53 @@ export default function AuRegionPage(): JSX.Element {
           subtitle="Sub-accounts whose conversions touch this region's compliance gates"
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Vertical</th>
-                <th>Plan</th>
-                <th>Knockers</th>
-                <th>MTD revenue</th>
-                <th>Conversions MTD</th>
-                <th>Health</th>
-              </tr>
-            </thead>
-            <tbody>
-              {AU_ACCOUNTS.map((a) => (
-                <tr key={a.slug}>
-                  <td>
-                    <a
-                      href={`/accounts/${a.slug}`}
-                      className="text-[13px] font-medium text-ink hover:text-accent flex items-center gap-1.5"
-                    >
-                      {a.name}
-                      <ExternalLink size={11} className="text-soft" />
-                    </a>
-                  </td>
-                  <td className="text-[12px] text-muted capitalize">{a.vertical}</td>
-                  <td className="text-[12px] text-ink">{a.plan}</td>
-                  <td className="text-[12px] text-ink numeric">{a.knockers}</td>
-                  <td className="text-[12px] text-ink">
-                    <Money cents={a.revenueCentsMTD} region="AU" />
-                  </td>
-                  <td className="text-[12px] text-ink numeric">
-                    {a.conversionsMTD.toLocaleString()}
-                  </td>
-                  <td>
-                    <StatusPill
-                      tone={
-                        a.health === 'healthy'
-                          ? 'success'
-                          : a.health === 'attention'
-                            ? 'warn'
-                            : 'danger'
-                      }
-                    >
-                      {a.health}
-                    </StatusPill>
-                  </td>
+          {auAccounts.length === 0 ? (
+            <div className="px-4 py-3 text-[12px] text-muted">
+              No AU accounts on the platform yet.
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Vertical</th>
+                  <th>Knockers</th>
+                  <th>MTD revenue</th>
+                  <th>Conversions MTD</th>
+                  <th>Territories</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {auAccounts.map((a) => {
+                  const s = accountStats?.[a.slug];
+                  return (
+                    <tr key={a.slug}>
+                      <td>
+                        <a
+                          href={`/accounts/${a.slug}`}
+                          className="text-[13px] font-medium text-ink hover:text-accent flex items-center gap-1.5"
+                        >
+                          {a.name}
+                          <ExternalLink size={11} className="text-soft" />
+                        </a>
+                      </td>
+                      <td className="text-[12px] text-muted capitalize">{a.vertical}</td>
+                      <td className="text-[12px] text-ink numeric">{s ? s.knockers : '—'}</td>
+                      <td className="text-[12px] text-ink">
+                        {s ? <Money cents={s.revenueCentsMTD} region="AU" /> : '—'}
+                      </td>
+                      <td className="text-[12px] text-ink numeric">
+                        {s ? s.conversionsMTD.toLocaleString() : '—'}
+                      </td>
+                      <td className="text-[12px] text-ink numeric">
+                        {s ? s.territoriesActive : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </Section>
       </div>
     </PlatformShell>
