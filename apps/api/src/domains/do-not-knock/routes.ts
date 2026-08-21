@@ -70,35 +70,53 @@ export async function registerDoNotKnock(app: FastifyInstance): Promise<void> {
     const { source, rows } = dnkIngestRequestSchema.parse(req.body);
     const regionCode = ctx.regionCode as RegionCode;
 
-    let inserted = 0;
     let skipped = 0;
 
-    for (const row of rows) {
-      const addr = await prisma().address.findFirst({
-        where: { regionCode, hashKey: row.hashedAddress },
-        select: { id: true },
-      });
+    // DNK/DNC lists are large (thousands of suppressed addresses). The old path
+    // did a sequential address.findFirst + doNotKnock.upsert PER ROW — 2N
+    // round-trips that time out on a real ingest. Batch it: one findMany to
+    // resolve every address, one createMany to insert. Addresses already on the
+    // list are left untouched (skipDuplicates) — they stay suppressed.
+    const hashKeys = [...new Set(rows.map((r) => r.hashedAddress))];
+    const addrs = await prisma().address.findMany({
+      where: { regionCode, hashKey: { in: hashKeys } },
+      select: { id: true, hashKey: true },
+    });
+    const addrIdByHash = new Map(addrs.map((a) => [a.hashKey, a.id]));
 
-      if (!addr) {
+    // Resolve rows → DNK payloads, deduped by addressId; a row whose address
+    // isn't on file counts as skipped (same as before).
+    const byAddr = new Map<
+      string,
+      {
+        id: string;
+        regionCode: RegionCode;
+        addressId: string;
+        source: typeof source;
+        loadedAt: Date;
+      }
+    >();
+    for (const row of rows) {
+      const addressId = addrIdByHash.get(row.hashedAddress);
+      if (!addressId) {
         skipped++;
         continue;
       }
-
-      await prisma().doNotKnock.upsert({
-        where: { regionCode_addressId: { regionCode, addressId: addr.id } },
-        create: {
-          id: newId('dnk'),
-          regionCode,
-          addressId: addr.id,
-          source,
-          loadedAt: row.capturedAt ? new Date(row.capturedAt) : new Date(),
-        },
-        update: { source, loadedAt: row.capturedAt ? new Date(row.capturedAt) : new Date() },
+      byAddr.set(addressId, {
+        id: newId('dnk'),
+        regionCode,
+        addressId,
+        source,
+        loadedAt: row.capturedAt ? new Date(row.capturedAt) : new Date(),
       });
-      inserted++;
     }
 
-    return reply.code(200).send({ inserted, skipped, source, regionCode });
+    const result = await prisma().doNotKnock.createMany({
+      data: [...byAddr.values()],
+      skipDuplicates: true,
+    });
+
+    return reply.code(200).send({ inserted: result.count, skipped, source, regionCode });
   });
 
   // GET /v1/do-not-knock — cursor-paginated list (admin/auditor only)
