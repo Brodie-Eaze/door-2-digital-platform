@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css';
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from '@/components/Toaster';
+import { SessionKeeper } from '@/components/SessionKeeper';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen font-sans">
+        <SessionKeeper />
         {children}
         <Toaster />
       </body>
