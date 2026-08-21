@@ -379,8 +379,17 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   every resource type returns **404, never 403**, while org B's own
   `/v1/territories/assigned → 200`. Cross-tenant reads are indistinguishable from
   "does not exist", which is the correct posture (no existence leak).
-- **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
-  return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
+- **D5 (backpressure) — PROVEN in prod; 50k harness fire-ready.** 150-request
+  burst → 120 pass, 121st+ return 429 + Retry-After + x-ratelimit-remaining:0,
+  per-client (TRUST_PROXY_HOPS=2) — the graceful-degradation MECHANISM is proven.
+  The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
+  ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
+  error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
+  with a runbook (`load-tests/README.md`). It is ONE command against a target
+  once one exists. What's missing is purely the target: 50k VUs needs k6 Cloud
+  or a self-hosted k6 cluster + a staging stack at scale — it cannot run from a
+  laptop and MUST NOT run against the live prod console (that's a DoS + pollutes
+  the prod DB with test knocks). So D5-scale is infra-gated, not code-gated.
 - **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
   money-cycle to the cent + human gate, RTBF at-rest erasure, voice double-gate,
   security floor. Full external pen test (D9) remains human-gated.
