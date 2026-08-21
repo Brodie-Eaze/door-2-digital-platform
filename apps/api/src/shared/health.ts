@@ -11,20 +11,11 @@ import { prisma } from '../config/db';
 import { redis } from '../config/redis';
 
 export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/v1/healthz', { config: { rateLimit: false } }, async (req) => {
-    // xffCount: how many entries the edge put in X-Forwarded-For — used once
-    // to calibrate TRUST_PROXY_HOPS for this deployment, then ignorable.
-    const xff = req.headers['x-forwarded-for'];
-    const xffCount =
-      typeof xff === 'string' ? xff.split(',').length : Array.isArray(xff) ? xff.length : 0;
-    return {
-      status: 'ok',
-      service: 'd2d-api',
-      version: process.env.npm_package_version ?? '0.1.0',
-      observedIp: req.ip,
-      xffCount,
-    };
-  });
+  app.get('/v1/healthz', { config: { rateLimit: false } }, async () => ({
+    status: 'ok',
+    service: 'd2d-api',
+    version: process.env.npm_package_version ?? '0.1.0',
+  }));
 
   app.get('/v1/readyz', { config: { rateLimit: false } }, async (_req, reply) => {
     const checks: Record<string, 'ok' | string> = {};
