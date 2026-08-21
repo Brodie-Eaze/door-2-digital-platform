@@ -320,12 +320,27 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   `PlanningSurface` from `account-planning` fixtures — that's an AI
   forecasting feature with no live backing model yet (same category as the
   command-centre AI-zones/anomalies, which already show honest empty states).
-  Both now carry a visible `fixture` DataSourceBadge so no operator mistakes a
-  demo forecast for a real staffing rec. DECISION FOR BRODIE: build a real
-  planning/forecast model, or replace the planning demo with an honest
-  "arrives with the propensity engine" empty state. The `grep`-clean D1 proof
-  isn't met until that's resolved and the web changes are deployed + walked
-  end-to-end on a fresh org.
+  Both were then converted to honest empty states (no fabricated forecasts).
+  **Live-account foundation built + shared surfaces migrated:** new
+  `/api/accounts/[slug]/meta` + `/api/accounts/list` (live, tenant-scoped) and
+  `useAccountMeta`/`useAccountList` hooks now back `AccountShell`,
+  `AccountAvatar`, and `AccountSwitcher` — so every sub-account HEADER + the
+  account switcher read live orgs, not the 4-org fixture fleet (a real org like
+  Northside used to 404 out of the switcher). `@/lib/accounts` consumers went
+  20 → 17. **Honest remaining scope (accurate, not hand-waved):** the 17 leftover
+  consumers are LEAF sub-account surfaces (tasks, calendars, files, forms,
+  invoices, workflows, services, memberships, sites, compliance, live-map,
+  territories, knocker-ios, settings, + regions/au, screens). Each is a demo
+  surface with its OWN fabricated content (generated task lists, invoice rows,
+  etc.) and often no backing model yet — de-fixturing them is per-surface
+  product build-out (wire a real tasks/invoices/etc. model), not a mechanical
+  `getAccount` swap. `Org` has no `health`/`plan`/`contractedAt` fields
+  (`contractedAt` → `createdAt`; health/plan are invented and should be
+  dropped); the fabricated per-account numbers (knockers, revenueMTD) should be
+  live-sourced like the command-centre rollup. This is the next real chunk of
+  work and is scoped here rather than rushed. The `grep`-clean D1 proof isn't
+  met until those surfaces are live (or honestly empty) and the web changes are
+  deployed + walked end-to-end on a fresh org.
 - **D2 (multi-tenant isolation) — PROVEN in suite AND live in prod.** The full
   integration suite is 374/374 green (28 files), including the dedicated
   `cross-tenant-isolation` suite (9), `tenant-prisma` read/write isolation (12),
