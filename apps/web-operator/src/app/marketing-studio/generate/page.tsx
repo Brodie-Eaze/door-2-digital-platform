@@ -54,118 +54,8 @@ interface Variant {
   capability: 'image' | 'carousel' | 'video' | 'avatar';
 }
 
-const VARIANT_SEEDS: Variant[] = [
-  {
-    id: 'var_a01',
-    seed: 'tampines-door-story-a01',
-    headline: "Every door is someone's story.",
-    copy: 'Sponsor a child in Tampines for just S$45/month. PayNow today, see your impact tomorrow.',
-    safetyPass: true,
-    cost: 0.42,
-    c2paId: 'c2pa-9421a',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a02',
-    seed: 'tampines-5min-change-a02',
-    headline: "In 5 minutes you can change a Tampines family's year.",
-    copy: 'S$45/mo via PayNow corporate UEN T26CC0021K. Tax-deductible 250% (IPC).',
-    safetyPass: true,
-    cost: 0.38,
-    c2paId: 'c2pa-9421b',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a03',
-    seed: 'tampines-school-meals-a03',
-    headline: 'Your S$45 buys a week of school meals.',
-    copy: "House-to-house permit PLRD/H2H/2026/0188. Knocker shows you the schools you're feeding.",
-    safetyPass: true,
-    cost: 0.41,
-    c2paId: 'c2pa-9421c',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a04',
-    seed: 'tampines-8210-doors-a04',
-    headline: 'We knocked on 8,210 doors in your block.',
-    copy: 'Less than 4% give. Be one of them. Recurring S$45/mo · cancel anytime.',
-    safetyPass: true,
-    cost: 0.39,
-    c2paId: 'c2pa-9421d',
-    status: 'preview',
-    capability: 'carousel',
-  },
-  {
-    id: 'var_a05',
-    seed: 'tampines-quiet-8-pct-a05',
-    headline: "Singapore's quiet 8% live below the line.",
-    copy: 'Tampines FSC reaches them. You can too. S$45/mo via PayNow.',
-    safetyPass: false,
-    cost: 0.44,
-    c2paId: 'c2pa-9421e',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a06',
-    seed: 'tampines-door-fed-a06',
-    headline: 'A door knocked is a child fed.',
-    copy: 'Our PLRD-permitted Knockers walk Tampines daily. Sponsor for S$45/mo.',
-    safetyPass: true,
-    cost: 0.4,
-    c2paId: 'c2pa-9421f',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a07',
-    seed: 'tampines-cdc-voucher-a07',
-    headline: 'Your CDC voucher? Stretch it twice as far.',
-    copy: 'Round-up at point of sale → recurring S$5/mo to Tampines FSC. PayNow today.',
-    safetyPass: true,
-    cost: 0.43,
-    c2paId: 'c2pa-9421g',
-    status: 'preview',
-    capability: 'carousel',
-  },
-  {
-    id: 'var_a08',
-    seed: 'tampines-knockknock-a08',
-    headline: 'Knock-knock. Tampines is here.',
-    copy: 'Our youngest sponsor is 16, our oldest 92. Join them with S$45/mo.',
-    safetyPass: true,
-    cost: 0.45,
-    c2paId: 'c2pa-9421h',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a09',
-    seed: 'tampines-recovery-video-a09',
-    headline: 'One block, 412 sponsors, and counting.',
-    copy: 'A short film from a single Tampines HDB block. Tap to watch · 28s.',
-    safetyPass: true,
-    cost: 0.62,
-    c2paId: 'c2pa-9421i',
-    status: 'preview',
-    capability: 'video',
-  },
-  {
-    id: 'var_a10',
-    seed: 'tampines-avatar-thanks-a10',
-    headline: 'A personal thanks from our Tampines team.',
-    copy: 'AI-presented avatar segment · CEO-recorded script · 18s.',
-    safetyPass: true,
-    cost: 1.84,
-    c2paId: 'c2pa-9421j',
-    status: 'preview',
-    capability: 'avatar',
-  },
-];
+/** Default number of variants requested per brief. */
+const DEFAULT_VARIANT_COUNT = 10;
 
 export default function GenerateCreativePage(): JSX.Element {
   const [vertical, setVertical] = useState<Vertical>('charity');
@@ -180,11 +70,9 @@ export default function GenerateCreativePage(): JSX.Element {
   const [isGenerating, setIsGenerating] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Has the user run a generation this session? Controls the empty state.
-  const [hasGenerated, setHasGenerated] = useState(false);
-  // Honest data-source signal: 'live' when the API returned real variants,
-  // 'fixture' when we fell back to sample variants.
-  const [dataSource, setDataSource] = useState<DataSource>('fixture');
+  // Data-source badge is only ever shown once real variants are on screen
+  // (see the Preview Section action below), so this only ever reads 'live'.
+  const [dataSource, setDataSource] = useState<DataSource>('live');
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   // Honest failure surface: when the upstream call fails we keep the brief and
   // show this banner rather than pretending the generation succeeded.
@@ -208,7 +96,6 @@ export default function GenerateCreativePage(): JSX.Element {
     setGenError(null);
     setSlowHint(false);
     setIsGenerating(true);
-    setHasGenerated(true);
 
     const slowTimer = setTimeout(() => setSlowHint(true), SLOW_HINT_MS);
     const timeoutTimer = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
@@ -226,7 +113,7 @@ export default function GenerateCreativePage(): JSX.Element {
           channel,
           format,
           brandKit,
-          variantCount: VARIANT_SEEDS.length,
+          variantCount: DEFAULT_VARIANT_COUNT,
         }),
       });
 
@@ -244,38 +131,32 @@ export default function GenerateCreativePage(): JSX.Element {
           setGeneratedAt(new Date());
         } else {
           // 200 but no variants yet (async job). The brief was accepted but no
-          // creatives are ready — show samples and say so honestly.
-          const seeds = VARIANT_SEEDS.map((v) => ({ ...v, status: 'preview' as const }));
-          setVariants(seeds);
-          setSelectedId(seeds[0]?.id ?? null);
-          setDataSource('fixture');
+          // creatives are ready synchronously — never fabricate placeholder
+          // variants; the job is tracked server-side and lands in the Library
+          // once it completes.
+          setVariants([]);
+          setSelectedId(null);
           setGenError(
-            'Generation was accepted as an async job — no AI variants are ready yet, so these are sample variants. Your brief is saved.',
+            'Generation was accepted as an async job — no AI variants are ready yet. Your brief is saved; check the Library shortly.',
           );
         }
       } else {
         // API error (e.g. NEXT_PUBLIC_API_URL not set in this environment).
-        // Show sample variants but never let the user believe the call succeeded.
-        console.warn('[generate] API returned', res.status, '— using seed variants');
-        const seeds = VARIANT_SEEDS.map((v) => ({ ...v, status: 'preview' as const }));
-        setVariants(seeds);
-        setSelectedId(seeds[0]?.id ?? null);
-        setDataSource('fixture');
-        setGenError(
-          "AI generation isn't connected in this environment — showing sample variants. Your brief is saved.",
-        );
+        // Never fabricate sample variants — show the empty state and say why.
+        console.warn('[generate] API returned', res.status);
+        setVariants([]);
+        setSelectedId(null);
+        setGenError("AI generation isn't connected in this environment — no variants to show.");
       }
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === 'AbortError';
       console.error('[generate] fetch failed:', err);
-      const seeds = VARIANT_SEEDS.map((v) => ({ ...v, status: 'preview' as const }));
-      setVariants(seeds);
-      setSelectedId(seeds[0]?.id ?? null);
-      setDataSource('fixture');
+      setVariants([]);
+      setSelectedId(null);
       setGenError(
         aborted
-          ? 'Generation timed out after 90s — showing sample variants. Your brief is saved; tap Retry to try again.'
-          : "AI generation isn't connected in this environment — showing sample variants. Your brief is saved.",
+          ? 'Generation timed out after 90s. Your brief is saved; tap Retry to try again.'
+          : "AI generation isn't connected in this environment — no variants to show.",
       );
     } finally {
       clearTimeout(slowTimer);
@@ -561,7 +442,7 @@ export default function GenerateCreativePage(): JSX.Element {
               title={`Preview · ${variants.length} variants`}
               subtitle="Click a tile to inspect provenance + safety detail"
               action={
-                hasGenerated ? (
+                variants.length > 0 ? (
                   <DataSourceBadge source={dataSource} updatedAt={generatedAt} />
                 ) : undefined
               }

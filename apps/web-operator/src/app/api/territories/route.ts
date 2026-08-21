@@ -15,7 +15,7 @@
  * in the trailing 30 days are weighted 1.5× so a territory that is converting
  * NOW ranks above one that converted last quarter. With zero knocks we fall
  * back to the Territory.metadata.basePropensity (seeded ACS/SEIFA prior) when
- * present, else 0 — the page then keeps the fixture heatmap.
+ * present, else 0 — the page renders an honest empty state, never a fixture.
  *
  * Tenant scope: every read is scoped to session.orgId. Cross-tenant operators
  * (super_admin) may pass ?orgId= to target a sub-account.
@@ -25,7 +25,7 @@
  * defensively and never block on a malformed value.
  *
  * Empty-table contract: if the org has no Territory rows we return
- * { territories: [], updatedAt } so the page falls back to fixture cells.
+ * { territories: [], updatedAt } so the page renders its empty state.
  */
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
 
     if (territories.length === 0) {
-      // Empty table → page keeps the fixture heatmap.
+      // Empty table → honest empty response; the page renders its empty state.
       return ok({ territories: [], updatedAt: new Date().toISOString() });
     }
 

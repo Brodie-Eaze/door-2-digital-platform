@@ -1,7 +1,10 @@
-// TODO(M5): needs KnockSession real-time feed, fleet GPS model, and AI zone
-// suggestion endpoint — no backing table for live fleet status or AI zone
-// scores yet. FLEET_REPS and hqRollup() remain seed-driven until those are
-// wired. Converts to a Server Component once live-session aggregation lands.
+// TODO(M5): AI zone suggestion + anomaly detection have no backing table yet
+// (see schema.prisma) — AiNextZonesPanel/AnomaliesPanel render honest empty
+// states below until those models + endpoints land. Fleet position (this
+// page + HQLiveMap) and the activity feed are now wired to real
+// KnockSession/Knock data via /api/fleet and /api/activity. hqRollup()
+// headline KPIs remain seed-driven pending a dedicated rollup job — out of
+// scope for this pass (see the W3 fleet/rep true-sourcing effort).
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +15,7 @@ import { Banner, KpiCard, Money, Reveal } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { CommandCentreEmpty } from '@/components/AccountEmptyStates';
-import { FLEET_REPS } from '@/lib/fleet-reps';
+import { apiFleetEntryToRep, HQ_FALLBACK_CENTER, type ApiFleetEntry } from '@/lib/fleet';
 import { hqRollup } from '@/lib/seed/kpis';
 import type { RealtimeMetrics } from '@/app/api/metrics/realtime/route';
 import {
@@ -26,7 +29,7 @@ import {
   type ActivityEvent,
   type PushToFieldAction,
 } from '@/components/field-ops';
-import type { FleetRep } from '@/lib/fleet-reps';
+import type { FleetRep } from '@/lib/fleet';
 
 const HQ_SCOPE_LABEL = 'All accounts · HQ';
 
@@ -38,160 +41,24 @@ const PUSH_ACTION_LABELS: Record<PushToFieldAction, string> = {
   end_shift_early: 'End-shift instruction',
 };
 
-const HQ_AI_SUGGESTIONS: AiZoneSuggestion[] = [
-  {
-    id: 'hq-zone-1',
-    name: 'Austin South · 78704',
-    propensity: 0.81,
-    reasonOneLiner: 'ACS median income $94k · charity-giving propensity 0.83 · 0% saturation',
-    estLiftPp: 14,
-    saturationPercent: 0,
-    recommendedReps: 2,
-  },
-  {
-    id: 'hq-zone-2',
-    name: 'Plano · 75024',
-    propensity: 0.78,
-    reasonOneLiner: 'Lookalike to top-performing Highland Park · low Dallas saturation',
-    estLiftPp: 11,
-    saturationPercent: 12,
-    recommendedReps: 2,
-  },
-  {
-    id: 'hq-zone-3',
-    name: 'Sugar Land · 77479',
-    propensity: 0.74,
-    reasonOneLiner: '24% knocks-not-converted in nearby Bellaire = warm re-engage pool',
-    estLiftPp: 9,
-    saturationPercent: 8,
-    recommendedReps: 1,
-  },
-];
+// No backing AI-zone-suggestion or anomaly-detection model exists yet (see
+// schema.prisma) — honest empty states until the propensity/anomaly
+// services land. AnomaliesPanel + ReassignDrawer's signature interaction
+// (fly-to-rep, distance-sorted reassign) stay wired to real /api/fleet data
+// so the plumbing is ready the moment a real anomaly feed exists.
+const HQ_AI_SUGGESTIONS: AiZoneSuggestion[] = [];
+const HQ_ANOMALIES: AnomalyItem[] = [];
 
-/**
- * Resolve a real FLEET_REPS entry to anchor the critical "offline rep" anomaly,
- * so the map flies to a real pin and the drawer lists real nearby reps. We
- * prefer a genuinely-offline rep in a Houston territory (matches the seed
- * narrative); else any offline rep; else the first Houston SE rep so the fly
- * target + territory stay coherent. Resolved once at module load.
- */
-function resolveCoverageGapRep(): FleetRep | undefined {
-  const offlineHouston = FLEET_REPS.find(
-    (r) => r.status === 'offline' && /houston/i.test(r.territory),
-  );
-  if (offlineHouston) return offlineHouston;
-  const houstonSE = FLEET_REPS.find((r) => r.territory === 'Houston SE');
-  if (houstonSE) return houstonSE;
-  return FLEET_REPS.find((r) => r.status === 'offline') ?? FLEET_REPS[0];
-}
-
-const COVERAGE_GAP_REP = resolveCoverageGapRep();
-
-const HQ_ANOMALIES: AnomalyItem[] = [
-  {
-    id: 'hq-anom-1',
-    severity: 'critical',
-    title: 'Devon R offline since 09:00',
-    detail: 'Houston SE shift uncovered. Auto-SMS + push sent. Backup: reassign to Marcus L.',
-    actionLabel: 'Reassign',
-    // Signature-interaction wiring — the action flies the map here + opens the
-    // reassign drawer. Coords/territory come from a real fleet rep so the pin
-    // and the drawer's distance sort are honest.
-    repId: COVERAGE_GAP_REP?.id,
-    repCoords: COVERAGE_GAP_REP
-      ? { lat: COVERAGE_GAP_REP.lat, lng: COVERAGE_GAP_REP.lng }
-      : undefined,
-    territoryName: COVERAGE_GAP_REP?.territory ?? 'Houston SE',
-  },
-  {
-    id: 'hq-anom-2',
-    severity: 'warn',
-    title: 'Tomás M lunch break > 45min',
-    detail: 'On break since 12:48. Auto-reminder push sent.',
-    actionLabel: 'Nudge',
-  },
-  {
-    id: 'hq-anom-3',
-    severity: 'warn',
-    title: 'Hiroshi K conv. rate dropped 11pp',
-    detail: 'Last 4 hours vs trailing avg. Try script v3.2 + check territory saturation.',
-    actionLabel: 'Open 1:1',
-  },
-];
-
-const HQ_ACTIVITY: ActivityEvent[] = [
-  {
-    id: 'hq-act-1',
-    at: '14:42',
-    actorInitials: 'JD',
-    type: 'conversion',
-    primary: 'Conversion captured',
-    secondary: 'Maria Santos · $24/mo · Austin East',
-  },
-  {
-    id: 'hq-act-2',
-    at: '14:41',
-    actorInitials: 'JM',
-    type: 'knock_lead',
-    primary: 'Knock recorded · LEAD',
-    secondary: '4218 Lakeview Dr',
-  },
-  {
-    id: 'hq-act-3',
-    at: '14:40',
-    actorInitials: 'KP',
-    type: 'callback_scheduled',
-    primary: 'Callback scheduled',
-    secondary: 'Robert Kim · Tue 3pm',
-  },
-  {
-    id: 'hq-act-4',
-    at: '14:38',
-    actorInitials: 'AR',
-    type: 'shift_start',
-    primary: 'Started shift',
-    secondary: 'Austin North · 8h shift',
-  },
-  {
-    id: 'hq-act-5',
-    at: '14:36',
-    actorInitials: 'BC',
-    type: 'conversion',
-    primary: 'Conversion captured',
-    secondary: 'PestMax service contract · $480',
-  },
-  {
-    id: 'hq-act-6',
-    at: '14:35',
-    actorInitials: 'TM',
-    type: 'shift_break_return',
-    primary: 'Returned from break',
-    secondary: 'Lunch 45m',
-  },
-  {
-    id: 'hq-act-7',
-    at: '14:32',
-    actorInitials: 'AM',
-    type: 'knock_sale',
-    primary: 'Knock recorded · SALE',
-    secondary: '1502 Cedar St · $36/mo recurring',
-  },
-  {
-    id: 'hq-act-8',
-    at: '14:30',
-    actorInitials: 'JM',
-    type: 'knock_not_home',
-    primary: 'Knock recorded · NOT HOME',
-    secondary: '4216 Lakeview Dr',
-  },
-];
+// No fabricated seed rows — LiveActivityFeed renders its own "No activity in
+// the last 5 minutes" empty state until /api/activity reports real events.
+const HQ_ACTIVITY: ActivityEvent[] = [];
 
 export default function CommandCentrePage(): JSX.Element {
-  // Live activity feed — seeded from the hardcoded fixture, replaced on mount
-  // and polled every 15 seconds from /api/activity. The badge next to the feed
-  // tells the operator honestly whether they're looking at live or demo data.
+  // Live activity feed — starts empty (never fabricated), polled every 15
+  // seconds from /api/activity. Zero events is an honest LIVE answer (nobody
+  // has knocked in the last window), not a "demo" state.
   const [activity, setActivity] = useState<ActivityEvent[]>(HQ_ACTIVITY);
-  const activityFreshness = useDataFreshness('fixture');
+  const activityFreshness = useDataFreshness('live');
   const activityInFlight = useRef(false);
 
   // ── Signature interaction: anomaly → fly map → highlight rep → reassign ──
@@ -213,11 +80,10 @@ export default function CommandCentrePage(): JSX.Element {
         const res = await fetch('/api/activity');
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as { events?: ActivityEvent[] };
-        if (Array.isArray(data.events) && data.events.length > 0) {
+        if (Array.isArray(data.events)) {
           setActivity(data.events);
           activityFreshness.markFresh();
         }
-        // Empty array (no knocks yet in DB) → keep seed data; badge stays DEMO.
       } catch {
         // Network failure — keep current state; staleness timer downgrades.
       } finally {
@@ -291,14 +157,48 @@ export default function CommandCentrePage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // HQ rollup is the source of truth for the headline numbers — every
-  // sub-account page reconciles against the same `hqRollup()` slice.
-  // FLEET_REPS is the *map* sample (capped at ~120 pins for legibility);
-  // the KPIs reflect the full Pilot-Charlie-scale operation.
+  // Live fleet — same /api/fleet source HQLiveMap itself polls (each polls
+  // independently; both are pure reads of the same active-KnockSession
+  // query, so there's no drift risk in duplicating the fetch). Feeds the
+  // idle/offline KPI tiles and the reassign drawer's candidate list.
+  const [fleet, setFleet] = useState<FleetRep[]>([]);
+  const fleetInFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchFleet(): Promise<void> {
+      if (fleetInFlight.current || document.visibilityState === 'hidden') return;
+      fleetInFlight.current = true;
+      try {
+        const res = await fetch('/api/fleet');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { fleet?: ApiFleetEntry[] };
+        if (Array.isArray(data.fleet)) {
+          setFleet(data.fleet.map((r) => apiFleetEntryToRep(r, HQ_FALLBACK_CENTER)));
+        }
+      } catch {
+        // Network failure — keep current state; next poll retries.
+      } finally {
+        fleetInFlight.current = false;
+      }
+    }
+
+    void fetchFleet();
+    const interval = setInterval(() => void fetchFleet(), 30_000);
+    return (): void => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // HQ rollup is the source of truth for the headline knock/conversion
+  // numbers — every sub-account page reconciles against the same
+  // `hqRollup()` slice (out of scope for this pass, see the header TODO).
   const hq = hqRollup();
-  const onBreak = FLEET_REPS.filter((r) => r.status === 'break').length;
-  const idle = FLEET_REPS.filter((r) => r.status === 'idle').length;
-  const offline = FLEET_REPS.filter((r) => r.status === 'offline').length;
+  const idle = fleet.filter((r) => r.status === 'idle').length;
+  const offline = fleet.filter((r) => r.status === 'offline').length;
 
   // Headline counters: live DB values when the realtime poll has reported
   // actual field activity (non-null + at least one value > 0 — enforced at
@@ -330,8 +230,9 @@ export default function CommandCentrePage(): JSX.Element {
             <Radio size={13} className="text-accent" />
             <span>
               Live satellite view of every <span className="font-semibold">Knocker iOS</span> iPad
-              in the field, across all accounts. Pins update from GPS every 30 seconds. AI-suggested
-              next zones pulse blue. Click any knocker for shift + activity detail.
+              in the field, across all accounts. Positions refresh every 30 seconds by poll — live
+              tracking activates when realtime is configured. Click any knocker for shift + activity
+              detail.
             </span>
           </span>
         </Banner>
@@ -347,7 +248,7 @@ export default function CommandCentrePage(): JSX.Element {
               updatedAt={metricsFreshness.updatedAt}
             />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <KpiCard
               label="Active iPads"
               value={activeReps.toLocaleString()}
@@ -359,9 +260,8 @@ export default function CommandCentrePage(): JSX.Element {
               delta={metricsLive ? undefined : '+8 last hour'}
               deltaTone="positive"
             />
-            <KpiCard label="On break" value={onBreak} hint="lunch / scheduled" />
-            <KpiCard label="Idle > 15min" value={idle} hint="manager nudge sent" />
-            <KpiCard label="Offline" value={offline} hint="not clocked in" />
+            <KpiCard label="Idle 20-60min" value={idle} hint="no knock in that window" />
+            <KpiCard label="Offline" value={offline} hint="no knock in 60min+" />
             <KpiCard
               label="Knocks today"
               value={knocksToday.toLocaleString()}
@@ -409,9 +309,8 @@ export default function CommandCentrePage(): JSX.Element {
         </Reveal>
 
         {/* The main live map — flyTarget + highlightCoords drive the signature
-            interaction (fly to the offline rep + pulse an amber ring). Both key
-            off the anomaly's repCoords so they survive the fixture→live fleet
-            swap (a fixture rep id never matches a live /api/fleet id). */}
+            interaction (fly to the offline rep + pulse an amber ring), keyed
+            off the anomaly's repCoords once a real anomaly feed exists. */}
         <Reveal delay={80}>
           <HQLiveMap flyTarget={flyTarget} highlightCoords={activeAnomaly?.repCoords ?? null} />
         </Reveal>
@@ -477,7 +376,7 @@ export default function CommandCentrePage(): JSX.Element {
           in over everything when a critical offline-rep anomaly is actioned. */}
       <ReassignDrawer
         anomaly={activeAnomaly}
-        reps={FLEET_REPS}
+        reps={fleet}
         onClose={() => {
           setActiveAnomaly(null);
           setFlyTarget(null);

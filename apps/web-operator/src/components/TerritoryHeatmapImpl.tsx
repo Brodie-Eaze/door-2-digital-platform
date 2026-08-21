@@ -26,14 +26,48 @@ import {
   ScaleControl,
 } from 'react-leaflet';
 import { Sparkles } from 'lucide-react';
-import { ALL_CELLS, type CellStatus, type ZoneSelection } from './territoryCells';
 
 const DEFAULT_CENTER: [number, number] = [31.0, -97.5];
 const DEFAULT_ZOOM = 6;
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 18;
 
-export type { CellStatus, ZoneSelection };
+/** A territory's status in the assign-a-knocker workflow. */
+export type CellStatus = 'ai_suggested' | 'active' | 'blocked' | 'low_yield';
+
+/**
+ * One clickable map cell — built by the page from a real Territory row
+ * (see /api/territories or /api/orgs/[slug]/territories). `bounds` is a
+ * visualisation box padded around the territory's real centroid, not a
+ * fabricated boundary — Territory.polygon isn't rendered here yet (TEXT
+ * placeholder geo column, no PostGIS in the dev DB).
+ */
+export type ZoneSelection = {
+  id: string;
+  name: string;
+  bounds: [[number, number], [number, number]];
+  propensity: number;
+  medianIncomeCents: number;
+  estLiftPp: number | null;
+  knockableDoors: number;
+  saturationPercent: number;
+  status: CellStatus;
+  densityLabel: 'High' | 'Medium' | 'Low';
+};
+
+/**
+ * A single real PropensityScore row (see /api/propensity or
+ * /api/orgs/[slug]/propensity) — the AI heat layer, independent of whether a
+ * Territory has been drawn there yet. Rendered as a non-interactive tinted
+ * cell so it never gets confused with the clickable Territory layer above it.
+ */
+export type PropensityHeatPoint = {
+  geoKey: string;
+  centroidLat: number;
+  centroidLng: number;
+  score: number;
+  band: 'high' | 'medium' | 'low';
+};
 
 function propensityColor(p: number): string {
   if (p >= 0.75) return '#22c55e'; // green-500
@@ -41,6 +75,13 @@ function propensityColor(p: number): string {
   if (p >= 0.25) return '#f59e0b'; // amber-500
   return '#ef4444'; // red-500
 }
+
+// ponytail: PropensityScore rows carry a lat/lng point, not a stored cell
+// boundary — pad a fixed box around each point for the heat layer. Upgrade
+// path: derive the real cell bounds from geoType (h3-js boundary lookup)
+// when geoType === 'h3' instead of this fixed pad.
+const HEAT_CELL_LAT = 0.05;
+const HEAT_CELL_LNG = 0.06;
 
 // ----- Component ------------------------------------------------------------
 
@@ -50,8 +91,10 @@ type Props = {
   onSelect: (cell: ZoneSelection | null) => void;
   assignedSet: Set<string>;
   statusFilter?: StatusFilter;
-  /** Override cell set (defaults to HQ Texas ALL_CELLS). */
-  cells?: ZoneSelection[];
+  /** Real Territory-derived cells — the clickable "zone" layer. */
+  cells: ZoneSelection[];
+  /** Real PropensityScore points — the non-interactive AI heat layer. */
+  propensityPoints?: PropensityHeatPoint[];
   /** Override map center (defaults to Texas). */
   center?: [number, number];
   /** Override default zoom (defaults to 6). */
@@ -65,11 +108,12 @@ export function TerritoryHeatmapImpl({
   assignedSet: _assignedSet,
   statusFilter = 'all',
   cells,
+  propensityPoints = [],
   center,
   defaultZoom,
   scopeLabel,
 }: Props): JSX.Element {
-  const sourceCells = cells ?? ALL_CELLS;
+  const sourceCells = cells;
   const mapCenter = center ?? DEFAULT_CENTER;
   const mapZoom = defaultZoom ?? DEFAULT_ZOOM;
 
@@ -132,7 +176,25 @@ export function TerritoryHeatmapImpl({
             </LayersControl.Overlay>
           </LayersControl>
 
-          {/* Propensity cells — react-leaflet wants Leaflet components as direct
+          {/* AI heat layer — real PropensityScore points, non-interactive, drawn
+              under the Territory layer so clicks still hit a real zone. */}
+          {propensityPoints.map((p) => {
+            const color = propensityColor(p.score);
+            const bounds: [[number, number], [number, number]] = [
+              [p.centroidLat - HEAT_CELL_LAT / 2, p.centroidLng - HEAT_CELL_LNG / 2],
+              [p.centroidLat + HEAT_CELL_LAT / 2, p.centroidLng + HEAT_CELL_LNG / 2],
+            ];
+            return (
+              <Rectangle
+                key={p.geoKey}
+                bounds={bounds}
+                pathOptions={{ color, weight: 0, fillColor: color, fillOpacity: 0.28 }}
+                interactive={false}
+              />
+            );
+          })}
+
+          {/* Territory cells — react-leaflet wants Leaflet components as direct
               children, so we use Fragment (no DOM wrapper) per cell. */}
           {visibleCells.map((c) => {
             const color = propensityColor(c.propensity);

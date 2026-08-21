@@ -11,6 +11,20 @@
  * gold-coast-hospital) NEVER hit first-run mode — they always render with
  * sprint B's populated fixtures. This is intentional: empty states must not
  * regress the realism work shipped in sprint B.
+ *
+ * KNOWN GAP (flagged in W3's true-source pass, not fixed by this helper):
+ * this is a synchronous, fixture-keyed proxy used by ~30 mostly-still-fixture
+ * call sites. It has no way to tell "brand-new org, zero data" apart from
+ * "real org with real data that just isn't one of the 4 demo seeds" — every
+ * non-seeded slug reads as first-run forever, regardless of how much real
+ * activity accumulates. `/today/page.tsx` does NOT use this helper for that
+ * reason — it computes isFirstRun itself from live knock/sale/session counts,
+ * which is the correct pattern. The 3 W3-scoped call sites that need a real
+ * org's real data to render (accounts/[slug]/{territories,live-map,
+ * marketing-studio}/page.tsx) no longer gate their live fetch on
+ * `firstRun.isFirstRun` — see those files. A full fix here (deciding from
+ * live counts for every caller) needs each of the ~30 call sites converted
+ * to an async data-driven check; out of scope for this pass.
  */
 
 import { ACCOUNT_SEEDS } from './seed/kpis';

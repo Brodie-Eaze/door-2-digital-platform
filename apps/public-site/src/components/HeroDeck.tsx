@@ -48,7 +48,7 @@ export function HeroDeck(): JSX.Element {
           </div>
           <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-surface/55">
             <span className="mk-blink inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-            LIVE
+            PRODUCT PREVIEW
           </span>
         </div>
 
@@ -59,7 +59,7 @@ export function HeroDeck(): JSX.Element {
             territory
             route
             pins={PINS}
-            label="Live field · NE-12"
+            label="Field view · illustrative"
             aspect="aspect-[1.5/1]"
           />
 

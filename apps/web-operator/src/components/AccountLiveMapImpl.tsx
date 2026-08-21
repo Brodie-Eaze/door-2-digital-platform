@@ -5,13 +5,18 @@
  * Loaded only client-side via the `AccountLiveMap` dynamic wrapper. Renders:
  *  - Streets (OSM) + Satellite (Esri World Imagery) base layers via switcher
  *  - Optional Places/Boundaries label overlay on satellite
- *  - Rep pins as CircleMarkers, with pulse halos for active reps
- *  - AI suggestion zones as labelled CircleMarkers with permanent tooltips
+ *  - Rep pins as CircleMarkers, with pulse halos for active reps — sourced
+ *    from live /api/orgs/[slug]/fleet, polled every 30 seconds.
  *  - Built-in zoom + scale + attribution controls
  *  - Floating fleet-status legend (top-left) + Live · {scope} badge (bottom-right)
+ *
+ * center/zoom/scopeLabel are hand-authored per-account map camera config
+ * (lib/account-fleet.ts) — legitimate UI placement, not fleet/rep data.
+ * There is no backing table for "AI suggested next zones" yet (see
+ * schema.prisma), so that overlay no longer renders here.
  */
 
-import { Fragment } from 'react';
+import { useEffect, useRef, useState, Fragment } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -22,9 +27,10 @@ import {
   ZoomControl,
   ScaleControl,
 } from 'react-leaflet';
-import { Phone, MessageSquare, Coffee, Play, Zap } from 'lucide-react';
-import { STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
-import { getAccountFleet } from '@/lib/account-fleet';
+import { Phone, MessageSquare, Coffee, Play } from 'lucide-react';
+import { STATUS_COLORS, apiFleetEntryToRep, type ApiFleetEntry, type FleetRep } from '@/lib/fleet';
+import { getAccountMapConfig } from '@/lib/account-fleet';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
 interface AccountLiveMapImplProps {
   accountSlug: string;
@@ -38,9 +44,47 @@ const STATUS_LABEL: Record<FleetRep['status'], string> = {
 };
 
 export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JSX.Element {
-  const fleet = getAccountFleet(accountSlug);
+  const mapConfig = getAccountMapConfig(accountSlug);
+  const fallbackCenter = mapConfig
+    ? { lat: mapConfig.center[0], lng: mapConfig.center[1] }
+    : { lat: 0, lng: 0 };
 
-  if (!fleet) {
+  const [reps, setReps] = useState<FleetRep[]>([]);
+  const { source, updatedAt, markFresh } = useDataFreshness('fixture');
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchFleet(): Promise<void> {
+      if (inFlight.current || document.visibilityState === 'hidden') return;
+      inFlight.current = true;
+      try {
+        const res = await fetch(`/api/orgs/${accountSlug}/fleet`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { fleet?: ApiFleetEntry[] };
+        // An empty array (nobody clocked in) is still a real live answer.
+        if (Array.isArray(data.fleet)) {
+          setReps(data.fleet.map((r) => apiFleetEntryToRep(r, fallbackCenter)));
+          markFresh();
+        }
+      } catch {
+        // Network failure — keep current state; staleness timer downgrades.
+      } finally {
+        inFlight.current = false;
+      }
+    }
+
+    void fetchFleet();
+    const interval = setInterval(() => void fetchFleet(), 30_000);
+    return (): void => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountSlug]);
+
+  if (!mapConfig) {
     return (
       <div
         className="relative w-full rounded-2xl overflow-hidden border border-line2 bg-ink flex items-center justify-center text-soft text-[12px]"
@@ -51,13 +95,12 @@ export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JS
     );
   }
 
-  const { center, zoom, reps, zones, scopeLabel } = fleet;
+  const { center, zoom, scopeLabel } = mapConfig;
   const activeCount = reps.filter((r) => r.status === 'active').length;
   const breakCount = reps.filter((r) => r.status === 'break').length;
   const idleCount = reps.filter((r) => r.status === 'idle').length;
   const offlineCount = reps.filter((r) => r.status === 'offline').length;
   const totalKnocks = reps.reduce((s, r) => s + r.knocksToday, 0);
-  const totalConv = reps.reduce((s, r) => s + r.conversionsToday, 0);
 
   return (
     <div className="relative w-full" style={{ height: 560 }}>
@@ -95,33 +138,6 @@ export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JS
               />
             </LayersControl.Overlay>
           </LayersControl>
-
-          {/* AI suggestion zones */}
-          {zones.map((z) => (
-            <CircleMarker
-              key={z.label}
-              center={[z.lat, z.lng]}
-              radius={30}
-              pathOptions={{
-                color: '#3B82F6',
-                weight: 2,
-                fillColor: '#3B82F6',
-                fillOpacity: 0.18,
-              }}
-            >
-              <Tooltip permanent direction="top" offset={[0, -6]} className="d2d-ai-tooltip">
-                <span style={{ fontWeight: 600, fontSize: 11 }}>{z.label}</span>
-              </Tooltip>
-              <Popup>
-                <div style={{ minWidth: 200 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>
-                    AI zone · {z.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>{z.reason}</div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          ))}
 
           {/* Rep pins — react-leaflet requires Leaflet components as direct children,
               so we use Fragment (no DOM wrapper) for the active-pulse halo + pin pair. */}
@@ -196,27 +212,30 @@ export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JS
           </div>
         </div>
 
-        {/* AI zones legend */}
-        <div className="absolute top-3 right-14 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-accent/30 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-accent mb-1 font-semibold flex items-center gap-1">
-            <Zap size={11} /> AI suggested next zones
-          </div>
-          <div className="text-[10px] text-muted">
-            {zones.length} high-propensity neighbourhoods · click to inspect
-          </div>
-        </div>
-
         {/* Live · {scope} badge */}
-        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold">
-            Live · {scopeLabel}
+        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none max-w-[220px]">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">
+              {scopeLabel}
+            </span>
+            <DataSourceBadge source={source} updatedAt={updatedAt} />
           </div>
           <div className="text-[14px] font-bold text-ink numeric flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                source === 'live'
+                  ? 'bg-green-500 animate-pulse'
+                  : source === 'stale'
+                    ? 'bg-rose-500'
+                    : 'bg-amber-500'
+              }`}
+            />
             {activeCount} active iPads
           </div>
-          <div className="text-[10px] text-muted">
-            {totalKnocks} knocks today · {totalConv} conversions
+          <div className="text-[10px] text-muted">{totalKnocks} knocks today</div>
+          <div className="text-[9px] text-soft mt-1 leading-snug">
+            Live tracking activates when realtime is configured — positions refresh via 30s poll,
+            not push.
           </div>
         </div>
       </div>
@@ -226,8 +245,6 @@ export function AccountLiveMapImpl({ accountSlug }: AccountLiveMapImplProps): JS
 
 function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
   const color = STATUS_COLORS[rep.status];
-  const convRate =
-    rep.knocksToday > 0 ? `${((rep.conversionsToday / rep.knocksToday) * 100).toFixed(1)}%` : '—';
 
   return (
     <div style={{ minWidth: 240 }}>
@@ -290,12 +307,10 @@ function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
           label="Today"
           value={
             <span>
-              <strong>{rep.knocksToday}</strong> knocks · <strong>{rep.conversionsToday}</strong>{' '}
-              conv
+              <strong>{rep.knocksToday}</strong> knocks
             </span>
           }
         />
-        <Row label="Conv. rate" value={<strong style={{ color: '#16a34a' }}>{convRate}</strong>} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <PopupButton

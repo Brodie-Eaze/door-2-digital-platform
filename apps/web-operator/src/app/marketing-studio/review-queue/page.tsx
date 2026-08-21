@@ -7,11 +7,7 @@ import { Banner, Button, Section } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
-import {
-  ReviewQueueBoard,
-  DEMO_DRAFT_CAMPAIGNS,
-  type DraftCampaign,
-} from '@/components/marketing-review-queue';
+import { ReviewQueueBoard, type DraftCampaign } from '@/components/marketing-review-queue';
 
 /**
  * HQ review queue — draft AdCampaigns awaiting publish across all orgs the
@@ -24,7 +20,7 @@ import {
  * connection exists, Publish returns an honest "connect in Integrations" state.
  */
 export default function ReviewQueuePage(): JSX.Element {
-  const { source, updatedAt, markFresh, markFixture } = useDataFreshness('fixture');
+  const { source, updatedAt, markFresh } = useDataFreshness('live');
   const [campaigns, setCampaigns] = useState<DraftCampaign[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,23 +33,22 @@ export default function ReviewQueuePage(): JSX.Element {
           campaigns?: DraftCampaign[];
           persisted?: boolean;
         };
-        if (data.persisted && Array.isArray(data.campaigns)) {
-          setCampaigns(data.campaigns);
-          markFresh();
-          return;
-        }
+        // Honest either way: persisted rows or an honest empty queue — never a
+        // fabricated fallback. `persisted:false` (backend not configured) still
+        // means zero real drafts, so the board renders its own empty state.
+        setCampaigns(Array.isArray(data.campaigns) ? data.campaigns : []);
+        markFresh();
+        return;
       }
-      // Backend not configured / empty persisted set → demo fixtures, flagged.
-      setCampaigns(DEMO_DRAFT_CAMPAIGNS);
-      markFixture();
+      console.error('[review-queue] fetch returned', res.status);
+      setCampaigns([]);
     } catch (err) {
       console.error('[review-queue] fetch failed:', err);
-      setCampaigns(DEMO_DRAFT_CAMPAIGNS);
-      markFixture();
+      setCampaigns([]);
     } finally {
       setLoading(false);
     }
-  }, [markFresh, markFixture]);
+  }, [markFresh]);
 
   useEffect(() => {
     void load();
@@ -81,7 +76,7 @@ export default function ReviewQueuePage(): JSX.Element {
           subtitle="Approve in the Generator → group → publish per provider"
           action={
             <div className="flex items-center gap-2">
-              <DataSourceBadge source={source} updatedAt={updatedAt} />
+              {updatedAt && <DataSourceBadge source={source} updatedAt={updatedAt} />}
               <Button
                 variant="ghost"
                 size="sm"

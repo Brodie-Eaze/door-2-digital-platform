@@ -6,14 +6,9 @@ import { Banner, Button, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
-import { MarketingStudioEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
-import {
-  ReviewQueueBoard,
-  DEMO_DRAFT_CAMPAIGNS,
-  type DraftCampaign,
-} from '@/components/marketing-review-queue';
+import { ReviewQueueBoard, type DraftCampaign } from '@/components/marketing-review-queue';
 
 /**
  * Per-account review queue — draft AdCampaigns awaiting publish, scoped to the
@@ -28,62 +23,49 @@ interface PageProps {
 
 export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
   const params = use(paramsPromise);
+  // Display name only — `getAccount()` only resolves the 4 seeded demo
+  // slugs; a real org still gets a reasonable name via firstRun's
+  // prettify-slug fallback, and the fetch below is never gated on this.
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
-  const { source, updatedAt, markFresh, markFixture } = useDataFreshness('fixture');
+  const accountName = account?.shortName ?? firstRun.accountName;
+  const { source, updatedAt, markFresh } = useDataFreshness('live');
   const [campaigns, setCampaigns] = useState<DraftCampaign[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
+      // No ?orgId= — the slug is a display route param, not a real org id;
+      // the route scopes to the signed-in session's own org, same as before.
       const res = await fetch('/api/marketing/review-queue', { method: 'GET' });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          campaigns?: DraftCampaign[];
-          persisted?: boolean;
-        };
-        if (data.persisted && Array.isArray(data.campaigns)) {
-          setCampaigns(data.campaigns);
-          markFresh();
-          return;
-        }
-      }
-      setCampaigns(DEMO_DRAFT_CAMPAIGNS);
-      markFixture();
+      const data = res.ok
+        ? ((await res.json()) as { campaigns?: DraftCampaign[] })
+        : { campaigns: [] };
+      // Honest either way: persisted rows or an honest empty queue — never a
+      // fabricated fallback. ReviewQueueBoard renders its own empty state.
+      setCampaigns(Array.isArray(data.campaigns) ? data.campaigns : []);
+      markFresh();
     } catch (err) {
       console.error('[review-queue] fetch failed:', err);
-      setCampaigns(DEMO_DRAFT_CAMPAIGNS);
-      markFixture();
+      setCampaigns([]);
     } finally {
       setLoading(false);
     }
-  }, [markFresh, markFixture]);
+  }, [markFresh]);
 
   useEffect(() => {
-    if (!account || firstRun.isFirstRun) return;
+    // W3 fix: no longer gated on `!account || firstRun.isFirstRun` — that
+    // blocked every real (non-demo-seed) org from ever loading its queue.
     void load();
-  }, [account, firstRun.isFirstRun, load]);
-
-  if (!account || firstRun.isFirstRun) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio · Review queue">
-        <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <MarketingStudioEmpty slug={params.slug} accountName={firstRun.accountName} />
-        </div>
-      </AccountShell>
-    );
-  }
+  }, [load]);
 
   const base = `/accounts/${params.slug}/marketing-studio`;
 
   return (
     <AccountShell
       accountSlug={params.slug}
-      pageTitle={`Marketing Studio · ${account.shortName} · Review queue`}
+      pageTitle={`Marketing Studio · ${accountName} · Review queue`}
     >
       <div className="space-y-5 max-w-[1500px]">
         <MarketingStudioTabs slug={params.slug} active="review-queue" />
@@ -92,10 +74,10 @@ export default function Page({ params: paramsPromise }: PageProps): JSX.Element 
           <span className="text-[13px] flex items-center gap-2">
             <ListChecks size={14} className="text-accent" />
             <span>
-              Approved creatives for <span className="font-semibold">{account.shortName}</span>{' '}
-              queue here as draft campaigns. Review the grouped creatives, then publish to Meta or
-              Google. Publishing is gated on a live provider connection — no ad spend leaves this
-              surface until your ad account is connected and verified.
+              Approved creatives for <span className="font-semibold">{accountName}</span> queue here
+              as draft campaigns. Review the grouped creatives, then publish to Meta or Google.
+              Publishing is gated on a live provider connection — no ad spend leaves this surface
+              until your ad account is connected and verified.
             </span>
           </span>
         </Banner>
