@@ -16,7 +16,6 @@ import { ArrowRight, Inbox, Phone, Megaphone, Database, AlertTriangle } from 'lu
 import { Banner, KpiCard, LeadCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { LeadsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { accountData } from '@/lib/account-fixtures';
 import { getSession } from '@/lib/session';
 import { isCrossTenantOperator } from '@/lib/api-helpers';
 import { maskEmail, maskPhone } from '@/lib/db-helpers';
@@ -39,7 +38,7 @@ interface DemoLead {
 }
 
 interface LoadResult {
-  source: 'database' | 'fixture-fallback';
+  source: 'database' | 'unavailable';
   orgName: string;
   leads: DemoLead[];
   error?: string;
@@ -79,13 +78,14 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
       take: 50,
       include: {
         address: { select: { street: true, locality: true, region: true, postcode: true } },
+        assignedTo: { select: { givenName: true, familyName: true } },
       },
     });
 
     return {
       source: 'database',
       orgName: org.tradingName,
-      leads: leads.map((l, i) => ({
+      leads: leads.map((l) => ({
         id: l.id,
         // PII-first: bulk list shows given name + family INITIAL, masked
         // email/phone, and a COARSE address (locality + region only — no street
@@ -99,47 +99,27 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
           ? `${l.address.locality}${l.address.region ? `, ${l.address.region}` : ''}`
           : null,
         status: l.status,
-        // Sources are stored at the Knock layer (sourceKnockId); for the demo
-        // we round-robin door / inside_sales / retargeting so the breakdown
-        // KPIs are populated. Phase 1.2 will derive these from the joined
-        // Knock + Conversion attribution.
-        source: (['door', 'inside_sales', 'retargeting'] as const)[i % 3]!,
-        assignee:
-          (
-            [
-              'Maya Castellanos',
-              'Jacob Bell',
-              'Imani Walker',
-              'Sage Whitfield',
-              'Dion Quintero',
-              'Aurelia Sokolov',
-            ] as const
-          )[i % 6] ?? 'Unassigned',
+        // Real attribution from stored fields — no fabrication: a lead born from
+        // a door knock is 'door'; one tied to a marketing campaign is
+        // 'retargeting'; otherwise it entered via inside sales.
+        source: l.sourceKnockId ? 'door' : l.campaignId ? 'retargeting' : 'inside_sales',
+        // Real assignee (inside-sales owner) or an honest "Unassigned".
+        assignee: l.assignedTo
+          ? `${l.assignedTo.givenName} ${l.assignedTo.familyName ?? ''}`.trim()
+          : 'Unassigned',
         createdAt: l.createdAt,
       })),
     };
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[accounts/leads] DB load failed:', err);
-    // Graceful degrade to fixture for demo continuity.
-    const fx = accountData(slug);
-    if (!fx.account) return 'not-found';
+    console.error('[accounts/leads] DB load failed — no fixture fallback:', err);
+    // Never fabricate a lead list. Show an honest "unavailable" state so an
+    // operator can't mistake demo rows for a real inbox (PII + true-source rule).
     return {
-      source: 'fixture-fallback',
-      orgName: fx.account.name,
+      source: 'unavailable',
+      orgName: slug,
       error: err instanceof Error ? err.message : String(err),
-      leads: fx.leads.map((l) => ({
-        id: l.id,
-        givenName: l.name.split(' ')[0] ?? l.name,
-        familyName: l.name.split(' ').slice(1).join(' '),
-        email: '—',
-        phone: maskPhone(l.phone),
-        address: l.address,
-        status: l.status,
-        source: l.source,
-        assignee: l.assignee || 'Unassigned',
-        createdAt: new Date(),
-      })),
+      leads: [],
     };
   }
 }
@@ -169,19 +149,34 @@ export default async function LeadsInboxPage({
     );
   }
 
-  const { leads, source, error } = result;
+  const { leads, source, error, orgName } = result;
   const door = leads.filter((l) => l.source === 'door').length;
   const inside = leads.filter((l) => l.source === 'inside_sales').length;
   const retarget = leads.filter((l) => l.source === 'retargeting').length;
   const firstRun = firstRunSnapshot(params.slug);
+  // A DB outage must NOT masquerade as an empty inbox — that would tell an
+  // operator "no leads" when leads may exist and simply couldn't be read.
+  if (source === 'unavailable') {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Leads inbox">
+        <div className="space-y-5 max-w-[1400px]">
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              Live data unavailable — the platform database is unreachable, so the lead inbox
+              can&apos;t be loaded. This is not an empty inbox. Retry shortly.
+            </span>
+          </Banner>
+        </div>
+      </AccountShell>
+    );
+  }
+
   if (leads.length === 0) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Leads inbox">
         <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <LeadsEmpty slug={params.slug} accountName={firstRun.accountName} />
+          {firstRun.isFirstRun && <FirstRunBanner slug={params.slug} accountName={orgName} />}
+          <LeadsEmpty slug={params.slug} accountName={orgName} />
         </div>
       </AccountShell>
     );

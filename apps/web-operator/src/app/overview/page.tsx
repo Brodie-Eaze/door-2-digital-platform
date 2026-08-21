@@ -2,16 +2,15 @@
  * /overview — cross-tenant mission control for the platform operator.
  *
  * Server component. Reads directly from the shared Prisma client (same
- * pattern as /accounts) so the first paint has live data. Falls back to
- * the static ANOMALIES + KPIS fixtures when the DB is unreachable
- * (Railway cold-start, missing env var, etc.) so the demo never blanks.
+ * pattern as /accounts) so the first paint has live data. If the DB is
+ * unreachable it shows an honest "Live data unavailable" state — figures
+ * are hidden, never faked (no fixture fallback).
  *
  * Authorization: super_admin sees all orgs; org-scoped sessions see their
  * own org only (isCrossTenantOperator mirrors the BFF helper).
  */
 import { AnomalyCard, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
-import { ANOMALIES, KPIS } from '@/lib/fixtures';
 import { getSession } from '@/lib/session';
 import { isCrossTenantOperator } from '@/lib/api-helpers';
 import { redirect } from 'next/navigation';
@@ -38,9 +37,11 @@ interface AnomalyItem {
 }
 
 interface OverviewData {
-  kpis: OverviewKpis;
+  // null when the platform DB is unreachable — we hide figures rather than
+  // fabricate them (true-source rule: no number ships unless it's real).
+  kpis: OverviewKpis | null;
   anomalies: AnomalyItem[];
-  source: 'database' | 'fixture-fallback';
+  source: 'database' | 'unavailable';
   error?: string;
 }
 
@@ -56,12 +57,7 @@ function startOfMonth(): Date {
 async function loadOverview(): Promise<OverviewData> {
   const session = await getSession();
   if (!session) {
-    return {
-      kpis: { activeOrgs: 0, activeKnockers: 0, conversionsMTD: 0, revenueCentsMTD: 0n },
-      anomalies: [],
-      source: 'fixture-fallback',
-      error: 'no session',
-    };
+    return { kpis: null, anomalies: [], source: 'unavailable', error: 'no session' };
   }
 
   try {
@@ -135,16 +131,13 @@ async function loadOverview(): Promise<OverviewData> {
     };
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[overview] DB load failed, falling back to fixture:', err);
+    console.error('[overview] DB load failed — hiding figures (no fixture fallback):', err);
+    // Do NOT fabricate KPIs. An operator must never see invented numbers dressed
+    // as live platform metrics; show an honest "unavailable" state instead.
     return {
-      kpis: {
-        activeOrgs: KPIS.activeOrgs,
-        activeKnockers: KPIS.activeKnockers,
-        conversionsMTD: KPIS.conversionsMTD,
-        revenueCentsMTD: KPIS.revenueCentsMTD,
-      },
-      anomalies: ANOMALIES.map((a, i) => ({ ...a, id: `fixture-${i}`, timestamp: a.timestamp })),
-      source: 'fixture-fallback',
+      kpis: null,
+      anomalies: [],
+      source: 'unavailable',
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -172,32 +165,43 @@ export default async function OverviewPage(): Promise<JSX.Element> {
           ) : (
             <span
               className="inline-flex items-center gap-1 text-warn text-[10px] uppercase tracking-wider font-semibold"
-              title={error ? `DB error: ${error}` : 'Showing fixture data'}
+              title={error ? `DB error: ${error}` : 'Platform database unreachable'}
             >
-              <AlertTriangle size={10} /> Fixture fallback
+              <AlertTriangle size={10} /> Live data unavailable
             </span>
           )}
         </div>
 
-        {/* KPI rail */}
+        {source !== 'database' && (
+          <div className="card card-pad border border-warn/40 bg-warn/5 text-[13px] text-ink">
+            The platform database is unreachable, so live figures are hidden rather than estimated.
+            Retry shortly. (No cached or sample numbers are shown.)
+          </div>
+        )}
+
+        {/* KPI rail — real values, or an honest dash when the DB is unavailable. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Active client orgs" value={kpis.activeOrgs} hint="non-archived" />
+          <KpiCard
+            label="Active client orgs"
+            value={kpis ? kpis.activeOrgs : '—'}
+            hint="non-archived"
+          />
           <KpiCard
             label="Active knockers"
-            value={kpis.activeKnockers}
+            value={kpis ? kpis.activeKnockers : '—'}
             delta="—"
             deltaTone="neutral"
           />
           <KpiCard
             label="MTD conversions"
-            value={kpis.conversionsMTD.toLocaleString()}
+            value={kpis ? kpis.conversionsMTD.toLocaleString() : '—'}
             delta="—"
             deltaTone="neutral"
             hint="all sources"
           />
           <KpiCard
             label="MTD platform revenue"
-            value={<Money cents={kpis.revenueCentsMTD} region="US" />}
+            value={kpis ? <Money cents={kpis.revenueCentsMTD} region="US" /> : '—'}
             delta="—"
             deltaTone="neutral"
             hint="rake + residual"
