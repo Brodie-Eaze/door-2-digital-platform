@@ -14,6 +14,9 @@ const envSchema = z.object({
 
   // HTTP
   PORT: z.coerce.number().int().default(3010),
+  // Staging/load-test knob for the global per-IP rate limit (k6 fires all
+  // traffic from one IP). Leave unset in production.
+  RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
   HOST: z.string().default('0.0.0.0'),
   // SEC-010: prod Railway URL removed from default. In production CORS_ORIGINS
   // must be set explicitly via env; the fail-fast below catches a missing value.
