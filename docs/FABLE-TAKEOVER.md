@@ -420,8 +420,15 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   verified rendering in prod. (A findMany-vs-take audit across the high-volume
   tables found the rest either paginated, bounded by a narrow WHERE, or a
   worker's own batch — this processor page was the one true unbounded load.)
-  This is the kind of enterprise-scale hardening that IS in reach without the
-  50k rig — the load run itself still needs the target infra.
+  N+1 fix also found + deployed: `POST /v1/do-not-knock/ingest` resolved each
+  row's address + upserted the DNK record ONE AT A TIME (2N sequential queries);
+  DNK/DNC lists are thousands of addresses, so a real ingest would time out.
+  Batched to one findMany (resolve all) + one createMany(skipDuplicates) = 2
+  queries regardless of list size (lead.test.ts 15/15, API redeployed healthy).
+  So all three classic scale killers are now hardened on the hot paths: missing
+  indexes (3 added), unbounded loads (1 fixed), and N+1 (1 fixed). This is the
+  kind of enterprise-scale hardening that IS in reach without the 50k rig — the
+  load run itself still needs the target infra.
   The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
   ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
   error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
