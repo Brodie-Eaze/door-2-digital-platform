@@ -99,10 +99,17 @@ function LoginPageInner(): JSX.Element {
   const [demoMode, setDemoMode] = useState(false);
   const [forgotToast, setForgotToast] = useState(false);
 
-  // Detect demo mode on mount by probing the proxy. If the proxy can reach
-  // /v1/auth/_status, real auth flows are wired. If not (404/5xx/network),
-  // we surface the demo-mode badge and route through /api/session/demo.
+  // Mode is a BUILD-TIME fact, not a runtime probe. When NEXT_PUBLIC_API_URL
+  // is baked into the bundle a real API is wired: real auth only, no demo
+  // fallback ever (F-010 — the old /_status probe broke when hardening made
+  // that endpoint auth-required: 401 -> probe "failed" -> demo 404 -> the
+  // login form showed "Not Found" against a perfectly healthy API).
+  const realApiWired = Boolean(process.env.NEXT_PUBLIC_API_URL);
   useEffect(() => {
+    if (realApiWired) {
+      setDemoMode(false);
+      return;
+    }
     let cancelled = false;
     fetch('/proxy/api/auth/_status', { method: 'GET' })
       .then((r) => {
@@ -115,7 +122,7 @@ function LoginPageInner(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [realApiWired]);
 
   const submit = useCallback(
     async (overrideEmail?: string, overridePassword?: string): Promise<void> => {
@@ -150,6 +157,7 @@ function LoginPageInner(): JSX.Element {
               credentials: 'include',
             });
           } catch (networkErr) {
+            if (realApiWired) throw networkErr;
             // Network-level failure (proxy target unreachable) — try demo path.
             res = await fetch('/api/session/demo', {
               method: 'POST',
@@ -159,9 +167,14 @@ function LoginPageInner(): JSX.Element {
             usedDemo = true;
             setDemoMode(true);
           }
-          if (!usedDemo && (res.status === 404 || res.status === 405 || res.status >= 500)) {
+          if (
+            !realApiWired &&
+            !usedDemo &&
+            (res.status === 404 || res.status === 405 || res.status >= 500)
+          ) {
             // Proxy reached but API is missing/misbehaving — fall back to
-            // synthetic-demo so prod stays demo-able.
+            // synthetic-demo so LOCAL demo builds stay usable. Never when a
+            // real API is wired: surface the real error instead.
             res = await fetch('/api/session/demo', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -396,72 +409,76 @@ function LoginPageInner(): JSX.Element {
             </Button>
           </form>
 
-          {/* ── Demo accounts — Quick switch ── */}
-          <div className="mt-8 pt-7" style={{ borderTop: '1px solid rgba(15,23,42,0.07)' }}>
-            <div className="flex items-center justify-between mb-3.5">
-              <span className="text-[10px] uppercase tracking-[0.18em] font-semibold text-soft/60">
-                Quick switch · demo
-              </span>
-              <span className="text-[10px] text-soft/40">password preserved</span>
-            </div>
+          {/* ── Demo accounts — Quick switch (never rendered when a real
+              API is wired: the synthetic-demo route hard-404s there, so the
+              panel would advertise logins that cannot work) ── */}
+          {realApiWired ? null : (
+            <div className="mt-8 pt-7" style={{ borderTop: '1px solid rgba(15,23,42,0.07)' }}>
+              <div className="flex items-center justify-between mb-3.5">
+                <span className="text-[10px] uppercase tracking-[0.18em] font-semibold text-soft/60">
+                  Quick switch · demo
+                </span>
+                <span className="text-[10px] text-soft/40">password preserved</span>
+              </div>
 
-            <div className="space-y-2">
-              {/* First user (super_admin) — full-width dark tile */}
-              {DEMO_USERS.slice(0, 1).map((u) => (
-                <button
-                  key={u.email}
-                  type="button"
-                  onClick={() => signInAs(u)}
-                  disabled={loading}
-                  className="w-full px-4 py-3.5 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                  style={{ background: '#0F172A' }}
-                >
-                  <div className="text-[13.5px] font-semibold text-surface leading-tight">
-                    {u.label}
-                  </div>
-                  <div
-                    className="text-[11px] mt-0.5 leading-tight font-normal"
-                    style={{ color: 'rgba(248,250,252,0.45)' }}
-                  >
-                    {u.sub}
-                  </div>
-                </button>
-              ))}
-
-              {/* Remaining users — 2-column grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {DEMO_USERS.slice(1).map((u) => (
+              <div className="space-y-2">
+                {/* First user (super_admin) — full-width dark tile */}
+                {DEMO_USERS.slice(0, 1).map((u) => (
                   <button
                     key={u.email}
                     type="button"
                     onClick={() => signInAs(u)}
                     disabled={loading}
-                    className="px-3.5 py-3 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    style={{
-                      background: '#FFFFFF',
-                      border: '1px solid rgba(15,23,42,0.11)',
-                      boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        'rgba(15,23,42,0.22)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        'rgba(15,23,42,0.11)';
-                    }}
+                    className="w-full px-4 py-3.5 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                    style={{ background: '#0F172A' }}
                   >
-                    <div className="text-[12.5px] font-semibold text-ink truncate leading-tight">
+                    <div className="text-[13.5px] font-semibold text-surface leading-tight">
                       {u.label}
                     </div>
-                    <div className="text-[10.5px] text-muted mt-0.5 leading-tight truncate font-normal">
+                    <div
+                      className="text-[11px] mt-0.5 leading-tight font-normal"
+                      style={{ color: 'rgba(248,250,252,0.45)' }}
+                    >
                       {u.sub}
                     </div>
                   </button>
                 ))}
+
+                {/* Remaining users — 2-column grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  {DEMO_USERS.slice(1).map((u) => (
+                    <button
+                      key={u.email}
+                      type="button"
+                      onClick={() => signInAs(u)}
+                      disabled={loading}
+                      className="px-3.5 py-3 rounded-xl text-left disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid rgba(15,23,42,0.11)',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          'rgba(15,23,42,0.22)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          'rgba(15,23,42,0.11)';
+                      }}
+                    >
+                      <div className="text-[12.5px] font-semibold text-ink truncate leading-tight">
+                        {u.label}
+                      </div>
+                      <div className="text-[10.5px] text-muted mt-0.5 leading-tight truncate font-normal">
+                        {u.sub}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Footer */}
           <div className="flex items-center gap-2 mt-6 text-[10.5px] text-soft">
