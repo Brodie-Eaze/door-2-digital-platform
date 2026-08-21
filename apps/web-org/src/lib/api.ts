@@ -22,7 +22,7 @@ function problemText(problem: ProblemDetails): string | null {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const accessToken = cookies().get('d2d_at')?.value;
+  const accessToken = (await cookies()).get('d2d_at')?.value;
   const headers = new Headers(init?.headers);
   if (accessToken) {
     headers.set('cookie', `d2d_at=${accessToken}`);
