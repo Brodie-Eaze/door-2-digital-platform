@@ -386,7 +386,13 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   `/v1/knocks/knk_01M0J6KAS8… → 404`, `/v1/sessions/sess_01M0J6KA2N… → 404` —
   every resource type returns **404, never 403**, while org B's own
   `/v1/territories/assigned → 200`. Cross-tenant reads are indistinguishable from
-  "does not exist", which is the correct posture (no existence leak).
+  "does not exist", which is the correct posture (no existence leak). The NEW
+  BFF endpoints added this session were probed the same way (2026-08-22): as an
+  org-scoped admin (Hope Forward, not super_admin), `/api/accounts/list` and
+  `/api/accounts/stats` return ONLY that org (1, not all 6), `/api/metrics/rollup`
+  scopes to activeAccounts:1, `/api/accounts/<other-org>/meta` → 404 (no
+  existence leak) while own-org → 200. So the new attack surface honours the
+  isolation guarantee rather than bypassing it.
 - **D5 (backpressure) — PROVEN in prod; 50k harness fire-ready.** 150-request
   burst → 120 pass, 121st+ return 429 + Retry-After + x-ratelimit-remaining:0,
   per-client (TRUST_PROXY_HOPS=2) — the graceful-degradation MECHANISM is proven.
