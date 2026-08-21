@@ -186,6 +186,31 @@ jobs:
       - run: pnpm --filter api db:generate
       - run: pnpm --filter api db:migrate
       - run: pnpm --filter api test:integration
+      # Boot smoke — the test harness builds its own Fastify app, so a config
+      # that makes src/index.ts itself unbootable (e.g. the Fastify 5
+      # logger/loggerInstance split) sails through every test. Boot the real
+      # entrypoint and demand a real HTTP answer.
+      - name: Boot smoke (real entrypoint serves HTTP)
+        working-directory: apps/api
+        run: |
+          pnpm exec tsx src/index.ts &
+          BOOT_PID=$!
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3010/ || true)
+            if [ "$code" != "000" ] && [ -n "$code" ]; then
+              echo "API answered HTTP $code after ${i}s"
+              kill $BOOT_PID
+              exit 0
+            fi
+            if ! kill -0 $BOOT_PID 2>/dev/null; then
+              echo "::error::API process died during boot"
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "::error::API never answered within 30s"
+          kill $BOOT_PID
+          exit 1
 
   # ── Gate 9: Cross-tenant isolation probe ───────────────────────────────
   # The cross-tenant-isolation.test.ts suite is part of Gate 8 (test:integration).
