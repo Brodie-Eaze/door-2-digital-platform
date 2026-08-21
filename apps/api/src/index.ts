@@ -94,6 +94,11 @@ async function buildServer() {
     // Fastify takes the rightmost client IP added by our LB — which the caller
     // cannot control.
     //
+    // TRUST_PROXY_HOPS lets each deployment topology declare how many trusted
+    // proxies sit in front (Railway edge = a few; ECS/ALB = 1; local = 0).
+    // req.ip then resolves to the real client, so the SEC-010 IP rate-limit
+    // bucket is per-client, not per-edge-node. Unset => hop===0 (trust only
+    // the immediate socket peer) — the safe default for the ECS story.
     // Fastify 5 removed the numeric hop-count shorthand from `trustProxy`
     // (@fastify/proxy-addr can no longer validate the immediate peer from a
     // bare count — see fastify/docs/Guides/Migration-Guide-V5 / Server.md
@@ -105,7 +110,7 @@ async function buildServer() {
     // ever reach this process directly — the socket peer can't be spoofed by
     // an external caller, only header *content* can, which hop-limiting
     // still defeats.
-    trustProxy: (_address, hop) => hop === 0,
+    trustProxy: (_address, hop) => hop === (e.TRUST_PROXY_HOPS ?? 0),
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
   });
