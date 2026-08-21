@@ -8,8 +8,18 @@ import { AccountShell } from '@/components/AccountShell';
 import { ComplianceEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount, type Account } from '@/lib/accounts';
+import { useAccountMeta, useAccountStats, prettifySlug } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
+
+/** Live-meta shape this page's registration/copy builders need. No `health`
+ * field exists on the live org — callers that used it for status variation
+ * now use a single deterministic value instead of fabricating drift. */
+interface AccountData {
+  slug: string;
+  shortName: string;
+  region: string;
+  vertical: string;
+}
 
 /**
  * Stable FNV-1a 32-bit hex of a string. Deterministic per input — used to
@@ -46,7 +56,7 @@ interface RegistrationRow {
   regNumber: string;
 }
 
-function buildRegistrations(account: Account): RegistrationRow[] {
+function buildRegistrations(account: AccountData): RegistrationRow[] {
   if (account.region === 'AU') {
     // ACNC + state regulators (Fundraising NSW etc.)
     return [
@@ -219,14 +229,14 @@ function buildRegistrations(account: Account): RegistrationRow[] {
   return base;
 }
 
-function regulatorName(region: 'AU' | 'US' | 'SG', vertical: string): string {
+function regulatorName(region: string, vertical: string): string {
   if (region === 'AU') return 'state regulators (ACNC + Fundraising NSW/VIC/QLD/WA)';
   if (region === 'SG') return 'Commissioner of Charities (COC)';
   if (vertical === 'commercial') return 'state contractor licensing boards';
   return 'state attorneys general (paid-solicitor registrations)';
 }
 
-function sectionLabel(region: 'AU' | 'US' | 'SG', vertical: string): string {
+function sectionLabel(region: string, vertical: string): string {
   if (region === 'AU') return 'AU charity registrations';
   if (region === 'SG') return 'SG charity registrations';
   if (vertical === 'commercial') return 'Contractor licenses';
@@ -239,9 +249,10 @@ export default function AccountCompliancePage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
+  const stats = useAccountStats();
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Compliance">
         <div className="space-y-5 max-w-[1400px]">
@@ -254,6 +265,16 @@ export default function AccountCompliancePage({
     );
   }
 
+  // Graceful fallbacks while live meta is still loading — never a fabricated
+  // fixture name, never a false "not found".
+  const account: AccountData = {
+    slug: params.slug,
+    shortName: meta?.name ?? prettifySlug(params.slug),
+    region: meta?.region ?? 'US',
+    vertical: meta?.vertical ?? 'commercial',
+  };
+  const knockers = stats?.[params.slug]?.knockers ?? 0;
+
   const regs = buildRegistrations(account);
   const cleared = regs.filter((r) => r.status === 'approved').length;
   const pending = regs.filter((r) => r.status !== 'approved').length;
@@ -261,9 +282,11 @@ export default function AccountCompliancePage({
   // Stable, deterministic pseudo Merkle root for the demo audit-chain surface.
   const fakeHash = stableMerkleRoot(account.slug);
 
-  const dncFreshness = account.health === 'attention' ? 18 : 4;
-  const auditEvents7d = Math.round(account.knockers * 24 * 7 * 0.12);
-  const dnkAddresses = Math.round(account.knockers * 2.4);
+  // No live `health` field exists on the org — a single fixed freshness value
+  // rather than fabricated drift between "healthy" and "attention" accounts.
+  const dncFreshness = 4;
+  const auditEvents7d = Math.round(knockers * 24 * 7 * 0.12);
+  const dnkAddresses = Math.round(knockers * 2.4);
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Compliance">
@@ -423,7 +446,7 @@ export default function AccountCompliancePage({
                 label={account.region === 'US' ? 'CCPA opt-outs' : 'Privacy Act requests'}
                 value={
                   <span className="text-ink numeric">
-                    {Math.max(0, Math.round(account.knockers * 0.05))} pending
+                    {Math.max(0, Math.round(knockers * 0.05))} pending
                   </span>
                 }
               />
@@ -462,7 +485,7 @@ export default function AccountCompliancePage({
                 label="Events sealed (lifetime)"
                 value={
                   <span className="text-ink numeric font-medium">
-                    {Math.round(account.knockers * 24 * 30 * 0.12).toLocaleString()}
+                    {Math.round(knockers * 24 * 30 * 0.12).toLocaleString()}
                   </span>
                 }
               />
@@ -524,15 +547,6 @@ export default function AccountCompliancePage({
                 tone: 'text-success',
                 msg: `Merkle audit chain sealed nightly — last root verified clean.`,
               },
-              ...(account.health === 'attention'
-                ? [
-                    {
-                      icon: AlertTriangle,
-                      tone: 'text-warn',
-                      msg: `Backup card on file expires in 18mo — recommend rotation before campaign Q3.`,
-                    },
-                  ]
-                : []),
             ].map((n, i) => (
               <div
                 key={i}

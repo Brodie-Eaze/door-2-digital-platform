@@ -6,7 +6,7 @@ import { Banner, KpiCard } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
 import { LiveMapEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta, prettifySlug } from '@/lib/use-account-meta';
 import type { ApiFleetEntry } from '@/lib/fleet';
 import {
   AiNextZonesPanel,
@@ -38,48 +38,16 @@ const NO_AI_SUGGESTIONS: AiZoneSuggestion[] = [];
 const NO_ANOMALIES: AnomalyItem[] = [];
 const NO_ACTIVITY: ActivityEvent[] = [];
 
-type AccountIdentity = { shortName: string; region: 'AU' | 'US' | 'SG' };
-type ApiOrg = { tradingName: string; regionCode: 'AU' | 'US' | 'SG' };
-
 export default function Page({
   params: paramsPromise,
 }: {
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const staticAccount = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
-
-  // W3 fix: `getAccount()` only resolves the 4 seeded demo slugs. Any other
-  // slug is a REAL org — resolve its identity from the DB instead of
-  // treating "not in the fixture" as "doesn't exist / show empty state",
-  // which was silently hiding real orgs' live fleet data.
-  const [liveAccount, setLiveAccount] = useState<AccountIdentity | null | undefined>(undefined);
-  useEffect(() => {
-    if (staticAccount) return;
-    let cancelled = false;
-    (async (): Promise<void> => {
-      try {
-        const res = await fetch(`/api/orgs/${encodeURIComponent(params.slug)}`, {
-          credentials: 'include',
-        });
-        if (!res.ok) {
-          if (!cancelled) setLiveAccount(null);
-          return;
-        }
-        const org = (await res.json()) as ApiOrg;
-        if (!cancelled) setLiveAccount({ shortName: org.tradingName, region: org.regionCode });
-      } catch {
-        if (!cancelled) setLiveAccount(null);
-      }
-    })();
-    return (): void => {
-      cancelled = true;
-    };
-  }, [params.slug, staticAccount]);
-
-  const account: AccountIdentity | null = staticAccount ?? liveAccount ?? null;
-  const resolvingAccount = !staticAccount && liveAccount === undefined;
+  const accountName = meta?.name ?? prettifySlug(params.slug);
+  const accountRegion = meta?.region ?? '—';
 
   // Live fleet — polled from /api/orgs/[slug]/fleet (real KnockSession +
   // Knock.geo, see that route). `fleetLoaded` gates the empty state so a
@@ -119,18 +87,7 @@ export default function Page({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.slug]);
 
-  // Still resolving a real org's identity — don't flash an empty state.
-  if (resolvingAccount) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Live field map">
-        <div className="space-y-5 max-w-[1400px]">
-          <LiveMapEmpty slug={params.slug} accountName={firstRun.accountName} />
-        </div>
-      </AccountShell>
-    );
-  }
-
-  if (!account || (fleetLoaded && fleet.length === 0)) {
+  if (fleetLoaded && fleet.length === 0) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Live field map">
         <div className="space-y-5 max-w-[1400px]">
@@ -151,15 +108,15 @@ export default function Page({
   // operators know something's off without losing the underlying view.
   const allOffline = fleetLoaded && activeCount === 0 && totalKnocks === 0;
 
-  const scopeLabel = `${account.shortName} · ${account.region}`;
+  const scopeLabel = `${accountName} · ${accountRegion}`;
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Live field map">
       <div className="space-y-5 max-w-[1700px]">
         <Banner tone="info">
           <span className="text-[13px]">
-            Live GPS view of every <strong>{account.shortName}</strong> knocker currently in the
-            field. Positions refresh every 30s by poll — live tracking activates when realtime is
+            Live GPS view of every <strong>{accountName}</strong> knocker currently in the field.
+            Positions refresh every 30s by poll — live tracking activates when realtime is
             configured. Click any knocker for full shift detail — call, message, or send on break
             without leaving the map.
           </span>
@@ -189,7 +146,7 @@ export default function Page({
             // broadcast_message fires a real POST /api/broadcast inside the strip.
             // The other three actions are honest queue toasts — no silent click.
             toast.info(
-              `${PUSH_ACTION_LABELS[kind]} queued for ${account.shortName} dispatch — wiring lands in Phase 1.2`,
+              `${PUSH_ACTION_LABELS[kind]} queued for ${accountName} dispatch — wiring lands in Phase 1.2`,
             );
           }}
         />

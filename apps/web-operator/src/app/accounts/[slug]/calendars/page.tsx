@@ -20,7 +20,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { CalendarsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 type ApptType = 'consult' | 'install' | 'follow-up' | 'demo';
@@ -189,7 +189,7 @@ export default function CalendarsPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [typeFilter, setTypeFilter] = useState<ApptType | 'all'>('all');
   const [showNew, setShowNew] = useState(false);
@@ -200,7 +200,7 @@ export default function CalendarsPage({
   const [newType, setNewType] = useState<ApptType>('consult');
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Calendars">
         <div className="space-y-5 max-w-[1400px]">
@@ -251,7 +251,7 @@ export default function CalendarsPage({
 
   const bookingsThisWeek = appts.length;
   const showRate = 86;
-  const avgValue = account.vertical === 'commercial' ? '$1,840' : '$385';
+  const avgValue = meta?.vertical === 'commercial' ? '$1,840' : '$385';
   const openSlots = 7 * HOURS.length - allAppts.reduce((s, a) => s + a.durationHours, 0);
 
   return (

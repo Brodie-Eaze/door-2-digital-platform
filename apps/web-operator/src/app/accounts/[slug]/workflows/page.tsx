@@ -25,7 +25,6 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { WorkflowsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 import { toast } from '@/components/Toaster';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
@@ -485,7 +484,6 @@ export default function WorkflowsPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'active' | 'paused' | 'failing' | 'draft'
   >('all');
@@ -500,7 +498,7 @@ export default function WorkflowsPage({
   }
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Workflows">
         <div className="space-y-5 max-w-[1400px]">

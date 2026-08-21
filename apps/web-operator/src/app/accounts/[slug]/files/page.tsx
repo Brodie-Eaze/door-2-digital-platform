@@ -25,7 +25,6 @@ import { AccountShell } from '@/components/AccountShell';
 import { FilesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 interface FolderDef {
@@ -250,14 +249,13 @@ export default function FilesPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
   const folders = buildFolders(params.slug);
   const [activeFolder, setActiveFolder] = useState(folders[0]?.name ?? 'Brand assets');
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Files">
         <div className="space-y-5 max-w-[1400px]">

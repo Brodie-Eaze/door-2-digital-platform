@@ -19,7 +19,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { SitesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta, prettifySlug } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 interface Site {
@@ -354,11 +354,12 @@ export default function SitesPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
+  const accountName = meta?.name ?? prettifySlug(params.slug);
   const [filter, setFilter] = useState<'all' | 'site' | 'funnel'>('all');
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Sites & Funnels">
         <div className="space-y-5 max-w-[1400px]">
@@ -600,12 +601,12 @@ export default function SitesPage({
             <div className="divide-y divide-line2">
               {[
                 {
-                  dom: `${account.shortName.toLowerCase().replace(/\s+/g, '')}.org`,
+                  dom: `${accountName.toLowerCase().replace(/\s+/g, '')}.org`,
                   ssl: true,
                   primary: true,
                 },
                 {
-                  dom: `give.${account.shortName.toLowerCase().replace(/\s+/g, '')}.org`,
+                  dom: `give.${accountName.toLowerCase().replace(/\s+/g, '')}.org`,
                   ssl: true,
                   primary: false,
                 },

@@ -5,16 +5,16 @@ import { Sparkles } from 'lucide-react';
 import { Banner, KpiCard, Section, Skeleton, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { AccountLiveMap } from '@/components/AccountLiveMap';
-import { TerritoriesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { TerritoriesEmpty } from '@/components/AccountEmptyStates';
 import { TerritoryAssignments } from '@/components/TerritoryAssignments';
 import { CanvassAreaTool } from '@/components/CanvassAreaTool';
-import { getAccount } from '@/lib/accounts';
-import { firstRunSnapshot } from '@/lib/first-run';
+import { useAccountMeta, prettifySlug } from '@/lib/use-account-meta';
 
-function regionLabel(region: 'AU' | 'US' | 'SG'): string {
+function regionLabel(region: string): string {
   if (region === 'AU') return 'Australia';
   if (region === 'US') return 'United States';
-  return 'Singapore';
+  if (region === 'SG') return 'Singapore';
+  return region;
 }
 
 /** Shape returned by GET /api/orgs/[slug]/territories (live Territory rows) —
@@ -27,69 +27,20 @@ type ApiTerritory = {
   assignments: Array<{ id: string }>;
 };
 
-type AccountIdentity = {
-  shortName: string;
-  region: 'AU' | 'US' | 'SG';
-  vertical: 'charity' | 'commercial' | 'healthcare';
-};
-
-/** GET /api/orgs/[slug] response — used only for the identity fallback below. */
-type ApiOrg = { tradingName: string; regionCode: 'AU' | 'US' | 'SG'; vertical: string | null };
-
 export default function AccountTerritoriesPage({
   params: paramsPromise,
 }: {
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const staticAccount = getAccount(params.slug);
-  const firstRun = firstRunSnapshot(params.slug);
-
-  // W3 fix: `staticAccount` only resolves for the 4 seeded demo slugs.
-  // Any other slug is a REAL org — fetch its identity from the DB instead of
-  // treating "not in the fixture" as "doesn't exist / has no data".
-  const [liveAccount, setLiveAccount] = useState<AccountIdentity | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (staticAccount) return;
-    let cancelled = false;
-    (async (): Promise<void> => {
-      try {
-        const res = await fetch(`/api/orgs/${encodeURIComponent(params.slug)}`, {
-          credentials: 'include',
-        });
-        if (!res.ok) {
-          if (!cancelled) setLiveAccount(null);
-          return;
-        }
-        const org = (await res.json()) as ApiOrg;
-        if (!cancelled) {
-          setLiveAccount({
-            shortName: org.tradingName,
-            region: org.regionCode,
-            vertical: (org.vertical as AccountIdentity['vertical']) ?? 'commercial',
-          });
-        }
-      } catch {
-        if (!cancelled) setLiveAccount(null);
-      }
-    })();
-    return (): void => {
-      cancelled = true;
-    };
-  }, [params.slug, staticAccount]);
-
-  const account: AccountIdentity | null = staticAccount ?? liveAccount ?? null;
-  // Still resolving a real (non-fixture) org's identity — wait before either
-  // fetching territories or declaring "no account" (avoids a false empty
-  // flash for a real org that just hasn't loaded yet).
-  const resolvingAccount = !staticAccount && liveAccount === undefined;
-  const skipFetch = resolvingAccount || !account;
+  const meta = useAccountMeta(params.slug);
+  const accountName = meta?.name ?? prettifySlug(params.slug);
+  const accountRegion = meta?.region ?? 'US';
+  const accountVertical = meta?.vertical ?? 'commercial';
 
   const [territories, setTerritories] = useState<ApiTerritory[] | null>(null);
 
   useEffect(() => {
-    if (skipFetch) return;
     let cancelled = false;
     (async (): Promise<void> => {
       try {
@@ -106,35 +57,7 @@ export default function AccountTerritoriesPage({
     return (): void => {
       cancelled = true;
     };
-  }, [params.slug, skipFetch]);
-
-  // Still resolving a real org's identity — show a skeleton, never an empty
-  // state, so a real org's data can never flash as "not found".
-  if (resolvingAccount) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Territories">
-        <div className="space-y-5 max-w-[1700px]">
-          <Skeleton height="h-24" rounded="rounded-2xl" />
-          <Skeleton height="h-[420px]" rounded="rounded-2xl" />
-        </div>
-      </AccountShell>
-    );
-  }
-
-  // Identity resolution finished and found nothing (unknown slug, no DB row)
-  // — this is a genuinely nonexistent account, not a data-hiding case.
-  if (!account) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Territories">
-        <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <TerritoriesEmpty slug={params.slug} accountName={firstRun.accountName} />
-        </div>
-      </AccountShell>
-    );
-  }
+  }, [params.slug]);
 
   if (territories === null) {
     return (
@@ -151,7 +74,7 @@ export default function AccountTerritoriesPage({
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Territories">
         <div className="space-y-5 max-w-[1400px]">
-          <TerritoriesEmpty slug={params.slug} accountName={account.shortName} />
+          <TerritoriesEmpty slug={params.slug} accountName={accountName} />
         </div>
       </AccountShell>
     );
@@ -167,7 +90,7 @@ export default function AccountTerritoriesPage({
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={13} className="text-accent" />
             <span>
-              Propensity scores for <span className="font-semibold">{account.shortName}</span> are
+              Propensity scores for <span className="font-semibold">{accountName}</span> are
               computed from real knock and conversion history — see the heatmap in the canvass-area
               tool below. External enrichment feeds (census, socio-economic indexes) are on the
               roadmap and not connected yet.
@@ -179,7 +102,7 @@ export default function AccountTerritoriesPage({
           <KpiCard
             label="Zones tracked"
             value={territories.length}
-            hint={`across ${regionLabel(account.region)}`}
+            hint={`across ${regionLabel(accountRegion)}`}
           />
           <KpiCard label="Active" value={activeCount} hint="canvass areas live" />
           <KpiCard label="Reps assigned" value={assignedRepCount} hint="across all zones" />
@@ -187,7 +110,7 @@ export default function AccountTerritoriesPage({
 
         {/* Keep the live-map section — that's the rep/operator view */}
         <Section
-          title={`Live territory map · ${account.shortName}`}
+          title={`Live territory map · ${accountName}`}
           subtitle="Real reps on real ground · AI zones flagged with blue halos · toggle Satellite ↔ Streets top-right"
         >
           <AccountLiveMap accountSlug={params.slug} />
@@ -207,10 +130,10 @@ export default function AccountTerritoriesPage({
 
         <Section
           title="External data feeding the propensity model — roadmap"
-          subtitle={`Reference only · no ${account.region} enrichment feed is connected yet`}
+          subtitle={`Reference only · no ${accountRegion} enrichment feed is connected yet`}
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {(account.region === 'AU'
+            {(accountRegion === 'AU'
               ? [
                   {
                     name: 'ABS SEIFA',
@@ -226,7 +149,7 @@ export default function AccountTerritoriesPage({
                   { name: 'Mapbox AU', detail: 'Postal + LGA polygons', status: 'roadmap' },
                   { name: 'AusPost addresses', detail: 'Door-level corpus', status: 'roadmap' },
                 ]
-              : account.region === 'SG'
+              : accountRegion === 'SG'
                 ? [
                     {
                       name: 'SingStat',
@@ -258,9 +181,9 @@ export default function AccountTerritoriesPage({
                     },
                     {
                       name:
-                        account.vertical === 'commercial'
+                        accountVertical === 'commercial'
                           ? 'Pest infestation index'
-                          : account.vertical === 'healthcare'
+                          : accountVertical === 'healthcare'
                             ? 'CDC public health'
                             : 'Charity Navigator',
                       detail: 'Vertical-specific signal',
@@ -270,7 +193,7 @@ export default function AccountTerritoriesPage({
             )
               .concat([
                 {
-                  name: `${account.shortName} knock/conversion history`,
+                  name: `${accountName} knock/conversion history`,
                   detail: 'Real — powers the propensity signal today',
                   status: 'live',
                 },
@@ -282,7 +205,7 @@ export default function AccountTerritoriesPage({
                       <div className="text-[12.5px] font-semibold text-ink truncate">{s.name}</div>
                       <div className="text-[10.5px] text-muted mt-0.5">{s.detail}</div>
                     </div>
-                    <span className="tag !text-[9px]">{account.region}</span>
+                    <span className="tag !text-[9px]">{accountRegion}</span>
                   </div>
                   <div className="mt-2">
                     <StatusPill tone={s.status === 'live' ? 'success' : 'muted'}>

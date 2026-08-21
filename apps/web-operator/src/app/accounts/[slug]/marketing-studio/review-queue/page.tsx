@@ -6,7 +6,7 @@ import { Banner, Button, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 import { ReviewQueueBoard, type DraftCampaign } from '@/components/marketing-review-queue';
 
@@ -23,12 +23,12 @@ interface PageProps {
 
 export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
   const params = use(paramsPromise);
-  // Display name only — `getAccount()` only resolves the 4 seeded demo
-  // slugs; a real org still gets a reasonable name via firstRun's
-  // prettify-slug fallback, and the fetch below is never gated on this.
-  const account = getAccount(params.slug);
+  // Display name only — live meta answers async; a real org still gets a
+  // reasonable name via firstRun's prettify-slug fallback meanwhile, and the
+  // fetch below is never gated on this.
+  const meta = useAccountMeta(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
-  const accountName = account?.shortName ?? firstRun.accountName;
+  const accountName = meta?.name ?? firstRun.accountName;
   const { source, updatedAt, markFresh } = useDataFreshness('live');
   const [campaigns, setCampaigns] = useState<DraftCampaign[]>([]);
   const [loading, setLoading] = useState(true);

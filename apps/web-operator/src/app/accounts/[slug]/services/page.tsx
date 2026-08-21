@@ -7,7 +7,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -51,10 +51,10 @@ export default function ServicesPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   const defaultVertical: OfferingVertical =
-    account?.vertical === 'commercial' ? 'commercial' : 'charity';
+    meta?.vertical === 'commercial' ? 'commercial' : 'charity';
 
   const [offerings, setOfferings] = useState<Offering[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
