@@ -51,10 +51,13 @@ final class D2DKnockerTests: XCTestCase {
         XCTAssertEqual(vm.step, .saving)
     }
 
-    func test_flowViewModel_callbackGoesToLeadForm() {
+    func test_flowViewModel_callbackStaysInlineAndCapturesLead() {
+        // T1-1 one-tap redesign: lead/sale dispositions capture inline on the
+        // single-screen sheet — no .leadForm hop. The rep fills the form in place.
         let vm = KnockFlowViewModel(coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0))
         vm.selectDisposition(.callback)
-        XCTAssertEqual(vm.step, .leadForm)
+        XCTAssertEqual(vm.step, .disposition)
+        XCTAssertTrue(vm.capturesLead)
     }
 
     func test_flowViewModel_callbackLeadFormGoesToSaving() {
@@ -64,10 +67,12 @@ final class D2DKnockerTests: XCTestCase {
         XCTAssertEqual(vm.step, .saving)
     }
 
-    func test_flowViewModel_convertedSaleGoesToLeadThenSignature() {
+    func test_flowViewModel_convertedSaleCapturesInlineThenSignature() {
+        // Sale: inline capture on the sheet, then signature, then saving.
         let vm = KnockFlowViewModel(coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0))
         vm.selectDisposition(.convertedSale)
-        XCTAssertEqual(vm.step, .leadForm)
+        XCTAssertEqual(vm.step, .disposition)
+        XCTAssertTrue(vm.capturesLead)
         vm.proceedFromLeadForm()
         XCTAssertEqual(vm.step, .signature)
         vm.proceedFromSignature()
