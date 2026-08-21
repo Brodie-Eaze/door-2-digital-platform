@@ -131,7 +131,25 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     const now = Date.now();
 
-    const fleet = activeSessions.map((session) => {
+    // A knocker can hold more than one open session (an app restart or a fresh
+    // login that didn't close the prior KnockSession leaves several rows with
+    // endedAt = null). The fleet view is per-KNOCKER, so collapse to ONE row per
+    // user — keep the session with the most recent knock (else the most recent
+    // start). Without this a rep renders as N duplicate map pins and their
+    // knocksToday is summed N times into the "knocks today" total.
+    const bestByUser = new Map<string, (typeof activeSessions)[number]>();
+    for (const s of activeSessions) {
+      const existing = bestByUser.get(s.userId);
+      if (!existing) {
+        bestByUser.set(s.userId, s);
+        continue;
+      }
+      const sTime = s.knocks[0]?.capturedAt.getTime() ?? s.startedAt.getTime();
+      const eTime = existing.knocks[0]?.capturedAt.getTime() ?? existing.startedAt.getTime();
+      if (sTime > eTime) bestByUser.set(s.userId, s);
+    }
+
+    const fleet = [...bestByUser.values()].map((session) => {
       const lastKnock = session.knocks[0] ?? null;
       const lastKnockMs = lastKnock ? now - lastKnock.capturedAt.getTime() : Infinity;
       const lastKnockMin = lastKnock ? Math.floor(lastKnockMs / 60_000) : 9999;

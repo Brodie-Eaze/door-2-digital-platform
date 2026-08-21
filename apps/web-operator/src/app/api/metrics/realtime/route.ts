@@ -67,7 +67,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const since = startOfToday();
 
   try {
-    const [knocksToday, convToday, activeReps] = await Promise.all([
+    const [knocksToday, convToday, activeSessionUsers] = await Promise.all([
       db.knock.count({
         where: { ...orgFilter, capturedAt: { gte: since } },
       }),
@@ -78,7 +78,11 @@ export async function GET(req: NextRequest): Promise<Response> {
           disposition: { in: [...CONVERTED_DISPOSITIONS] },
         },
       }),
-      db.knockSession.count({
+      // Count DISTINCT knockers with an open session, not sessions — a rep can
+      // leave several sessions open (app restart / re-login without clock-out),
+      // which would otherwise inflate "active iPads".
+      db.knockSession.groupBy({
+        by: ['userId'],
         where: { ...orgFilter, endedAt: null },
       }),
     ]);
@@ -86,7 +90,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const body: RealtimeMetrics = {
       knocksToday,
       convToday,
-      activeReps,
+      activeReps: activeSessionUsers.length,
       updatedAt: new Date().toISOString(),
     };
     return ok(body);
