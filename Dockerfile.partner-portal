@@ -3,8 +3,8 @@
 # Door 2 Digital — partner-portal (Next.js 14 standalone client portal).
 # Per-app Dockerfile pattern (mirrors Dockerfile.public-site). The white-label
 # client deliverable: invoices, payout statements, attribution, state clearance,
-# brand kit, and SSO config. Reads only its own fixtures today; wires to the
-# billing service in Phase 1.3. No money movement originates here.
+# brand kit, and SSO config — live against the D2D API billing/compliance
+# routes. No money movement originates here.
 
 ARG NODE_VERSION=20.10.0
 
@@ -19,6 +19,9 @@ COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/shared-utils/package.json packages/shared-utils/
 COPY packages/ui-tokens/package.json packages/ui-tokens/
 COPY packages/ui-web/package.json packages/ui-web/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/database/package.json packages/database/
+COPY packages/integrations/package.json packages/integrations/
 RUN pnpm fetch --frozen-lockfile
 RUN pnpm install --frozen-lockfile --offline
 
@@ -27,7 +30,9 @@ WORKDIR /repo
 COPY apps/partner-portal ./apps/partner-portal
 COPY packages ./packages
 ARG NEXT_PUBLIC_ENV=production
+ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_ENV=${NEXT_PUBLIC_ENV}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter partner-portal build
 

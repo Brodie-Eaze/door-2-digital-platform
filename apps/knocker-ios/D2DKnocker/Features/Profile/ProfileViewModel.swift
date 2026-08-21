@@ -47,6 +47,11 @@ final class ProfileViewModel {
         knocksToday = stats.knocksToday
         conversionsToday = stats.conversionsToday
         commissionCents = stats.commissionCentsToday
+        // Drive the hero "Live earnings" banner from the REAL server-computed
+        // commission (the commission plan lives server-side), not a client-side
+        // guess. Previously the banner summed sale PRICES as if they were the
+        // rep's commission — a big overstatement of their earnings.
+        appState.commissionCentsToday = Int64(stats.commissionCentsToday)
         knocksYesterday = stats.knocksYesterday ?? 0
         revenueCents = stats.revenueCentsToday ?? 0
         leaderboardRank = stats.leaderboardRank

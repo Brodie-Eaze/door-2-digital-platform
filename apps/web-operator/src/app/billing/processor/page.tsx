@@ -66,7 +66,7 @@ async function loadProcessor(): Promise<ProcessorData> {
     sixMonthsAgo.setUTCDate(1);
     sixMonthsAgo.setUTCHours(0, 0, 0, 0);
 
-    const [mtdAgg, byOrgGroup, recentRows] = await Promise.all([
+    const [mtdAgg, byOrgGroup, monthRows] = await Promise.all([
       db.conversion.aggregate({
         _sum: { amountCents: true, processorResidualCents: true },
         _count: { _all: true },
@@ -78,10 +78,21 @@ async function loadProcessor(): Promise<ProcessorData> {
         _sum: { amountCents: true },
         _count: { _all: true },
       }),
-      db.conversion.findMany({
-        where: { paymentProvider: 'micamp', signedAt: { gte: sixMonthsAgo } },
-        select: { signedAt: true, amountCents: true, processorResidualCents: true },
-      }),
+      // Monthly buckets computed IN THE DB (date_trunc), not by loading every
+      // conversion row into the server. At scale this table holds millions of
+      // rows over six months — the old findMany streamed them all into memory
+      // just to group by month in JS (an OOM waiting to happen). This returns
+      // ~6 rows. BigInt sums come back as text and are parsed below.
+      db.$queryRaw<Array<{ period: string; volume: string; txns: number; residual: string }>>`
+        SELECT to_char(date_trunc('month', "signedAt"), 'YYYY-MM') AS period,
+               SUM("amountCents")::text AS volume,
+               COUNT(*)::int AS txns,
+               SUM("processorResidualCents")::text AS residual
+        FROM "Conversion"
+        WHERE "paymentProvider"::text = 'micamp' AND "signedAt" >= ${sixMonthsAgo}
+        GROUP BY 1
+        ORDER BY 1 DESC
+      `,
     ]);
 
     const orgIds = byOrgGroup.map((g) => g.orgId);
@@ -107,18 +118,12 @@ async function loadProcessor(): Promise<ProcessorData> {
       };
     });
 
-    const buckets = new Map<string, { volumeCents: bigint; txns: number; residualCents: bigint }>();
-    for (const row of recentRows) {
-      const period = row.signedAt.toISOString().slice(0, 7);
-      const bucket = buckets.get(period) ?? { volumeCents: 0n, txns: 0, residualCents: 0n };
-      bucket.volumeCents += row.amountCents;
-      bucket.txns += 1;
-      bucket.residualCents += row.processorResidualCents;
-      buckets.set(period, bucket);
-    }
-    const byMonth: MonthBucket[] = Array.from(buckets.entries())
-      .map(([period, b]) => ({ period, ...b }))
-      .sort((a, b) => (a.period < b.period ? 1 : -1));
+    const byMonth: MonthBucket[] = monthRows.map((r) => ({
+      period: r.period,
+      volumeCents: BigInt(r.volume ?? '0'),
+      txns: Number(r.txns),
+      residualCents: BigInt(r.residual ?? '0'),
+    }));
 
     return {
       volumeMtdCents: mtdAgg._sum.amountCents ?? 0n,

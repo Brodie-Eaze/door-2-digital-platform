@@ -216,3 +216,252 @@ Institutional memory from the CI-gate campaign, paid for in failed runs:
 
 You are not here to make the dashboard look finished. It already looks finished.
 You are here to make it true.
+
+---
+
+## PRODUCTION PROOF LOG — 2026-08-21
+
+The stack is deployed to Railway production (URLs in CLAUDE.md). Criteria proven
+LIVE against `https://d2d-api-production-895b.up.railway.app`, not dev:
+
+- **D1 (loop closes on live data) — PROVEN in prod.** Onboarded a stranger org
+  (Northside Trust) through the Command Centre → founding admin invite minted
+  atomically → redeemed → org admin mapped a territory (Riverside North) →
+  invited a knocker (Sam) → Sam redeemed + logged in → saw the assigned area →
+  opened a shift session → logged a knock batch (inserted:1) → the knock is
+  visible to the org admin. Every step live Postgres in production.
+- **D2 (multi-tenant real) — PROVEN in prod.** New org sees 0 leads; Northside
+  admin token reading Hope Forward's org → 404; the logged knock is scoped to
+  `org_06G28...` (Northside), and 0 Northside knocks leak to the Hope Forward
+  admin's knock list.
+- **D3 (Knocker iOS first-class client) — PROVEN in the app UI against prod.**
+  Release build points at the production API, ATS arbitrary-loads=NO in the
+  built plist (F-007). Drove the actual Simulator UI (via generic desktop
+  control, since the native integration needs `xcode-select`): logged in as
+  the production knocker Sam (sam.field@northsidetrust.org) — the app
+  authenticated against PRODUCTION and the map showed 'Riverside North · 0/0
+  knocked', the exact territory the org admin mapped + assigned on the
+  platform. The knock-capture UI works (real reverse-geocoded address +
+  disposition grid + save). WRITE-BACK SYNC — root-caused end-to-end through
+  FOUR distinct client bugs; three fixed + verified live (each advanced the
+  server-observed failure: `noToken → 400 → 401 → "session not found"`), the
+  fourth (session lifecycle) specified but not yet built:
+  1. FIXED + VERIFIED — token source. `SyncEngine` read its bearer token only
+     from the Keychain, but the app authenticates the rest of its traffic off
+     the in-memory `AppState` token (set at login). On this build the Keychain
+     write is silently rejected (no keychain-access-group entitlement →
+     `SecItemAdd` fails; cold-launch drops to the login screen — proof the
+     Keychain never persisted), so `keychain.accessToken` read nil and every
+     queued knock died at `.noToken` before any HTTP call. Fix:
+     `SyncEngine.authTokenOverride`, kept in lockstep with
+     `appState.accessToken` by ContentView; drain prefers it, Keychain
+     fallback. VERIFIED: error moved `Not authenticated → HTTP 400`; the API
+     log then showed `POST /v1/knocks/batch` arriving from the app.
+  2. FIXED + VERIFIED — payload contract. `buildPayload`/`KnockPayload` were
+     written against an older shape. The deployed `knockBatchRequestSchema` is
+     `.strict()`: it wants `geo:{lat,lng}` + structured `rawAddress`, and
+     rejects the extras the app sent (`orgId,userId,latitude,longitude,
+addressLine,clientOffsetMs`). Fix: emit the server shape, deriving
+     `rawAddress` from the CLPlacemark components the reverse-geocoder already
+     extracts (with dead-zone fallbacks), drop the rejected keys. VERIFIED:
+     the stored payload is now exactly the server shape; error moved
+     `400 → 401`.
+  3. FIXED + VERIFIED — response parse. `KnockBatchResponse` expected a
+     `processed[]` field; the server returns `{inserted,deduped,errors,
+knocks[]}`. Fix: match the real shape, mark items complete off
+     `knocks[].idempotencyKey`, and (defensive) count per-knock `errors[]` as
+     attempts so a rejected knock surfaces its message instead of re-POSTing
+     forever at attempts=0. VERIFIED via curl: the exact app payload with a
+     REAL server sessionId returns 201 and PERSISTS in prod
+     (`knk_01M0JC5TP…`); the parse now succeeds.
+  4. FIXED + VERIFIED — session lifecycle (the last blocker). The app logged
+     knocks with `appState.sessionId ?? UUID().uuidString` — a client UUID
+     never registered server-side (`startShift` built only a LOCAL
+     `KnockSession`; the drain's `.startSession` op was a no-op), so the batch
+     201'd but every knock landed in `errors[]`
+     (`"KnockSession <uuid> not found"`, inserted:0). `StartSessionRequest`
+     (client DTO) was also drifted from `startSessionRequestSchema`. Fix:
+     `KnockFlowViewModel.saveKnock` now ensures a REAL server session before
+     recording a knock — if `appState.sessionId` isn't a `sess_…` id and the
+     rep is online with an assigned territory (`MapViewModel` now exports
+     `appState.assignedTerritoryId`), it `POST /v1/sessions` and stores the
+     returned `sess_…` id; the DTOs (`StartSessionRequest`/`Response`) now
+     match the server, and the idempotency key is kept ≤64 chars (the full
+     deviceId+territory overflowed the server's key limit → its own 400).
+     VERIFIED END-TO-END against prod from the app UI: `POST /v1/sessions →
+201` (sess_01M0JDHDJNK0…) then `POST /v1/knocks/batch → 201`; the knock
+     (`knock-939148fe…`, captured 15:02:57) now PERSISTS in production tied to
+     that real session, and the local queue item is marked complete
+     (`completed=1, attempts=0, no error`) — the "Syncing" banner clears.
+     D3 IS NOW PROVEN END-TO-END from the real app UI against production: platform
+     assigns territory → app shows it → knocker logs a knock → app opens a server
+     session → knock POSTs → server persists it, tenant-scoped to the org → client
+     confirms + clears. The write-back that was the open gap is closed. Client fixes
+     live in the tree (SyncEngine.swift, ContentView.swift, KnockFlowViewModel.swift,
+     DTOs.swift, KnockSheetView.swift, APIClient.swift, AppState.swift,
+     MapViewModel.swift) — uncommitted, Release build green (`/tmp/dd-rel8`).
+     Known follow-ups (non-blocking): the Keychain doesn't persist on this sim build
+     (no keychain-access-group entitlement) so a cold launch requires re-login — on
+     a real device the default access group makes this work; and pure-offline shift
+     start (never online to open a session) still needs the local→server session-id
+     reconcile path.
+- **D1 (loop on live data) — write path proven (see D3); web surfaces being
+  de-fixtured.** The knock→platform leg is proven live (D3). Web-operator
+  page-route mock/seed audit went from 5 fixture-wired routes to 2:
+  `/overview` and `/accounts/[slug]/leads` now show honest "Live data
+  unavailable" states instead of fabricated fixtures on DB failure, and the
+  leads list derives source/assignee from real fields (no more round-robin /
+  hardcoded-name fabrication); `/command-centre` (the main operator surface) is
+  now fully live — a new `/api/metrics/rollup` endpoint feeds the week/MTD/
+  revenue/roster/territory KPIs straight from Prisma, KPIs render `—` until
+  their live source answers, all fabricated deltas removed, and zero-activity
+  now reads as a live answer (a real org no longer borrows another org's demo
+  numbers). Remaining: the two `/planning` routes still render the
+  `PlanningSurface` from `account-planning` fixtures — that's an AI
+  forecasting feature with no live backing model yet (same category as the
+  command-centre AI-zones/anomalies, which already show honest empty states).
+  Both were then converted to honest empty states (no fabricated forecasts).
+  **Live-account foundation built + shared surfaces migrated:** new
+  `/api/accounts/[slug]/meta` + `/api/accounts/list` (live, tenant-scoped) and
+  `useAccountMeta`/`useAccountList` hooks now back `AccountShell`,
+  `AccountAvatar`, and `AccountSwitcher` — so every sub-account HEADER + the
+  account switcher read live orgs, not the 4-org fixture fleet (a real org like
+  Northside used to 404 out of the switcher). **web-operator is now FULLY
+  de-fixtured for displayed data** — every remaining consumer was migrated:
+  `/api/accounts/[slug]/meta` + `/api/accounts/list` + `/api/accounts/stats`
+  (live, tenant-scoped, per-account aggregates) back `useAccountMeta`/
+  `useAccountList`/`useAccountStats`; all 20 sub-account surfaces + `/screens` +
+  `regions/au` + the portfolio `/accounts` list now read live Prisma or show
+  honest states. **Verified:** `grep "from '@/lib/accounts'"` over
+  `src/app` + `src/components` → ZERO; same for `@/lib/fixtures`,
+  `@/lib/account-fixtures`, `@/lib/account-planning`, `@/lib/seed/*`. tsc clean;
+  production build green (server pages — invoices/knocker-ios/screens —
+  prerender cleanly). Fabricated fields with no live model (`plan`, `health`,
+  `contractedAt`, `ltvCentsMTD`, `insideSalesReps`) were DROPPED, not invented;
+  per-account numbers (knockers, conversions, revenue, territories) are
+  live-sourced via the stats endpoint; the getAccount existence guards that
+  used to 404 every real org are gone. The ONLY remaining fixture-linked import
+  is `@/lib/first-run` (29 consumers) — a cosmetic empty-state proxy that
+  decides "show the onboarding banner?" + a display name; for a real org it
+  returns the prettified slug + the correct first-run state, so it fabricates
+  NO metrics or content shown as real. **DEPLOYED (2026-08-22):** web-operator
+  was redeployed to Railway (service `D2D`,
+  https://d2d-production-1fab.up.railway.app) with all of the above — the build
+  compiled, the new endpoints are live (`/api/accounts/stats`,
+  `/api/accounts/list`, `/api/metrics/rollup` return 307 auth-redirects, not
+  404, proving the new code shipped) and `/login` serves the Command Centre, so
+  the de-fixtured operator is the LIVE build. **D1 LOOP PROVEN ON LIVE DATA
+  through the deployed operator (2026-08-22):** authenticated to the deployed
+  console as the operator super*admin and read its own live BFF endpoints —
+  `/api/accounts/list` (200) returns SIX real orgs including `northside-trust`
+  (the org onboarded through the platform this session), not the old 4-org
+  fixture; `/api/metrics/rollup` (200) returns the live rollup reflecting exactly
+  what was built through platform + app — `totalReps: 1` (Sam), `totalTerritories:
+1` (Riverside North), honest `0` conversions/revenue; `/api/metrics/realtime`
+  (200) returns `knocksToday: 3` — INCLUDING the knock pushed from the Knocker
+  iOS app — and `activeReps: 5`. So onboard → territory → knocker → app-logged
+  knock all surface LIVE in the deployed command-centre's real data path (the
+  same endpoints the UI renders). The only unproduced artifact is a literal
+  screen recording; the loop-on-live-data itself is proven end-to-end.
+  **Org-console leg also verified (2026-08-22):** the deployed Org Console
+  (web-org, https://d2d-web-org-production.up.railway.app) renders LIVE per-org
+  data — for Hope Forward's admin (Sarah Harris, org_admin) it shows "Leads
+  loaded 12", Conversions 0, $0 GMV, "No live anomalies yet" (honest empty),
+  full CRM nav. So the loop's "appears in the Org console" claim holds: an org
+  admin sees their own org's live data. (The old CLAUDE.md note "web-org has
+  zero backend contact" is stale — it is live-wired.) The leaf surfaces that
+  had their OWN demo \_content* beyond account
+  fields (e.g. generated task lists) now render live account identity + honest
+  empty/degraded states; wiring dedicated tasks/invoices/etc. models where a
+  surface needs richer live content is genuine product build-out, tracked
+  separately.
+- **D2 (multi-tenant isolation) — PROVEN in suite AND live in prod.** The full
+  integration suite is 374/374 green (28 files), including the dedicated
+  `cross-tenant-isolation` suite (9), `tenant-prisma` read/write isolation (12),
+  and per-domain 404-across-tenant assertions (audit, sale, user, territory,
+  knock, lead, donation, catalog, marketing). LIVE probe against production:
+  logged in as a DIFFERENT org (Hope Forward, `manager@hope-forward.com`) and hit
+  Northside Trust's real resources with org B's token —
+  `GET /v1/territories/ter_01M0J6G3CB… → 404`, `…/satellite → 404`,
+  `/v1/knocks/knk_01M0J6KAS8… → 404`, `/v1/sessions/sess_01M0J6KA2N… → 404` —
+  every resource type returns **404, never 403**, while org B's own
+  `/v1/territories/assigned → 200`. Cross-tenant reads are indistinguishable from
+  "does not exist", which is the correct posture (no existence leak). The NEW
+  BFF endpoints added this session were probed the same way (2026-08-22): as an
+  org-scoped admin (Hope Forward, not super_admin), `/api/accounts/list` and
+  `/api/accounts/stats` return ONLY that org (1, not all 6), `/api/metrics/rollup`
+  scopes to activeAccounts:1, `/api/accounts/<other-org>/meta` → 404 (no
+  existence leak) while own-org → 200. So the new attack surface honours the
+  isolation guarantee rather than bypassing it.
+- **D5 (backpressure) — PROVEN in prod; 50k harness fire-ready.** 150-request
+  burst → 120 pass, 121st+ return 429 + Retry-After + x-ratelimit-remaining:0,
+  per-client (TRUST_PROXY_HOPS=2) — the graceful-degradation MECHANISM is proven.
+  SCALE-HARDENING APPLIED (2026-08-22): a real hot-path index gap was found by
+  reviewing the query plans of the new metrics endpoints — the "who is live
+  now" lookups (`/api/fleet`, `/api/metrics/realtime` active-rep count) filter
+  `KnockSession WHERE endedAt IS NULL [+ orgId + startedAt]`, but the table only
+  had `[userId, startedAt]`, so at scale (millions of closed sessions) it would
+  full-scan to find the handful of open ones. Added
+  `@@index([endedAt, orgId, startedAt])` (endedAt IS NULL leads — highly
+  selective), migration `20260822000000_knocksession_active_index`, DEPLOYED +
+  APPLIED to the prod DB (`prisma migrate status` → "Database schema is up to
+  date!"). TWO MORE hot-path full-scan risks then found + indexed + applied to
+  prod (migration `20260822010000`): (a) AuditEvent — the audit-shipper polls
+  `WHERE shippedToS3At IS NULL ORDER BY id` every 60s on the highest-volume
+  table (one row per action) with no index on `shippedToS3At` → continuous full
+  scan once off-site shipping is on; added `@@index([shippedToS3At, id])`; (b)
+  Lead — the inbox `WHERE orgId=? ORDER BY createdAt DESC LIMIT 50` had no
+  `[orgId, createdAt]` index → sorted the whole org's leads; added it. All three
+  index migrations are live in the prod DB. UNBOUNDED-QUERY OOM fix also found +
+  deployed: `/billing/processor` loaded EVERY micamp conversion over 6 months
+  (no org scope) into the server just to bucket them by month in JS — millions
+  of rows at scale, a guaranteed OOM. Replaced with a raw `date_trunc('month')`
+  GROUP BY that returns ~6 rows (same output, bounded memory), deployed +
+  verified rendering in prod. (A findMany-vs-take audit across the high-volume
+  tables found the rest either paginated, bounded by a narrow WHERE, or a
+  worker's own batch — this processor page was the one true unbounded load.)
+  N+1 fix also found + deployed: `POST /v1/do-not-knock/ingest` resolved each
+  row's address + upserted the DNK record ONE AT A TIME (2N sequential queries);
+  DNK/DNC lists are thousands of addresses, so a real ingest would time out.
+  Batched to one findMany (resolve all) + one createMany(skipDuplicates) = 2
+  queries regardless of list size (lead.test.ts 15/15, API redeployed healthy).
+  A second N+1 was then batched: the lead-routing worker (every 5 min) did a
+  user.findMany + workload groupBy PER ORG (2N queries scaling with org count) —
+  hoisted both reads out of the loop into one findMany + one groupBy over all
+  orgs; the per-org loop reads from maps (per-lead assignment writes unchanged).
+  So all three classic scale killers are now hardened on the hot paths: missing
+  indexes (3 added), unbounded loads (1 fixed), and N+1 (2 fixed — a hot route +
+  a worker). This is the
+  kind of enterprise-scale hardening that IS in reach without the 50k rig — the
+  load run itself still needs the target infra.
+  The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
+  ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
+  error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
+  with a runbook (`load-tests/README.md`). It is ONE command against a target
+  once one exists. What's missing is purely the target: 50k VUs needs k6 Cloud
+  or a self-hosted k6 cluster + a staging stack at scale — it cannot run from a
+  laptop and MUST NOT run against the live prod console (that's a DoS + pollutes
+  the prod DB with test knocks). So D5-scale is infra-gated, not code-gated.
+- **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
+  money-cycle to the cent + human gate, RTBF at-rest erasure, voice double-gate,
+  security floor. Full external pen test (D9) remains human-gated.
+
+**Finding FIXED + verified live — fleet/active-rep duplicate-session inflation.**
+Live visual verification of the deployed command-centre showed the top KPI
+"Knocks today" (3) diverging from the fleet-map panel "knocks today" (15). Root
+cause (found by comparing `/api/metrics/realtime` and `/api/fleet` at the same
+moment): a knocker can hold several open `KnockSession` rows (an app restart or
+re-login that never sets `endedAt`). `/api/fleet` mapped ONE ROW PER SESSION, so
+one rep with 3 knocks and 5 open sessions rendered as 5 duplicate map pins and
+summed 5×3 = 15; `/api/metrics/realtime` counted open SESSIONS (5) as "active
+iPads" rather than distinct knockers (1). Fix (commit `51fdf98`): `/api/fleet`
+collapses to one row per user (keeping the session with the most recent knock);
+`/api/metrics/realtime` counts distinct session users via `groupBy`. Deployed +
+verified: both now read `knocksToday: 3, activeReps: 1`, fleet returns a single
+row summing to 3 — the counters reconcile. (Note: the underlying stale-open-
+session data is a separate hygiene item — the app/a cleanup job should close
+sessions on clock-out; the endpoints are now robust to it regardless.)
+
+Still human-gated: **D4** (AWS/Terraform apply — no account), **D5-scale** (50k
+load test on real infra), **D9-external** (CREST pen-test firm), **D11-onboarding
+doc walk by a non-engineer**, **D12** (first real paying org), merge PR #18.

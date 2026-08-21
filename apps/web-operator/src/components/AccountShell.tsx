@@ -42,7 +42,7 @@ import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
 import { AccountSwitcher } from './AccountSwitcher';
 import { OperationalIndicator } from './OperationalIndicator';
 import { TrustFooter } from './TrustFooter';
-import { getAccount, accountMonogram } from '@/lib/accounts';
+import { useAccountMeta, prettifySlug, monogramFrom } from '@/lib/use-account-meta';
 
 interface SessionUser {
   userId: string;
@@ -86,7 +86,12 @@ interface AccountShellProps {
  * account only — no cross-account leakage.
  */
 export function AccountShell({ accountSlug, pageTitle, children }: AccountShellProps): JSX.Element {
-  const account = getAccount(accountSlug);
+  // Live account header metadata (name/region/vertical/avatar) — null until the
+  // fetch answers, so header labels fall back to a prettified slug + house navy
+  // rather than a fabricated fixture name.
+  const meta = useAccountMeta(accountSlug);
+  const shortName = meta?.name ?? prettifySlug(accountSlug);
+  const avatarBg = meta?.avatarBg ?? '#0F172A';
   const base = `/accounts/${accountSlug}`;
   const router = useRouter();
   const user = useSession();
@@ -175,18 +180,16 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
           colour, painted across the very top of the viewport. Free brand
           differentiator: a screenshot of Hope Forward vs PestMax vs World
           Vision instantly reads as different products. */}
-      {account?.avatarBg && (
-        <div
-          aria-hidden
-          className="fixed top-0 left-0 right-0 z-[60] h-[2px] pointer-events-none"
-          style={{ background: account.avatarBg }}
-        />
-      )}
+      <div
+        aria-hidden
+        className="fixed top-0 left-0 right-0 z-[60] h-[2px] pointer-events-none"
+        style={{ background: avatarBg }}
+      />
       <AppShell
         sidebar={
           <AccountSidebarReveal key={accountSlug}>
             <Sidebar
-              appName={account?.shortName ?? 'Account'}
+              appName={shortName}
               appTagline="SUB-ACCOUNT"
               homeHref={`${base}/today`}
               groups={NAV}
@@ -201,11 +204,11 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
                     <ArrowLeft size={10} /> Back to Command Centre
                   </Link>
                   <div className="flex items-center gap-2">
-                    {account && <Monogram letters={accountMonogram(account.shortName)} small />}
-                    <span>{account?.shortName}</span>
+                    <Monogram letters={monogramFrom(shortName)} small />
+                    <span>{shortName}</span>
                   </div>
                   <div className="text-soft">
-                    {account?.vertical} · {account?.region}
+                    {meta ? `${meta.vertical} · ${meta.region}` : ' '}
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     <span>v0.5.0</span>

@@ -85,13 +85,38 @@ async function buildServer() {
   redis();
 
   const app = Fastify({
-    logger: log,
+    // Fastify 5: a pino INSTANCE goes in loggerInstance; the logger key now
+    // only accepts options (FST_ERR_LOG_INVALID_LOGGER_CONFIG otherwise).
+    loggerInstance: log,
     // SEC-006: trust exactly 1 upstream hop (the load balancer). `true` would
     // trust the entire X-Forwarded-For chain, allowing an attacker to prepend a
     // spoofed IP and bypass the per-IP rate limit bucket. With hop count = 1,
     // Fastify takes the rightmost client IP added by our LB — which the caller
     // cannot control.
-    trustProxy: 1,
+    //
+    // TRUST_PROXY_HOPS lets each deployment topology declare how many trusted
+    // proxies sit in front (Railway edge = a few; ECS/ALB = 1; local = 0).
+    // req.ip then resolves to the real client, so the SEC-010 IP rate-limit
+    // bucket is per-client, not per-edge-node. Unset => hop===0 (trust only
+    // the immediate socket peer) — the safe default for the ECS story.
+    // Fastify 5 removed the numeric hop-count shorthand from `trustProxy`
+    // (@fastify/proxy-addr can no longer validate the immediate peer from a
+    // bare count — see fastify/docs/Guides/Migration-Guide-V5 / Server.md
+    // #trustproxy). Reproduced as an explicit function: `hop === 0` trusts
+    // only the directly-connecting socket peer and takes the one
+    // X-Forwarded-For entry it appended, exactly matching the old
+    // `trustProxy: 1` math. Safe here because network ACLs (ECS security
+    // group / Railway private networking) make our LB the only peer that can
+    // ever reach this process directly — the socket peer can't be spoofed by
+    // an external caller, only header *content* can, which hop-limiting
+    // still defeats.
+    // proxy-addr semantics: return true to KEEP trusting (walk further left);
+    // trusting the first N hops means `hop < N`. N counts trusted proxies in
+    // front (Railway edge chain = 2; ECS/ALB = 1). req.ip becomes the entry
+    // just past the trusted proxies — the real client. Railway sanitises
+    // client-injected X-Forwarded-For (verified: an injected value never
+    // reaches a trusted position), so a caller cannot forge this bucket key.
+    trustProxy: (_address, hop) => hop < (e.TRUST_PROXY_HOPS ?? 1),
     bodyLimit: 1024 * 1024, // 1 MB default; knock-batch route bumps to 10 MB
     genReqId: () => newId('req'),
   });

@@ -23,6 +23,16 @@ final class KnockFlowViewModel {
     // MARK: - Inputs
     var coordinate: CLLocationCoordinate2D
     var addressLine: String = ""
+    // Structured address components from reverse-geocoding. The server's knock
+    // schema (`knockBatchRequestSchema`, .strict) wants a structured `rawAddress`
+    // — a flat line alone 400s. Captured in KnockSheetView.reverseGeocode from
+    // the CLPlacemark; fall back to sensible values in a dead zone so a GPS-only
+    // knock still syncs rather than being rejected.
+    var addrStreet: String = ""
+    var addrLocality: String = ""
+    var addrRegion: String = ""
+    var addrPostcode: String = ""
+    var addrCountry: String = ""
 
     // MARK: - Step state
     var step: KnockFlowStep = .disposition
@@ -107,6 +117,27 @@ final class KnockFlowViewModel {
         guard let disposition = selectedDisposition, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
+
+        // Ensure a REAL server session before recording the knock. A knock whose
+        // sessionId is a client-only UUID is rejected server-side ("KnockSession
+        // not found"), so it 201s into `errors[]` and never persists. Server
+        // session ids are prefixed `sess_`; if we don't have one yet and we're
+        // online with an assigned territory, start one now and reuse it for the
+        // rest of the shift. Offline: fall back to a local UUID (the knock still
+        // queues; it needs the session-reconcile path — tracked separately).
+        if appState.sessionId?.hasPrefix("sess_") != true,
+           let territoryId = appState.assignedTerritoryId,
+           appState.isOnline {
+            let client = APIClient(accessToken: appState.accessToken)
+            let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
+            if let resp = try? await client.startSession(StartSessionRequest(
+                territoryId: territoryId,
+                deviceId: deviceId,
+                startGeo: GeoPoint(lat: coordinate.latitude, lng: coordinate.longitude)
+            )) {
+                appState.sessionId = resp.session.id
+            }
+        }
 
         let sessionId = appState.sessionId ?? UUID().uuidString
         let userId    = appState.currentUser?.id ?? "unknown"
@@ -224,9 +255,10 @@ final class KnockFlowViewModel {
         appState.knocksToday += 1
         if disposition == .convertedSale || disposition == .convertedDonation {
             appState.conversionsToday += 1
-            if let service = selectedService {
-                appState.commissionCentsToday += Int64(service.priceCents)
-            }
+            // NOTE: do NOT bump commissionCentsToday by the sale price here — the
+            // rep's commission is a fraction of the price computed by the
+            // server-side commission plan, not the gross amount. The real figure
+            // is pulled from daily-stats (see ProfileViewModel.load).
         }
 
         NotificationCenter.default.post(name: .knockRecorded, object: nil)
@@ -270,20 +302,31 @@ final class KnockFlowViewModel {
     }
 
     private func buildPayload(knock: Knock) -> String {
+        // Match the server contract exactly: `geo:{lat,lng}` + structured
+        // `rawAddress`, and NO extra keys — the batch schema is `.strict()`, so
+        // orgId/userId/latitude/longitude/addressLine/clientOffsetMs (which the
+        // server takes from the JWT or doesn't accept) are dropped. org + user
+        // come from the bearer token server-side.
+        let formatted = knock.addressLine.isEmpty ? "Unknown address" : knock.addressLine
+        // Dead-zone fallbacks so each required min-1 field is non-empty and a
+        // GPS-only knock still syncs; the true formatted line is preserved above.
         var dict: [String: Any] = [
             "idempotencyKey": knock.idempotencyKey,
             "sessionId":      knock.sessionId,
-            "orgId":          knock.orgId,
-            "userId":         knock.userId,
-            "latitude":       knock.latitude,
-            "longitude":      knock.longitude,
             "disposition":    knock.dispositionRaw,
-            "addressLine":    knock.addressLine,
+            "geo":            ["lat": knock.latitude, "lng": knock.longitude],
+            "rawAddress": [
+                "formatted":   formatted,
+                "street":      addrStreet.isEmpty ? formatted : addrStreet,
+                "locality":    addrLocality.isEmpty ? "Unknown" : addrLocality,
+                "region":      addrRegion.isEmpty ? "Unknown" : addrRegion,
+                "postcode":    addrPostcode.isEmpty ? "00000" : addrPostcode,
+                "countryCode": addrCountry.count == 2 ? addrCountry : "US",
+            ],
             "capturedAt":     ISO8601DateFormatter().string(from: knock.capturedAt),
-            "clientOffsetMs": knock.clientOffsetMs,
         ]
+        if let t = knock.territoryId { dict["territoryId"] = t }
         if let n = knock.notes, !n.isEmpty { dict["notes"] = n }
-        if let lid = knock.leadId { dict["leadId"] = lid.uuidString }
         if let s = knock.signatureLocalPath { dict["signatureKey"] = (s as NSString).lastPathComponent }
         if let p = knock.photoLocalPath { dict["photoKey"] = (p as NSString).lastPathComponent }
         return jsonString(dict)

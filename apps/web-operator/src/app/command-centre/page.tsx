@@ -1,10 +1,10 @@
 // TODO(M5): AI zone suggestion + anomaly detection have no backing table yet
 // (see schema.prisma) — AiNextZonesPanel/AnomaliesPanel render honest empty
-// states below until those models + endpoints land. Fleet position (this
-// page + HQLiveMap) and the activity feed are now wired to real
-// KnockSession/Knock data via /api/fleet and /api/activity. hqRollup()
-// headline KPIs remain seed-driven pending a dedicated rollup job — out of
-// scope for this pass (see the W3 fleet/rep true-sourcing effort).
+// states below until those models + endpoints land. Everything else on this
+// page is now live: fleet + activity via /api/fleet + /api/activity, the
+// today counters via /api/metrics/realtime, and the week/MTD/revenue/roster/
+// territory rollup via /api/metrics/rollup. No seed/fixture numbers remain —
+// KPIs render "—" until their live source answers.
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,7 +16,6 @@ import { PlatformShell } from '@/components/PlatformShell';
 import { HQLiveMap } from '@/components/HQLiveMap';
 import { CommandCentreEmpty } from '@/components/AccountEmptyStates';
 import { apiFleetEntryToRep, HQ_FALLBACK_CENTER, type ApiFleetEntry } from '@/lib/fleet';
-import { hqRollup } from '@/lib/seed/kpis';
 import type { RealtimeMetrics } from '@/app/api/metrics/realtime/route';
 import {
   AiNextZonesPanel,
@@ -100,11 +99,10 @@ export default function CommandCentrePage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live headline KPIs — seeded from hqRollup(), replaced by real DB counters
-  // from /api/metrics/realtime once the field reports activity. Polled every
-  // 30 seconds with the same visibility + in-flight guards as the activity
-  // poll above. All-zero responses (empty tables) keep the seed numbers and
-  // the DEMO badge — the badge only says LIVE when live numbers are shown.
+  // Live today-counters from /api/metrics/realtime. Null until the first
+  // answer (KPIs show "—"); zeros are an honest live answer, never replaced by
+  // a seed. Polled every 30s with the same visibility + in-flight guards as
+  // the activity poll above.
   const [liveMetrics, setLiveMetrics] = useState<Pick<
     RealtimeMetrics,
     'knocksToday' | 'convToday' | 'activeReps'
@@ -129,18 +127,15 @@ export default function CommandCentrePage(): JSX.Element {
         ) {
           return; // Malformed payload — keep current state.
         }
-        if (data.knocksToday > 0 || data.convToday > 0 || data.activeReps > 0) {
-          setLiveMetrics({
-            knocksToday: data.knocksToday,
-            convToday: data.convToday,
-            activeReps: data.activeReps,
-          });
-          metricsFreshness.markFresh();
-        } else {
-          // Honest zeros (no field activity in DB yet) → seed numbers + DEMO badge.
-          setLiveMetrics(null);
-          metricsFreshness.markFixture();
-        }
+        // The endpoint answered with real counts — that IS the live truth, even
+        // when every count is zero (nobody's knocked yet today). Zero is an
+        // honest live answer, never a reason to show fabricated seed numbers.
+        setLiveMetrics({
+          knocksToday: data.knocksToday,
+          convToday: data.convToday,
+          activeReps: data.activeReps,
+        });
+        metricsFreshness.markFresh();
       } catch {
         // Network failure — keep current state; staleness timer downgrades.
       } finally {
@@ -150,6 +145,69 @@ export default function CommandCentrePage(): JSX.Element {
 
     void fetchMetrics();
     const interval = setInterval(() => void fetchMetrics(), 30_000);
+    return (): void => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Live rollup — the non-today headline stats (week/MTD conversions, MTD
+  // revenue, roster size, territory + account counts) straight off Prisma via
+  // /api/metrics/rollup. Null until the first answer; the KPIs render "—"
+  // while loading rather than any seeded number. Polled every 60s (these move
+  // slower than the realtime counters).
+  const [rollup, setRollup] = useState<{
+    totalReps: number;
+    activeAccounts: number;
+    totalConvWeek: number;
+    totalConvMTD: number;
+    totalRevenueCentsMTD: bigint;
+    totalTerritories: number;
+  } | null>(null);
+  const rollupInFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchRollup(): Promise<void> {
+      if (rollupInFlight.current || document.visibilityState === 'hidden') return;
+      rollupInFlight.current = true;
+      try {
+        const res = await fetch('/api/metrics/rollup');
+        if (!res.ok || cancelled) return;
+        const d = (await res.json()) as {
+          totalReps?: number;
+          activeAccounts?: number;
+          totalConvWeek?: number;
+          totalConvMTD?: number;
+          totalRevenueCentsMTD?: string;
+          totalTerritories?: number;
+        };
+        if (
+          typeof d.totalReps !== 'number' ||
+          typeof d.totalRevenueCentsMTD !== 'string' ||
+          cancelled
+        ) {
+          return;
+        }
+        setRollup({
+          totalReps: d.totalReps,
+          activeAccounts: d.activeAccounts ?? 0,
+          totalConvWeek: d.totalConvWeek ?? 0,
+          totalConvMTD: d.totalConvMTD ?? 0,
+          totalRevenueCentsMTD: BigInt(d.totalRevenueCentsMTD),
+          totalTerritories: d.totalTerritories ?? 0,
+        });
+      } catch {
+        // Network failure — keep last good rollup; badge staleness handles it.
+      } finally {
+        rollupInFlight.current = false;
+      }
+    }
+
+    void fetchRollup();
+    const interval = setInterval(() => void fetchRollup(), 60_000);
     return (): void => {
       cancelled = true;
       clearInterval(interval);
@@ -193,26 +251,27 @@ export default function CommandCentrePage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // HQ rollup is the source of truth for the headline knock/conversion
-  // numbers — every sub-account page reconciles against the same
-  // `hqRollup()` slice (out of scope for this pass, see the header TODO).
-  const hq = hqRollup();
   const idle = fleet.filter((r) => r.status === 'idle').length;
   const offline = fleet.filter((r) => r.status === 'offline').length;
 
-  // Headline counters: live DB values when the realtime poll has reported
-  // actual field activity (non-null + at least one value > 0 — enforced at
-  // setLiveMetrics time), otherwise the seeded hqRollup figures. Derived
-  // stats (conv rate) always follow whichever set is displayed.
+  // Headline today-counters come straight from /api/metrics/realtime (live
+  // Prisma). Null until the first answer → the KPIs render "—", never a
+  // fabricated number. `fmt` is the single place that maps a pending value to
+  // an em-dash.
   const metricsLive = liveMetrics !== null;
-  const knocksToday = liveMetrics ? liveMetrics.knocksToday : hq.totalKnocksToday;
-  const convToday = liveMetrics ? liveMetrics.convToday : hq.totalConvToday;
-  const activeReps = liveMetrics ? liveMetrics.activeReps : hq.totalActiveReps;
-  const convRate = knocksToday > 0 ? (convToday / knocksToday) * 100 : 0;
+  const knocksToday = liveMetrics ? liveMetrics.knocksToday : null;
+  const convToday = liveMetrics ? liveMetrics.convToday : null;
+  const activeReps = liveMetrics ? liveMetrics.activeReps : null;
+  const convRate =
+    knocksToday !== null && convToday !== null && knocksToday > 0
+      ? (convToday / knocksToday) * 100
+      : null;
+  const fmt = (n: number | null): string => (n === null ? '—' : n.toLocaleString());
 
-  // Rare but possible: no per-account activity at all. Render the platform
-  // empty state instead of a wall of zeros.
-  if (hq.perAccount.length === 0 || hq.totalReps === 0) {
+  // Empty platform: the live rollup has loaded and there is no one on any
+  // roster. While the rollup is still loading we render the dashboard with
+  // "—" placeholders rather than flashing the empty state.
+  if (rollup !== null && rollup.totalReps === 0) {
     return (
       <PlatformShell pageTitle="Command Centre · Live field map">
         <div className="space-y-5 max-w-[1400px]">
@@ -251,59 +310,51 @@ export default function CommandCentrePage(): JSX.Element {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <KpiCard
               label="Active iPads"
-              value={activeReps.toLocaleString()}
+              value={fmt(activeReps)}
               hint={
                 metricsLive
                   ? 'open shift sessions · live'
-                  : `of ${hq.totalReps.toLocaleString()} on roster`
+                  : rollup
+                    ? `of ${rollup.totalReps.toLocaleString()} on roster`
+                    : 'loading…'
               }
-              delta={metricsLive ? undefined : '+8 last hour'}
-              deltaTone="positive"
             />
             <KpiCard label="Idle 20-60min" value={idle} hint="no knock in that window" />
             <KpiCard label="Offline" value={offline} hint="no knock in 60min+" />
-            <KpiCard
-              label="Knocks today"
-              value={knocksToday.toLocaleString()}
-              delta={metricsLive ? undefined : '+8.4%'}
-              deltaTone="positive"
-            />
+            <KpiCard label="Knocks today" value={fmt(knocksToday)} />
             <KpiCard
               label="Conv. today"
-              value={convToday.toLocaleString()}
-              delta={metricsLive ? undefined : '+12%'}
-              deltaTone="positive"
-              hint={`${convRate.toFixed(1)}% rate`}
+              value={fmt(convToday)}
+              hint={convRate !== null ? `${convRate.toFixed(1)}% rate` : undefined}
             />
           </div>
         </Reveal>
 
-        {/* HQ rollup totals — reconciled with every per-account view. */}
+        {/* HQ rollup totals — live from /api/metrics/rollup, reconciled with
+            every per-account view. No fabricated deltas: a trend needs a real
+            prior-period series we don't yet compute, so none is shown. */}
         <Reveal delay={40} className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard
             label="Conversions · 7d"
-            value={hq.totalConvWeek.toLocaleString()}
-            delta="+14%"
-            deltaTone="positive"
-            hint="across 4 accounts"
+            value={rollup ? rollup.totalConvWeek.toLocaleString() : '—'}
           />
           <KpiCard
             label="Conversions · MTD"
-            value={hq.totalConvMTD.toLocaleString()}
-            delta="+22%"
-            deltaTone="positive"
-            hint={`${hq.perAccount.length} accounts live`}
+            value={rollup ? rollup.totalConvMTD.toLocaleString() : '—'}
+            hint={
+              rollup
+                ? `${rollup.activeAccounts} account${rollup.activeAccounts === 1 ? '' : 's'} live`
+                : undefined
+            }
           />
           <KpiCard
             label="Revenue · MTD"
-            value={<Money cents={hq.totalRevenueCentsMTD} region="US" />}
-            delta="+18.2%"
-            deltaTone="positive"
-            hint="mixed USD/AUD · displayed USD"
+            value={rollup ? <Money cents={rollup.totalRevenueCentsMTD} region="US" /> : '—'}
+            hint="rake + residual · USD"
           />
           <KpiCard
             label="Territories active"
-            value={hq.totalTerritories}
+            value={rollup ? rollup.totalTerritories : '—'}
             hint="across all metros"
           />
         </Reveal>

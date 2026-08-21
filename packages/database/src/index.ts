@@ -49,12 +49,27 @@ function makeClient(): PrismaClient {
 /**
  * Shared Prisma client. Reuses the same instance across HMR reloads in
  * dev (otherwise the connection pool would grow without bound).
+ *
+ * LAZY: constructed on first property access, not at import. `next build`
+ * imports every route module during page-data collection in an environment
+ * with no DATABASE_URL (Docker image builds) — an import-time throw fails
+ * the build even for force-dynamic routes. First real query still fails
+ * fast with the same clear error.
  */
-export const db: PrismaClient = globalThis.__d2dPrisma ?? makeClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.__d2dPrisma = db;
+function getClient(): PrismaClient {
+  if (!globalThis.__d2dPrisma) {
+    globalThis.__d2dPrisma = makeClient();
+  }
+  return globalThis.__d2dPrisma;
 }
+
+export const db: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_t, prop, receiver) {
+    const client = getClient();
+    const value = Reflect.get(client, prop, client);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
 
 // Re-export Prisma so consumers don't need to take a second dep on
 // @prisma/client. (`Prisma.TransactionClient`, `Prisma.InputJsonValue`,

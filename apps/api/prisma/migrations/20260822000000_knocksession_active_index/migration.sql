@@ -1,0 +1,14 @@
+-- Active-session hot-path index.
+--
+-- The fleet map (/api/fleet) and the realtime active-rep count
+-- (/api/metrics/realtime) both look up KnockSession rows with
+--   WHERE endedAt IS NULL [+ orgId] [+ startedAt >= ...]
+-- `endedAt IS NULL` is highly selective (a handful of open sessions among
+-- potentially millions of closed ones), so the index leads with it. Without
+-- this the "who is live right now" query full-scans KnockSession at scale.
+--
+-- The table is currently small, so a plain CREATE INDEX (brief write-lock) is
+-- fine. If it has grown large by the time this ships, replace with
+-- `CREATE INDEX CONCURRENTLY` in a non-transactional migration to avoid the
+-- lock.
+CREATE INDEX "KnockSession_endedAt_orgId_startedAt_idx" ON "KnockSession"("endedAt", "orgId", "startedAt");

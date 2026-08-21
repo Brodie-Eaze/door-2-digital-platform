@@ -53,12 +53,18 @@ struct ContentView: View {
             // on the same queue, double-POSTing and burning the retry budget).
             .environment(syncEngine)
             .task {
+                syncEngine.authTokenOverride = appState.accessToken
                 syncEngine.triggerSync(context: modelContext)
                 appState.pendingSyncCount = syncEngine.pendingCount
                 reachability.start { online in
                     appState.isOnline = online
                     if online { syncEngine.triggerSync(context: modelContext) }
                 }
+            }
+            // Keep the drain's token in lockstep with the live session so a knock
+            // logged right after sign-in (or after a silent refresh) always syncs.
+            .onChange(of: appState.accessToken) { _, token in
+                syncEngine.authTokenOverride = token
             }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {

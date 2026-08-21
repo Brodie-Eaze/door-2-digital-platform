@@ -12,7 +12,7 @@
  *   <DataSourceBadge source="fixture" />
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export type DataSource = 'live' | 'fixture' | 'stale';
 
@@ -42,15 +42,17 @@ export function useDataFreshness(initial: DataSource = 'fixture'): {
     return (): void => clearInterval(interval);
   }, [source, updatedAt]);
 
-  return {
-    source,
-    updatedAt,
-    markFresh: (): void => {
-      setUpdatedAt(new Date());
-      setSource('live');
-    },
-    markFixture: (): void => setSource('fixture'),
-  };
+  // Memoized so their identity is STABLE across renders. Consumers put these
+  // in useCallback/useEffect dependency arrays (the live-fetch pattern); an
+  // unstable identity there caused an infinite fetch loop that left every
+  // wired surface stuck on 'Loading…' (found in the visual audit).
+  const markFresh = useCallback((): void => {
+    setUpdatedAt(new Date());
+    setSource('live');
+  }, []);
+  const markFixture = useCallback((): void => setSource('fixture'), []);
+
+  return { source, updatedAt, markFresh, markFixture };
 }
 
 function ago(d: Date): string {

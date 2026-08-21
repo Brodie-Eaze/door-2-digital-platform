@@ -4,7 +4,40 @@ import { ExternalLink } from 'lucide-react';
 import { Banner, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import { AccountAvatar } from '@/components/AccountAvatar';
-import { ACCOUNTS } from '@/lib/accounts';
+import { avatarBgFor } from '@/lib/account-color';
+
+interface GalleryOrg {
+  slug: string;
+  tradingName: string;
+  regionCode: string;
+  vertical: string;
+}
+
+/** Live, non-archived orgs for the "Accounts in the demo" tile grid. Returns
+ * [] on a DB failure — an honest empty grid rather than a fabricated one. */
+async function loadOrgs(): Promise<GalleryOrg[]> {
+  try {
+    const { db } = await import('@d2d/database');
+    const orgs = await db.org.findMany({
+      where: { status: { not: 'archived' }, slug: { not: null } },
+      orderBy: { tradingName: 'asc' },
+      select: { slug: true, tradingName: true, regionCode: true, vertical: true },
+      take: 500,
+    });
+    return orgs
+      .filter((o): o is typeof o & { slug: string } => Boolean(o.slug))
+      .map((o) => ({
+        slug: o.slug,
+        tradingName: o.tradingName,
+        regionCode: o.regionCode,
+        vertical: o.vertical ?? 'commercial',
+      }));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[screens] DB load failed — showing empty account grid:', err);
+    return [];
+  }
+}
 
 interface ScreenEntry {
   href: string;
@@ -165,7 +198,8 @@ const SCREENS: ScreenEntry[] = [
   },
 ];
 
-export default function ScreensPage(): JSX.Element {
+export default async function ScreensPage(): Promise<JSX.Element> {
+  const orgs = await loadOrgs();
   const grouped = {
     HQ: SCREENS.filter((s) => s.scope === 'HQ'),
     'In-account': SCREENS.filter((s) => s.scope === 'In-account'),
@@ -225,21 +259,28 @@ export default function ScreensPage(): JSX.Element {
           title="Accounts in the demo"
           subtitle="Click any account name to drop into its workspace"
         >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {ACCOUNTS.map((a) => (
-              <Link
-                key={a.slug}
-                href={`/accounts/${a.slug}/today`}
-                className="card card-pad text-center hover:shadow-md transition cursor-pointer flex flex-col items-center"
-              >
-                <AccountAvatar account={a} size={40} />
-                <div className="text-[12px] font-semibold text-ink mt-2">{a.shortName}</div>
-                <div className="text-[10px] text-muted capitalize mt-0.5">
-                  {a.vertical} · {a.region}
-                </div>
-              </Link>
-            ))}
-          </div>
+          {orgs.length === 0 ? (
+            <div className="px-2 py-3 text-[12px] text-muted">No accounts on the platform yet.</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {orgs.map((o) => (
+                <Link
+                  key={o.slug}
+                  href={`/accounts/${o.slug}/today`}
+                  className="card card-pad text-center hover:shadow-md transition cursor-pointer flex flex-col items-center"
+                >
+                  <AccountAvatar
+                    account={{ shortName: o.tradingName, avatarBg: avatarBgFor(o.slug) }}
+                    size={40}
+                  />
+                  <div className="text-[12px] font-semibold text-ink mt-2">{o.tradingName}</div>
+                  <div className="text-[10px] text-muted capitalize mt-0.5">
+                    {o.vertical} · {o.regionCode}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </Section>
       </div>
     </PlatformShell>

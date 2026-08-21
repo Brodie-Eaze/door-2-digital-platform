@@ -87,16 +87,43 @@ async function runRouting(): Promise<void> {
   let skipped = 0;
   const orgCount = leadsByOrg.size;
 
+  // Batch the two per-org READS out of the loop (was an N+1 that fired a user
+  // findMany + a workload groupBy for EVERY org, every 5-minute run — thousands
+  // of queries at scale). One findMany for all orgs' inside-sales users, one
+  // groupBy for all their open-lead workloads; the loop reads from maps.
+  const allOrgIds = [...leadsByOrg.keys()];
+  const allUsers = await prisma().user.findMany({
+    where: { orgId: { in: allOrgIds }, role: 'inside_sales', status: 'active' },
+    select: { id: true, orgId: true },
+  });
+  const usersByOrg = new Map<string, UserRow[]>();
+  for (const u of allUsers) {
+    const b = usersByOrg.get(u.orgId) ?? [];
+    b.push(u);
+    usersByOrg.set(u.orgId, b);
+  }
+  const allUserIds = allUsers.map((u) => u.id);
+  const workloadRows = allUserIds.length
+    ? await prisma().lead.groupBy({
+        by: ['orgId', 'assignedToId'],
+        where: {
+          orgId: { in: allOrgIds },
+          assignedToId: { in: allUserIds },
+          status: { in: OPEN_STATUSES },
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const workloadByOrg = new Map<string, Map<string, number>>();
+  for (const row of workloadRows) {
+    if (!row.assignedToId) continue;
+    const m = workloadByOrg.get(row.orgId) ?? new Map<string, number>();
+    m.set(row.assignedToId, row._count._all);
+    workloadByOrg.set(row.orgId, m);
+  }
+
   for (const [orgId, orgLeads] of leadsByOrg) {
-    // 2. Load active inside_sales users for this org.
-    const users = await prisma().user.findMany({
-      where: {
-        orgId,
-        role: 'inside_sales',
-        status: 'active',
-      },
-      select: { id: true, orgId: true },
-    });
+    const users = usersByOrg.get(orgId) ?? [];
 
     if (users.length === 0) {
       log.warn(
@@ -107,27 +134,11 @@ async function runRouting(): Promise<void> {
       continue;
     }
 
-    // 3. Compute workload for each user: count of open leads assigned to them.
-    const userIds = users.map((u) => u.id);
-
-    const workloadRows = await prisma().lead.groupBy({
-      by: ['assignedToId'],
-      where: {
-        orgId,
-        assignedToId: { in: userIds },
-        status: { in: OPEN_STATUSES },
-      },
-      _count: { _all: true },
-    });
-
+    // Workload for each user (open leads already assigned), from the batch.
+    const orgWorkload = workloadByOrg.get(orgId);
     const workload = new Map<string, number>();
     for (const u of users) {
-      workload.set(u.id, 0);
-    }
-    for (const row of workloadRows) {
-      if (row.assignedToId) {
-        workload.set(row.assignedToId, row._count._all);
-      }
+      workload.set(u.id, orgWorkload?.get(u.id) ?? 0);
     }
 
     // 4. Route each lead to the user with the lowest workload (tie: smallest id).

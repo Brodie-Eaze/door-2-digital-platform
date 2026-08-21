@@ -20,7 +20,7 @@ import { AccountShell } from '@/components/AccountShell';
 import { MembershipsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
+import { useAccountMeta } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 interface Tier {
@@ -342,13 +342,13 @@ export default function MembershipsPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
+  const meta = useAccountMeta(params.slug);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'at-risk' | 'champion'>(
     'all',
   );
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Memberships">
         <div className="space-y-5 max-w-[1400px]">
@@ -361,7 +361,7 @@ export default function MembershipsPage({
     );
   }
 
-  const region = account.region === 'AU' ? 'AU' : 'US';
+  const region = meta?.region === 'AU' ? 'AU' : 'US';
   const tiers = buildTiers(params.slug);
   const activity = buildActivity(params.slug);
   const topMembers = buildTopMembers(params.slug);

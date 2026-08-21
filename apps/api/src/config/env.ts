@@ -17,6 +17,10 @@ const envSchema = z.object({
   // Staging/load-test knob for the global per-IP rate limit (k6 fires all
   // traffic from one IP). Leave unset in production.
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
+  // Number of trusted reverse-proxy hops in front of the API (Railway edge,
+  // ALB). Sets which X-Forwarded-For entry becomes req.ip for the SEC-010
+  // per-client rate-limit bucket. Unset => 0 (trust only the socket peer).
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).optional(),
   HOST: z.string().default('0.0.0.0'),
   // SEC-010: prod Railway URL removed from default. In production CORS_ORIGINS
   // must be set explicitly via env; the fail-fast below catches a missing value.

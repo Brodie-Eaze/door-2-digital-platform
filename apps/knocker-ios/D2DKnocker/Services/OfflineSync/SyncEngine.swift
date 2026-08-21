@@ -14,6 +14,16 @@ final class SyncEngine {
     var lastSyncError: String?
     var lastSyncAt: Date?
 
+    /// Live in-memory session token from AppState. The app authenticates the rest
+    /// of its traffic off AppState (set at login), not the Keychain — and on some
+    /// builds/simulators the Keychain write is silently rejected (no keychain
+    /// access-group entitlement → SecItemAdd fails), so `keychain.accessToken`
+    /// reads nil even though the rep is signed in. That stranded every queued
+    /// knock at `.noToken` ("Not authenticated") and it never left the device.
+    /// ContentView keeps this synced to `appState.accessToken`; the drain prefers
+    /// it and falls back to the Keychain.
+    var authTokenOverride: String?
+
     /// After this many failed attempts an item is dead-lettered (stops retrying)
     /// so a poison message can't loop forever or block the rest of the queue.
     private let maxAttempts = 8
@@ -49,8 +59,10 @@ final class SyncEngine {
         isSyncing = true
         defer { isSyncing = false }
 
-        // Refresh token from keychain
-        apiClient.accessToken = keychain.accessToken
+        // Live session token first (AppState), Keychain as fallback. See
+        // `authTokenOverride` — the Keychain can read nil while the rep is signed
+        // in, which used to strand every knock at "Not authenticated".
+        apiClient.accessToken = authTokenOverride ?? keychain.accessToken
 
         // Fetch all pending items ordered by createdAt
         let descriptor = FetchDescriptor<PendingSync>(
@@ -103,13 +115,27 @@ final class SyncEngine {
 
         do {
             let response = try await apiClient.batchCreateKnocks(KnockBatchRequest(knocks: payloads))
-            // Mark each processed knock as complete
-            let processedKeys = Set(response.processed.map { $0.idempotencyKey })
-            for item in items where processedKeys.contains(item.idempotencyKey) {
-                item.completedAt = Date()
+            // Mark each server-acknowledged knock (inserted OR deduped) complete;
+            // the server returns them all in `knocks` keyed by idempotencyKey.
+            let processedKeys = Set(response.knocks.map { $0.idempotencyKey })
+            // A 201 can still carry per-knock rejections in `errors` (e.g. an
+            // unknown sessionId). Those must count as attempts + surface the
+            // message — otherwise the item sits at attempts=0 forever and the
+            // drain re-POSTs it every cycle in a silent loop.
+            var errorByKey: [String: String] = [:]
+            for e in response.errors { if let k = e.idempotencyKey { errorByKey[k] = e.message } }
+            for item in items {
+                if processedKeys.contains(item.idempotencyKey) {
+                    item.completedAt = Date()
+                } else if let msg = errorByKey[item.idempotencyKey] {
+                    item.attempts += 1
+                    item.lastAttemptAt = Date()
+                    item.lastError = msg
+                    lastSyncError = msg
+                }
             }
             try? context.save()
-            lastSyncError = nil
+            if response.errors.isEmpty { lastSyncError = nil }
         } catch {
             for item in items {
                 item.attempts += 1

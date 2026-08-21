@@ -22,7 +22,6 @@ import { AccountShell } from '@/components/AccountShell';
 import { TasksEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
-import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
@@ -277,7 +276,6 @@ export default function TasksPage({
   params: Promise<{ slug: string }>;
 }): JSX.Element {
   const params = use(paramsPromise);
-  const account = getAccount(params.slug);
   const initial = useMemo(() => buildTasks(params.slug), [params.slug]);
   const [tasks, setTasks] = useState<Task[]>(initial);
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
@@ -303,7 +301,7 @@ export default function TasksPage({
   }, []);
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Tasks">
         <div className="space-y-5 max-w-[1400px]">

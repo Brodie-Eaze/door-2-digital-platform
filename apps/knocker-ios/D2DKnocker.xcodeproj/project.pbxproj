@@ -687,7 +687,7 @@
 				CODE_SIGN_ENTITLEMENTS = D2DKnocker/D2DKnocker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				D2D_API_BASE_URL = "https://api.d2d.io/v1";
+				D2D_API_BASE_URL = "https://d2d-api-production-895b.up.railway.app/v1";
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = D2DKnocker/Info.plist;
