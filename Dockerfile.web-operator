@@ -32,7 +32,7 @@ COPY packages ./packages
 # API's schema before next build or the Prisma namespace collapses to the
 # ungenerated stub (InputJsonValue/DbNull missing, every type downstream {}).
 COPY apps/api/prisma ./apps/api/prisma
-RUN pnpm --filter api exec prisma generate --schema apps/api/prisma/schema.prisma
+RUN pnpm --filter api exec prisma generate
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_ENV=production
