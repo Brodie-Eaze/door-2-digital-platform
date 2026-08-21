@@ -269,7 +269,9 @@ export function decryptWebhookSecret(cipher: string, endpointId: string): string
   const ciphertext = Buffer.from(parts[2]!, 'base64');
   const authTag = Buffer.from(parts[3]!, 'base64');
   const aad = Buffer.from(`webhook-secret:${endpointId}`, 'utf8');
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  // authTagLength pins the expected GCM tag to 16 bytes — without it a
+  // truncated tag can pass verification (semgrep gcm-no-tag-length).
+  const decipher = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
   decipher.setAAD(aad);
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
