@@ -425,8 +425,13 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   DNK/DNC lists are thousands of addresses, so a real ingest would time out.
   Batched to one findMany (resolve all) + one createMany(skipDuplicates) = 2
   queries regardless of list size (lead.test.ts 15/15, API redeployed healthy).
+  A second N+1 was then batched: the lead-routing worker (every 5 min) did a
+  user.findMany + workload groupBy PER ORG (2N queries scaling with org count) —
+  hoisted both reads out of the loop into one findMany + one groupBy over all
+  orgs; the per-org loop reads from maps (per-lead assignment writes unchanged).
   So all three classic scale killers are now hardened on the hot paths: missing
-  indexes (3 added), unbounded loads (1 fixed), and N+1 (1 fixed). This is the
+  indexes (3 added), unbounded loads (1 fixed), and N+1 (2 fixed — a hot route +
+  a worker). This is the
   kind of enterprise-scale hardening that IS in reach without the 50k rig — the
   load run itself still needs the target infra.
   The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
