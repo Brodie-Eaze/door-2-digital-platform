@@ -173,11 +173,15 @@ describe('POST /v1/webhooks/endpoints', () => {
     expect(res.json().endpoint.id).toMatch(/^whk_/);
     expect(res.json().endpoint.secret).toMatch(/^[A-Za-z0-9_-]{40,}$/);
 
-    // DB row stores only the hash.
+    // DB row stores the secret AES-256-GCM encrypted (reversible) — NOT a one-way
+    // hash. The delivery worker must decrypt secretCipher to HMAC-sign payloads, so
+    // a SHA-256 hash was never usable here. Format: aes256gcm:<iv>:<ct>:<tag>.
     const row = await prisma().webhookEndpoint.findUnique({
       where: { id: res.json().endpoint.id },
     });
-    expect(row?.secretCipher).toMatch(/^[a-f0-9]{64}$/);
+    expect(row?.secretCipher).toMatch(
+      /^aes256gcm:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/,
+    );
     expect(row?.secretCipher).not.toBe(res.json().endpoint.secret);
   });
 
@@ -416,7 +420,7 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
     expect(res.json().nextCursor).toBeNull();
   });
 
-  it('cross-tenant returns 404 (foreign endpoint invisible)', async () => {
+  it('cross-tenant returns 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const create = await app.inject({
@@ -431,11 +435,7 @@ describe('GET /v1/webhooks/endpoints/:id/deliveries', () => {
       url: `/v1/webhooks/endpoints/${id}/deliveries`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    // listDeliveries reads the endpoint through tenantPrismaTx(actor.orgId):
-    // org A's endpoint is invisible to org B (app-layer orgId filter + RLS
-    // belt under d2d_app), so the read resolves to null → notFound, not the
-    // pre-belt 403 tenantMismatch. The existence oracle closes — org B can't
-    // tell "forbidden" from "doesn't exist". See docs/runbooks/rls-cutover.md §4b.1.
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
     expect(res.statusCode).toBe(404);
   });
 });

@@ -251,12 +251,7 @@ describe('POST /v1/conversions — sale', () => {
 });
 
 describe('Tenant isolation + auth', () => {
-  it("can't convert another org's lead — the lead is invisible (404, not 403)", async () => {
-    // RLS belt (SEC-005): the createConversion lead-validation read runs through
-    // tenantPrismaTx(orgB), so org A's lead is invisible → null → 404 notFound.
-    // Pre-belt this returned 403 tenantMismatch (the app saw the foreign row to
-    // reject it); under RLS we never see it, and withholding existence is the
-    // point of tenant isolation.
+  it("forbids creating a conversion against another org's lead", async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const leadId = await createLead(tA, 'cnv-iso-1');
@@ -274,6 +269,8 @@ describe('Tenant isolation + auth', () => {
         donationDetails: {},
       },
     });
+    // cross-tenant lead → 404 (Problems.tenantMismatch), NOT 403: a foreign lead
+    // id is indistinguishable from a non-existent one (no enumeration oracle).
     expect(res.statusCode).toBe(404);
   });
 
@@ -365,38 +362,40 @@ describe('GET /v1/conversions + GET /v1/conversions/:id', () => {
       headers: { authorization: `Bearer ${tA}` },
     });
     expect(a.statusCode).toBe(200);
-    // RLS belt (SEC-005): org B cannot see org A's conversion — the row is
-    // invisible, so the read resolves to null → 404 (not 403). A 403 would
-    // itself disclose that the resource exists.
     const b = await app.inject({
       method: 'GET',
       url: `/v1/conversions/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
+    // cross-tenant read → 404 (Problems.tenantMismatch), NOT 403: a cross-tenant
+    // id must be indistinguishable from a non-existent one (no enumeration oracle).
     expect(b.statusCode).toBe(404);
   });
 });
 
-describe('Stub endpoints', () => {
-  it('POST /:id/refund returns 501', async () => {
+// Phase 1.4: refund + dispute are now IMPLEMENTED (ADR-0019 instruct-only),
+// not 501 stubs. A well-formed call against an unknown id resolves through the
+// service to 404, proving the route is wired (was: asserting 501).
+describe('Refund + dispute (implemented)', () => {
+  it('POST /:id/refund is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/conversions/anything/refund',
-      headers: { authorization: `Bearer ${t}` },
-      payload: {},
+      url: '/v1/conversions/cnv_does_not_exist/refund',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'cnv-refund-404' },
+      payload: { amountCents: '100', currency: 'USD', reason: 'duplicate_charge' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 
-  it('POST /:id/dispute returns 501', async () => {
+  it('POST /:id/dispute is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/conversions/anything/dispute',
-      headers: { authorization: `Bearer ${t}` },
-      payload: {},
+      url: '/v1/conversions/cnv_does_not_exist/dispute',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'cnv-dispute-404' },
+      payload: { reason: 'fraud' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

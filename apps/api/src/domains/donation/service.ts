@@ -11,7 +11,9 @@ import { AuditService } from '../audit/service';
 import type {
   CancelDonationRequest,
   ChangeDonationAmountRequest,
+  GenerateReceiptRequest,
   PauseDonationRequest,
+  ResumeDonationRequest,
 } from './schemas';
 
 interface ActorContext {
@@ -23,7 +25,10 @@ interface ActorContext {
 export interface DonationPublic {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  // F-004: the plaintext-named `donorEmail` field is NOT exposed on the read
+  // path — the real value lives in donorEmailVault (JIT-unmask only). We surface
+  // the deterministic search digest so callers can correlate without revealing PII.
+  donorEmailDigest: string | null;
   amountCents: string;
   currency: string;
   frequency: string | null;
@@ -40,12 +45,14 @@ async function loadDonationAndAssertTenant(
   row: {
     id: string;
     conversionId: string;
-    donorEmail: string;
+    donorEmailDigest: string | null;
     amountCents: bigint;
     currency: string;
     frequency: string | null;
     status: string;
     receiptNumber: string | null;
+    einOrEquivalent: string | null;
+    deductibleGiftRecipientNo: string | null;
     startedAt: Date;
     cancelledAt: Date | null;
   };
@@ -191,10 +198,110 @@ export async function changeDonationAmount(
   return toPublic(updated);
 }
 
+export async function resumeDonation(
+  id: string,
+  input: ResumeDonationRequest,
+  actor: ActorContext,
+): Promise<DonationPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+  if (row.status === 'active') return toPublic(row);
+  if (row.status === 'cancelled') {
+    throw new ProblemError(Problems.conflict('Cannot resume a cancelled donation'));
+  }
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { status: 'active' },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'donation.resumed',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { status: row.status },
+      afterJson: { status: 'active' },
+      ...(input.reason ? { metadata: { reason: input.reason } } : {}),
+    });
+    return next;
+  });
+  return toPublic(updated);
+}
+
+export interface DonationReceiptPublic {
+  donationId: string;
+  receiptNumber: string;
+  amountCents: string;
+  currency: string;
+  frequency: string | null;
+  einOrEquivalent: string | null;
+  deductibleGiftRecipientNo: string | null;
+  issuedAt: string;
+}
+
+export async function generateDonationReceipt(
+  id: string,
+  input: GenerateReceiptRequest,
+  actor: ActorContext,
+): Promise<DonationReceiptPublic> {
+  const { row } = await loadDonationAndAssertTenant(id, actor);
+
+  // If a receipt already exists and caller didn't request resend, just return it.
+  if (row.receiptNumber && !input.resend) {
+    return toReceiptPublic(row);
+  }
+
+  // Generate a new receipt number: D2D-{YYYY}-{6-hex} — globally unique within the tenant.
+  const year = new Date().getFullYear();
+  const hex = crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
+  const receiptNumber = `D2D-${year}-${hex}`;
+
+  const updated = await prisma().$transaction(async (tx) => {
+    const next = await tx.donation.update({
+      where: { id },
+      data: { receiptNumber },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: input.resend ? 'donation.receipt_resent' : 'donation.receipt_generated',
+      resourceType: 'Donation',
+      resourceId: id,
+      beforeJson: { receiptNumber: row.receiptNumber },
+      afterJson: { receiptNumber },
+    });
+    return next;
+  });
+  return toReceiptPublic(updated);
+}
+
+function toReceiptPublic(r: {
+  id: string;
+  amountCents: bigint;
+  currency: string;
+  frequency: string | null;
+  receiptNumber: string | null;
+  einOrEquivalent: string | null;
+  deductibleGiftRecipientNo: string | null;
+}): DonationReceiptPublic {
+  return {
+    donationId: r.id,
+    receiptNumber: r.receiptNumber ?? '',
+    amountCents: r.amountCents.toString(),
+    currency: r.currency,
+    frequency: r.frequency,
+    einOrEquivalent: r.einOrEquivalent,
+    deductibleGiftRecipientNo: r.deductibleGiftRecipientNo,
+    issuedAt: new Date().toISOString(),
+  };
+}
+
 function toPublic(r: {
   id: string;
   conversionId: string;
-  donorEmail: string;
+  donorEmailDigest: string | null;
   amountCents: bigint;
   currency: string;
   frequency: string | null;
@@ -206,7 +313,9 @@ function toPublic(r: {
   return {
     id: r.id,
     conversionId: r.conversionId,
-    donorEmail: r.donorEmail,
+    // F-004: never surface the plaintext-named email field; expose the search
+    // digest only. Real value is JIT-unmask via /v1/pii/* against donorEmailVault.
+    donorEmailDigest: r.donorEmailDigest,
     amountCents: r.amountCents.toString(),
     currency: r.currency,
     frequency: r.frequency,

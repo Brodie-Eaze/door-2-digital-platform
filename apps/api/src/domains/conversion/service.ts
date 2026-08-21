@@ -22,7 +22,14 @@ import { computeRake, money, newId, Problems, ProblemError } from '@d2d/shared-u
 import { tenantPrismaTx, tenantTx } from '../../config/db';
 import { AuditService } from '../audit/service';
 import { assertStateCleared } from '../compliance/service';
-import type { CreateConversionRequest, ListConversionsQuery } from './schemas';
+import { accrueConversionCommission } from '../commission/service';
+import { emitAnalyticsEvent } from '../analytics/service';
+import type {
+  CreateConversionRequest,
+  DisputeConversionRequest,
+  ListConversionsQuery,
+  RefundConversionRequest,
+} from './schemas';
 
 interface ActorContext {
   userId: string;
@@ -195,7 +202,7 @@ export async function createConversion(
             input.type === 'donation_recurring' && input.donationDetails?.frequency
               ? input.donationDetails.frequency
               : null,
-          paymentMethodToken: input.paymentMethodToken ?? input.paymentExternalId ?? 'unknown',
+          paymentMethodTokenVault: input.paymentMethodToken ?? input.paymentExternalId ?? null,
           status: 'active',
           deductibleGiftRecipientNo: input.donationDetails?.deductibleGiftRecipientNo ?? null,
           einOrEquivalent: input.donationDetails?.einOrEquivalent ?? null,
@@ -225,6 +232,17 @@ export async function createConversion(
       });
     }
 
+    await accrueConversionCommission(
+      {
+        orgId: actor.orgId,
+        userId: input.knockerId ?? actor.userId,
+        conversionId,
+        conversionType: input.type,
+        amountCents,
+      },
+      tx,
+    );
+
     await AuditService.recordEvent(tx, {
       orgId: actor.orgId,
       regionCode: actor.regionCode,
@@ -233,6 +251,25 @@ export async function createConversion(
       resourceType: 'Conversion',
       resourceId: conversionId,
       afterJson: {
+        type: input.type,
+        attributionSource: input.attributionSource,
+        amountCents: amountCents.toString(),
+        currency: input.currency,
+        paymentProvider: input.paymentProvider,
+        processorResidualCents: processorResidualCents.toString(),
+        d2dRakeCents: rake.toString(),
+      },
+    });
+
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: input.knockerId ?? actor.userId,
+      eventType: 'conversion',
+      entityType: 'Conversion',
+      entityId: conversionId,
+      occurredAt: signedAt,
+      payload: {
         type: input.type,
         attributionSource: input.attributionSource,
         amountCents: amountCents.toString(),
@@ -296,8 +333,152 @@ export async function getConversion(id: string, actor: ActorContext): Promise<Co
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Phase 1.4 — Refund instruction + dispute intake (ADR-0019: instruct-only)
+// ───────────────────────────────────────────────────────────────────────────
+
+async function loadConversionAndAssertTenant(
+  id: string,
+  actor: ActorContext,
+): Promise<{
+  id: string;
+  orgId: string;
+  regionCode: RegionCode;
+  amountCents: bigint;
+  currency: string;
+  conversionId: string; // alias for id — keeps callers readable
+}> {
+  const row = await prisma().conversion.findUnique({ where: { id } });
+  if (!row) throw new ProblemError(Problems.notFound('Conversion', id));
+  if (row.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(row.orgId));
+  }
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    regionCode: row.regionCode,
+    amountCents: row.amountCents,
+    currency: row.currency,
+    conversionId: row.id,
+  };
+}
+
+export interface RefundInstructionPublic {
+  id: string;
+  conversionId: string;
+  amountCents: string;
+  currency: string;
+  reason: string;
+  clawbackCommissions: boolean;
+  status: 'pending_manual_action';
+  instructedAt: string;
+}
+
+export async function refundConversion(
+  id: string,
+  input: RefundConversionRequest,
+  actor: ActorContext,
+): Promise<RefundInstructionPublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const instructionId = newId('rfi');
+  const instructedAt = new Date();
+
+  await prisma().$transaction(async (tx) => {
+    if (input.clawbackCommissions) {
+      await tx.commission.updateMany({
+        where: { conversionId: conv.id, status: 'accrued' },
+        data: { status: 'clawback_pending' },
+      });
+    }
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.refund_instruction',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: { amountCents: conv.amountCents.toString(), currency: conv.currency },
+      afterJson: {
+        instructionId,
+        refundAmountCents: input.amountCents.toString(),
+        currency: input.currency,
+        status: 'pending_manual_action',
+        clawbackCommissions: input.clawbackCommissions,
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: instructionId,
+    conversionId: conv.id,
+    amountCents: input.amountCents.toString(),
+    currency: input.currency,
+    reason: input.reason,
+    clawbackCommissions: input.clawbackCommissions,
+    status: 'pending_manual_action',
+    instructedAt: instructedAt.toISOString(),
+  };
+}
+
+export interface DisputePublic {
+  id: string;
+  conversionId: string;
+  reason: string;
+  chargebackCode: string | null;
+  status: 'received';
+  receivedAt: string;
+}
+
+export async function disputeConversion(
+  id: string,
+  input: DisputeConversionRequest,
+  actor: ActorContext,
+): Promise<DisputePublic> {
+  const conv = await loadConversionAndAssertTenant(id, actor);
+  const disputeId = newId('dsp');
+  const receivedAt = input.notifiedAt ? new Date(input.notifiedAt) : new Date();
+
+  await prisma().$transaction(async (tx) => {
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'conversion.dispute_intake',
+      resourceType: 'Conversion',
+      resourceId: conv.id,
+      beforeJson: {},
+      afterJson: {
+        disputeId,
+        chargebackCode: input.chargebackCode ?? null,
+        status: 'received',
+        receivedAt: receivedAt.toISOString(),
+      },
+      metadata: { reason: input.reason },
+    });
+  });
+
+  return {
+    id: disputeId,
+    conversionId: conv.id,
+    reason: input.reason,
+    chargebackCode: input.chargebackCode ?? null,
+    status: 'received',
+    receivedAt: receivedAt.toISOString(),
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
+
+/** PII-first: mask a donor email at the read boundary (e.g. m•••@example.org).
+ * Returns '[encrypted]' for vault rows; JIT unmask via /v1/pii/unmask-request. */
+function maskDonorEmail(email: string): string {
+  if (email === 'redacted@vaulted') return '[encrypted]';
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
 
 function toPublic(
   c: {
@@ -359,7 +540,9 @@ function toPublic(
     amountCents: c.amountCents.toString(),
     currency: c.currency,
     signedAt: c.signedAt.toISOString(),
-    signatureKey: c.signatureKey,
+    // PII-first: the signature S3 key points at a signed consent/contract — never
+    // returned on the read path; signed-doc retrieval is an audited signed-URL grant.
+    signatureKey: null,
     paymentProvider: c.paymentProvider,
     paymentExternalId: c.paymentExternalId,
     processorResidualCents: c.processorResidualCents.toString(),
@@ -368,7 +551,8 @@ function toPublic(
       ? {
           id: donation.id,
           conversionId: donation.conversionId,
-          donorEmail: donation.donorEmail,
+          // PII-first: donor email masked at the read boundary.
+          donorEmail: maskDonorEmail(donation.donorEmail),
           amountCents: donation.amountCents.toString(),
           currency: donation.currency,
           frequency: donation.frequency,

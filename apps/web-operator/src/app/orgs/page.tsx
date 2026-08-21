@@ -1,17 +1,19 @@
 import Link from 'next/link';
 import { ChevronRight, Building2 } from 'lucide-react';
 import { Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { PlatformShell } from '@/components/PlatformShell';
+import { OperatorShell } from '@/components/OperatorShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { ORGS } from '@/lib/fixtures';
 
 export default function OrgsPage(): JSX.Element {
   return (
-    <PlatformShell pageTitle="Client orgs">
+    <OperatorShell pageTitle="Client orgs">
       <div className="space-y-6 max-w-[1280px]">
         <Section
           title={`${ORGS.length} client orgs`}
           subtitle="Pilot-Charlie launches Sept 15. Two adjacent trials onboarded for product validation."
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           <table className="tbl">
             <thead>
@@ -74,6 +76,6 @@ export default function OrgsPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </PlatformShell>
+    </OperatorShell>
   );
 }

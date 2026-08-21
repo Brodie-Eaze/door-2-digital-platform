@@ -9,7 +9,7 @@
  *
  * Every mutation writes AuditEvent in the same TX.
  */
-import type { PlatformRole, RegionCode, Prisma } from '@prisma/client';
+import { Prisma, type PlatformRole, type RegionCode } from '@prisma/client';
 import { emailDigest, newId, Problems, ProblemError } from '@d2d/shared-utils';
 import type {
   CreateUserRequest,
@@ -20,8 +20,21 @@ import type {
 import { prisma, tenantTx } from '../../config/db';
 import { env } from '../../config/env';
 import { writeAudit } from '../../shared/audit/write';
+import { PiiVaultService } from '../pii-vault/service';
 import { generateInviteToken, hashRefreshToken } from '../auth/tokens';
+import { revokeUserAccessTokens } from '../auth/token-revocation';
 import { hashPassword } from '../auth/password';
+
+function maskGivenName(name: string): string {
+  return name.length > 0 ? `${name[0]}${'•'.repeat(Math.max(2, name.length - 1))}` : '•••';
+}
+function maskFamilyName(name: string): string {
+  return name.length > 0 ? `${name[0]}.` : '•.';
+}
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : '•••';
+}
 import type { ListUsersQuery } from './schemas';
 
 interface ActorContext {
@@ -122,9 +135,26 @@ export async function inviteUser(
         orgId: actor.orgId,
         email: input.email,
         emailDigest: digest,
-        phone: input.phone ?? null,
-        givenName: input.givenName,
-        familyName: input.familyName,
+        phone: input.phone ? maskPhone(input.phone) : null,
+        phoneVault: input.phone
+          ? (PiiVaultService.encryptForRow(
+              'User',
+              userId,
+              input.phone,
+            ) as unknown as Prisma.JsonObject)
+          : Prisma.DbNull,
+        givenName: maskGivenName(input.givenName),
+        givenNameVault: PiiVaultService.encryptForRow(
+          'User',
+          userId,
+          input.givenName,
+        ) as unknown as Prisma.JsonObject,
+        familyName: maskFamilyName(input.familyName),
+        familyNameVault: PiiVaultService.encryptForRow(
+          'User',
+          userId,
+          input.familyName,
+        ) as unknown as Prisma.JsonObject,
         role: input.role,
         managerId: input.managerId ?? null,
         regionCode: actor.regionCode,
@@ -174,10 +204,16 @@ export async function acceptInvite(args: {
     where: { inviteTokenHash: hash },
     include: { user: true },
   });
+
+  // SEC-011: always run hashPassword regardless of whether the token was found
+  // or is expired — this normalises the response time across both failure paths
+  // so a probe cannot distinguish "token not found" from "token expired".
+  // The hash result is only used when the token is genuinely valid.
+  const pwHash = await hashPassword(args.password);
+
   if (!cred || !cred.inviteExpiresAt || cred.inviteExpiresAt < new Date()) {
     throw new ProblemError(Problems.unauthorized('Invite token invalid or expired'));
   }
-  const pwHash = await hashPassword(args.password);
   const updated = await prisma().$transaction(async (tx) => {
     await tx.userCredential.update({
       where: { userId: cred.userId },
@@ -267,9 +303,32 @@ export async function updateUser(
       // changeUserRole() (guarded). `UpdateUserRequest` omits `role` so this
       // path can never escalate, even if a body smuggled the field. (D3)
       data: {
-        ...(input.givenName !== undefined && { givenName: input.givenName }),
-        ...(input.familyName !== undefined && { familyName: input.familyName }),
-        ...(input.phone !== undefined && { phone: input.phone }),
+        ...(input.givenName !== undefined && {
+          givenName: maskGivenName(input.givenName),
+          givenNameVault: PiiVaultService.encryptForRow(
+            'User',
+            userId,
+            input.givenName,
+          ) as unknown as Prisma.InputJsonValue,
+        }),
+        ...(input.familyName !== undefined && {
+          familyName: maskFamilyName(input.familyName),
+          familyNameVault: PiiVaultService.encryptForRow(
+            'User',
+            userId,
+            input.familyName,
+          ) as unknown as Prisma.InputJsonValue,
+        }),
+        ...(input.phone !== undefined && {
+          phone: input.phone ? maskPhone(input.phone) : null,
+          phoneVault: input.phone
+            ? (PiiVaultService.encryptForRow(
+                'User',
+                userId,
+                input.phone,
+              ) as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+        }),
         ...(input.managerId !== undefined && { managerId: input.managerId }),
       },
     });
@@ -353,7 +412,52 @@ export async function changeUserRole(
     });
     return updated;
   });
+  // SEC-002: also stamp the access-token revocation epoch so any live access
+  // token (up to 5 min residual) is rejected immediately. Refresh tokens were
+  // already revoked inside the TX above; this closes the access-token window.
+  await revokeUserAccessTokens(userId);
   return toPublic(next);
+}
+
+/**
+ * Clear a per-account login lockout. Only org_admin and super_admin may call
+ * this — same access level as role-granting. The operation is idempotent: if
+ * the account is not currently locked the write is a no-op and the audit row
+ * still lands so the action is traceable.
+ *
+ * Same-org invariant: actor must be in the target user's org. The service
+ * enforces this explicitly rather than relying solely on the RLS GUC because
+ * UserCredential is keyed on userId and cross-tenant probing must be blocked
+ * before any credential row is read.
+ */
+export async function unlockUser(userId: string, actor: ActorContext): Promise<UserPublic> {
+  // Tighter than USER_ADMIN_ROLES — only org_admin and above; a manager can
+  // archive users but must not be able to unilaterally un-throttle an account.
+  requireActorRole(actor, ROLE_GRANT_ROLES);
+
+  const existing = await prisma().user.findUnique({ where: { id: userId } });
+  if (!existing) throw new ProblemError(Problems.notFound('User', userId));
+  if (existing.orgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(existing.orgId));
+  }
+
+  await tenantTx(actor.orgId, async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { lockedUntil: null, failedLoginCount: 0 },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.lockout_cleared',
+      resourceType: 'User',
+      resourceId: userId,
+      metadata: { clearedBy: actor.userId },
+    });
+  });
+
+  return toPublic(existing);
 }
 
 export async function archiveUser(userId: string, actor: ActorContext): Promise<UserPublic> {
@@ -391,7 +495,87 @@ export async function archiveUser(userId: string, actor: ActorContext): Promise<
     });
     return u;
   });
+  // SEC-002: stamp the access-token revocation epoch so any live access token
+  // issued to this user (up to 5 min residual) is rejected immediately.
+  await revokeUserAccessTokens(userId);
   return toPublic(updated);
+}
+
+const MFA_ADMIN_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin']);
+
+export async function resendInvite(userId: string, actor: ActorContext): Promise<InviteResult> {
+  requireActorRole(actor, USER_ADMIN_ROLES);
+  const user = await prisma().user.findUnique({ where: { id: userId } });
+  if (!user) throw new ProblemError(Problems.notFound('User', userId));
+  if (user.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(user.orgId));
+  if (user.status !== 'invited') {
+    throw new ProblemError(Problems.conflict('User is not in invited status'));
+  }
+
+  const invite = generateInviteToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await prisma().$transaction(async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { inviteTokenHash: invite.hash, inviteExpiresAt: expiresAt },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.invite_resent',
+      resourceType: 'User',
+      resourceId: userId,
+      afterJson: { status: user.status },
+      metadata: { resentBy: actor.userId, expiresAt: expiresAt.toISOString() },
+    });
+  });
+
+  return {
+    user: toPublic(user),
+    inviteToken: invite.plaintext,
+    inviteExpiresAt: expiresAt.toISOString(),
+  };
+}
+
+export async function resetMfa(userId: string, actor: ActorContext): Promise<UserPublic> {
+  requireActorRole(actor, MFA_ADMIN_ROLES);
+  const user = await prisma().user.findUnique({ where: { id: userId } });
+  if (!user) throw new ProblemError(Problems.notFound('User', userId));
+  if (user.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(user.orgId));
+
+  await prisma().$transaction(async (tx) => {
+    await tx.userCredential.update({
+      where: { userId },
+      data: { totpSecret: null, mfaEnabledAt: null },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'user.mfa_reset',
+      resourceType: 'User',
+      resourceId: userId,
+      beforeJson: { mfaEnabled: true },
+      afterJson: { mfaEnabled: false },
+      metadata: { resetBy: actor.userId },
+    });
+  });
+
+  return toPublic(user);
+}
+
+/** PII-first masks for the staff directory read boundary. */
+function maskUserEmail(email: string): string {
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  return `${user.slice(0, 1)}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+function maskUserPhone(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : '•••';
 }
 
 function toPublic(u: {
@@ -412,10 +596,13 @@ function toPublic(u: {
   return {
     id: u.id,
     orgId: u.orgId,
-    email: u.email,
+    // PII-first: staff email + phone masked, family name → initial. Given name
+    // stays (needed for team-management UI). Full contact PII for a specific
+    // staff member requires an audited JIT unmask grant.
+    email: maskUserEmail(u.email),
     givenName: u.givenName,
-    familyName: u.familyName,
-    phone: u.phone,
+    familyName: u.familyName ? `${u.familyName.charAt(0)}.` : '',
+    phone: maskUserPhone(u.phone),
     role: u.role,
     managerId: u.managerId,
     status: u.status,

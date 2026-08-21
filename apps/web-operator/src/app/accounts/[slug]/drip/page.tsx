@@ -1,8 +1,13 @@
+'use client';
+
+import { use, useState } from 'react';
 import { Mail, MessageSquare, Phone, Clock, ArrowRight, Plus, Split, Sparkles } from 'lucide-react';
 import { Banner, Button, EmptyState, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 const DRIPS = [
   {
@@ -61,7 +66,13 @@ const CH_COLOR = {
   call: 'bg-successSoft text-success',
 };
 
-export default function DripDesignerPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function DripDesignerPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
+  const [aiDismissed, setAiDismissed] = useState(false);
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {
     return (
@@ -117,10 +128,24 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
             subtitle={`Trigger: lead enters "${drip.stage}" stage · ${drip.enrolledCount} currently enrolled · ${drip.convRate}% conv. rate`}
             action={
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" leftIcon={<Split size={13} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Split size={13} />}
+                  onClick={() =>
+                    toast.info(`A/B test "${drip.name}" — split-test wiring lands in Phase 1.2`)
+                  }
+                >
                   A/B
                 </Button>
-                <Button variant="secondary" size="sm" leftIcon={<Plus size={13} />}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<Plus size={13} />}
+                  onClick={() =>
+                    toast.info(`Add step to "${drip.name}" — step editor lands in Phase 1.2`)
+                  }
+                >
                   Add step
                 </Button>
                 <StatusPill tone="success">Live</StatusPill>
@@ -158,40 +183,62 @@ export default function DripDesignerPage({ params }: { params: { slug: string } 
               {/* End cap */}
               <div className="flex items-center gap-2 shrink-0">
                 <ArrowRight size={14} className="text-soft" />
-                <div className="card !shadow-none border border-dashed border-line2 p-3 w-[160px] flex flex-col items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    toast.info(`Add step to "${drip.name}" — step editor lands in Phase 1.2`)
+                  }
+                  className="card !shadow-none border border-dashed border-line2 p-3 w-[160px] flex flex-col items-center justify-center hover:border-line transition cursor-pointer"
+                >
                   <Plus size={16} className="text-soft mb-1" />
                   <div className="text-[11px] text-muted">Add step</div>
-                </div>
+                </button>
               </div>
             </div>
           </Section>
         ))}
 
-        <Section
-          title="AI-suggested sequence refinement"
-          subtitle="Claude analyses 30d of sequence performance"
-        >
-          <div className="card !shadow-none border border-accent/20 bg-accentSoft/30 card-pad flex items-start gap-3">
-            <Sparkles size={16} className="text-accent mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <div className="text-[13px] font-semibold text-ink">
-                &ldquo;Qualified → close sequence&rdquo; Day-2 call is converting only at 28%
-              </div>
-              <div className="text-[12px] text-muted mt-1">
-                Consider replacing Day-2 call with a 2-min branded video sent over SMS (Heygen AI
-                avatar). Pilot test on 50 leads suggests +9pp lift in same window.
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <Button variant="primary" size="sm">
-                  Run A/B test
-                </Button>
-                <Button variant="ghost" size="sm">
-                  Dismiss
-                </Button>
+        {!aiDismissed && (
+          <Section
+            title="AI-suggested sequence refinement"
+            subtitle="Claude analyses 30d of sequence performance"
+            action={<DataSourceBadge source="fixture" />}
+          >
+            <div className="card !shadow-none border border-accent/20 bg-accentSoft/30 card-pad flex items-start gap-3">
+              <Sparkles size={16} className="text-accent mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-[13px] font-semibold text-ink">
+                  &ldquo;Qualified → close sequence&rdquo; Day-2 call is converting only at 28%
+                </div>
+                <div className="text-[12px] text-muted mt-1">
+                  Consider replacing Day-2 call with a 2-min branded video sent over SMS (Heygen AI
+                  avatar). Pilot test on 50 leads suggests +9pp lift in same window.
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() =>
+                      toast.info('Run A/B test — experiment wiring lands in Phase 1.2')
+                    }
+                  >
+                    Run A/B test
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setAiDismissed(true);
+                      toast.success('Suggestion dismissed');
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        </Section>
+          </Section>
+        )}
       </div>
     </AccountShell>
   );

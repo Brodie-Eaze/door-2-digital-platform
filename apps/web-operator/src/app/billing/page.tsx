@@ -1,6 +1,10 @@
+'use client';
+
 import { Download, ExternalLink } from 'lucide-react';
 import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
-import { PlatformShell } from '@/components/PlatformShell';
+import { OperatorShell } from '@/components/OperatorShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 
 const INVOICES = [
   {
@@ -54,7 +58,7 @@ const RESIDUALS = [
 
 export default function BillingPage(): JSX.Element {
   return (
-    <PlatformShell pageTitle="Billing & invoices">
+    <OperatorShell pageTitle="Billing & invoices">
       <div className="space-y-6 max-w-[1280px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
@@ -87,9 +91,17 @@ export default function BillingPage(): JSX.Element {
           subtitle="Platform fee + per-attribution rake (door 15% · inside-sales 10% · retargeting 5%)"
           paddedBody={false}
           action={
-            <Button leftIcon={<Download size={14} />} variant="ghost" size="sm">
-              Export CSV
-            </Button>
+            <div className="flex items-center gap-2">
+              <DataSourceBadge source="fixture" />
+              <Button
+                leftIcon={<Download size={14} />}
+                variant="ghost"
+                size="sm"
+                onClick={() => toast.info('Export CSV — wiring lands in Phase 1.2')}
+              >
+                Export CSV
+              </Button>
+            </div>
           }
         >
           <table className="tbl">
@@ -136,7 +148,12 @@ export default function BillingPage(): JSX.Element {
                     </StatusPill>
                   </td>
                   <td>
-                    <button className="text-soft hover:text-ink">
+                    <button
+                      className="text-soft hover:text-ink"
+                      onClick={() =>
+                        toast.info(`Open invoice ${inv.id} — wiring lands in Phase 1.2`)
+                      }
+                    >
                       <ExternalLink size={14} />
                     </button>
                   </td>
@@ -150,6 +167,7 @@ export default function BillingPage(): JSX.Element {
           title="MiCamp ISO residuals"
           subtitle="Processor markup share — separate from D2D platform revenue. Per ADR-0028."
           paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
         >
           <table className="tbl">
             <thead>
@@ -183,6 +201,6 @@ export default function BillingPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </PlatformShell>
+    </OperatorShell>
   );
 }

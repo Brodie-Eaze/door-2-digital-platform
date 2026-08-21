@@ -7,13 +7,14 @@
  */
 import type { PlatformRole, RegionCode } from '@prisma/client';
 import { Problems, ProblemError, emailDigest, newId } from '@d2d/shared-utils';
-import { prisma, tenantTx, tenantPrismaTx } from '../../config/db';
+import { prisma } from '../../config/db';
 import { env } from '../../config/env';
 import { hashPassword, verifyPassword } from './password';
 import {
   generateRefreshToken,
   hashRefreshToken,
   signAccessToken,
+  normalizeUserAgent,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './tokens';
@@ -37,38 +38,18 @@ export interface AuthSuccess {
 }
 
 /**
- * Flat row shapes returned by the §4b SECURITY DEFINER pre-auth resolvers
- * (apps/api/prisma/migrations/.../preauth_resolvers). These run as the table
- * owner so they bypass the non-FORCE RLS belt for a single keyed identity
- * lookup BEFORE any org context exists — the caller re-enters the belt with the
- * resolved orgId. Enum columns arrive as raw text and are re-narrowed below.
+ * SEC-007: Return the lockout duration in ms for the given cumulative failure
+ * count, or null if no lockout should be applied yet.
+ *
+ * Thresholds are based on the POST-lock cumulative count (never resets on
+ * lock), so each tier is sticky: once an account hits 20 failures it stays
+ * on the 1-hour tier until a successful login clears it.
  */
-interface PreAuthUserRow {
-  id: string;
-  orgId: string;
-  role: string;
-  regionCode: string;
-  brandCode: string;
-  email: string;
-  givenName: string;
-  familyName: string;
-  status: string;
-  passwordHash: string | null;
-}
-
-interface PreAuthRefreshRow {
-  rtId: string;
-  userId: string;
-  orgId: string;
-  expiresAt: Date;
-  revokedAt: Date | null;
-  role: string;
-  status: string;
-  regionCode: string;
-  brandCode: string;
-  email: string;
-  givenName: string;
-  familyName: string;
+function lockoutDurationForCount(count: number): number | null {
+  if (count >= 30) return 24 * 60 * 60 * 1000; // 24 hours
+  if (count >= 20) return 60 * 60 * 1000; // 1 hour
+  if (count >= 10) return 15 * 60 * 1000; // 15 minutes
+  return null;
 }
 
 /**
@@ -84,33 +65,49 @@ export async function login(args: {
   const e = env();
   const digest = emailDigest(args.email, e.PII_SEARCH_KEY);
 
-  // §4b: pre-auth identity resolution via the SECURITY DEFINER resolver. No org
-  // context exists yet, so a direct table read under d2d_app would deny-by-default
-  // (orgId compared against a NULL GUC). The resolver runs as the table owner for
-  // this one keyed lookup; we re-enter the belt with the resolved orgId for every
-  // write below.
-  const rows = await prisma().$queryRaw<PreAuthUserRow[]>`
-    SELECT * FROM app_resolve_user_by_email_digest(${digest})
-  `;
-  const row = rows[0];
-  if (!row || row.passwordHash === null || row.status !== 'active') {
+  const user = await prisma().user.findUnique({
+    where: { emailDigest: digest },
+    include: { credential: true },
+  });
+  if (!user || !user.credential || user.status !== 'active') {
     // Constant-time-ish: still hash a dummy password to avoid email enumeration.
     await verifyPassword(args.password, 'dummy:00');
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
-  const user: IssueUser = {
-    id: row.id,
-    email: row.email,
-    role: row.role as PlatformRole,
-    orgId: row.orgId,
-    regionCode: row.regionCode as RegionCode,
-    brandCode: row.brandCode,
-    givenName: row.givenName,
-    familyName: row.familyName,
-  };
-  const ok = await verifyPassword(args.password, row.passwordHash);
+
+  // SEC-003 / SEC-007: per-account lockout check. Evaluated BEFORE the password
+  // hash so a locked account cannot be brute-forced even with correct timing.
+  if (user.credential.lockedUntil && user.credential.lockedUntil > new Date()) {
+    // Still burn time equivalent to a hash to avoid a timing oracle that reveals
+    // lockout state vs. bad-password state.
+    await verifyPassword(args.password, 'dummy:00');
+    const retryAfterSeconds = Math.ceil(
+      (user.credential.lockedUntil.getTime() - Date.now()) / 1000,
+    );
+    throw new ProblemError(Problems.rateLimited(retryAfterSeconds));
+  }
+
+  const ok = await verifyPassword(args.password, user.credential.passwordHash);
   if (!ok) {
-    await tenantTx(user.orgId, async (tx) => {
+    // SEC-007: cumulative count is NEVER reset on lock — resetting gave an
+    // attacker a fresh 10 attempts every 15 minutes. The count only resets on a
+    // SUCCESSFUL login (see below). Escalating durations:
+    //   ≥10 attempts → 15 min, ≥20 → 1 hour, ≥30 → 24 hours.
+    const nextCount = user.credential.failedLoginCount + 1;
+    const lockoutDurationMs = lockoutDurationForCount(nextCount);
+    const shouldLock = lockoutDurationMs !== null;
+
+    await prisma().$transaction(async (tx) => {
+      await tx.userCredential.update({
+        where: { userId: user.id },
+        data: {
+          failedLoginCount: nextCount,
+          // Only write lockedUntil when the new count crosses a threshold;
+          // leave the existing value alone for intermediate counts so a prior
+          // longer lockout is not inadvertently shortened.
+          ...(shouldLock && { lockedUntil: new Date(Date.now() + lockoutDurationMs) }),
+        },
+      });
       await writeAudit(tx, {
         orgId: user.orgId,
         regionCode: user.regionCode,
@@ -118,11 +115,21 @@ export async function login(args: {
         action: 'auth.login_failed',
         resourceType: 'User',
         resourceId: user.id,
-        metadata: { reason: 'invalid_password' },
+        metadata: {
+          reason: 'invalid_password',
+          failedAttempt: nextCount,
+          accountLocked: shouldLock,
+        },
       });
     });
     throw new ProblemError(Problems.unauthorized('Invalid email or password'));
   }
+
+  // Successful login: clear the failure counter and any stale lockout.
+  await prisma().userCredential.update({
+    where: { userId: user.id },
+    data: { failedLoginCount: 0, lockedUntil: null },
+  });
 
   return issueTokens(user, { ip: args.ip, userAgent: args.userAgent, audit: 'auth.login_success' });
 }
@@ -138,39 +145,16 @@ export async function refresh(args: {
   userAgent?: string;
 }): Promise<AuthSuccess> {
   const presentedHash = hashRefreshToken(args.refreshToken);
-  // §4b: pre-auth resolver — same belt-bypass rationale as login(). Resolves the
-  // refresh-token row + owning user identity by tokenHash before any org context.
-  const rows = await prisma().$queryRaw<PreAuthRefreshRow[]>`
-    SELECT * FROM app_resolve_refresh_token(${presentedHash})
-  `;
-  const r = rows[0];
-  if (!r) {
+  const stored = await prisma().refreshToken.findUnique({
+    where: { tokenHash: presentedHash },
+    include: { user: { include: { credential: true } } },
+  });
+  if (!stored) {
     throw new ProblemError(Problems.unauthorized('Invalid refresh token'));
   }
-  // Reshape the flat resolver row into the nested shape the rest of this function
-  // and issueTokens expect, so the reuse / expiry / active checks below are unchanged.
-  const user: IssueUser & { status: string } = {
-    id: r.userId,
-    email: r.email,
-    role: r.role as PlatformRole,
-    orgId: r.orgId,
-    regionCode: r.regionCode as RegionCode,
-    brandCode: r.brandCode,
-    givenName: r.givenName,
-    familyName: r.familyName,
-    status: r.status,
-  };
-  const stored = {
-    id: r.rtId,
-    userId: r.userId,
-    orgId: r.orgId,
-    expiresAt: r.expiresAt,
-    revokedAt: r.revokedAt,
-    user,
-  };
   if (stored.revokedAt) {
     // Token reuse — revoke all outstanding tokens for this user.
-    await tenantTx(stored.orgId, async (tx) => {
+    await prisma().$transaction(async (tx) => {
       await tx.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -219,41 +203,17 @@ export async function logout(args: {
   regionCode?: RegionCode;
 }): Promise<void> {
   if (!args.refreshToken && !args.userId) return;
-
-  // RefreshToken is RLS-enabled, so the revoke must run with the owning org's GUC
-  // pinned — an un-GUC'd updateMany matches ZERO rows under d2d_app post-cutover
-  // and silently fails to revoke the token. An authenticated logout already
-  // carries orgId; a logout-by-token-only (optionalAuth: stale cookie / no live
-  // session) resolves the owning orgId from the token row via the §4b SECURITY
-  // DEFINER resolver first (the same indexed point-lookup login/refresh use).
-  let orgId = args.orgId;
-  let tokenHash: string | undefined;
-  if (args.refreshToken) {
-    tokenHash = hashRefreshToken(args.refreshToken);
-    if (!orgId) {
-      const rows = await prisma().$queryRaw<{ orgId: string }[]>`
-        SELECT "orgId" FROM app_resolve_refresh_token(${tokenHash})
-      `;
-      orgId = rows[0]?.orgId;
-    }
-  }
-
-  // Unknown/garbage token and no session → no org context, nothing to revoke.
-  if (!orgId) return;
-  const scopedOrgId = orgId;
-
-  await tenantTx(scopedOrgId, async (tx) => {
-    if (tokenHash) {
-      // tokenHash is globally unique, so the GUC (belt) + the unique hash both
-      // pin exactly the presented row; idempotent via the revokedAt: null guard.
+  await prisma().$transaction(async (tx) => {
+    if (args.refreshToken) {
+      const hash = hashRefreshToken(args.refreshToken);
       await tx.refreshToken.updateMany({
-        where: { tokenHash, revokedAt: null },
+        where: { tokenHash: hash, revokedAt: null },
         data: { revokedAt: new Date() },
       });
     }
-    if (args.userId && args.regionCode) {
+    if (args.userId && args.orgId && args.regionCode) {
       await writeAudit(tx, {
-        orgId: scopedOrgId,
+        orgId: args.orgId,
         regionCode: args.regionCode,
         actorUserId: args.userId,
         action: 'auth.logout',
@@ -267,10 +227,7 @@ export async function logout(args: {
 /**
  * Get the user identified by the auth context.
  */
-export async function getCurrentUser(
-  userId: string,
-  orgId: string,
-): Promise<{
+export async function getCurrentUser(userId: string): Promise<{
   id: string;
   email: string;
   role: PlatformRole;
@@ -280,10 +237,7 @@ export async function getCurrentUser(
   givenName: string;
   familyName: string;
 } | null> {
-  // RLS belt: scope the lookup to the principal's org. The reshaper ANDs orgId
-  // into the where and runs findFirst inside a GUC-pinned tx, so a forged userId
-  // from another tenant resolves to null rather than leaking the row.
-  const u = await tenantPrismaTx(orgId).user.findUnique({
+  const u = await prisma().user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -355,8 +309,9 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
       role: user.role,
       regionCode: user.regionCode,
       brandCode: user.brandCode,
-      // Vanity claims for browser topbar — never read for authz decisions.
-      email: user.email,
+      // SEC-005: givenName is a vanity claim for the browser topbar. email was
+      // removed — it is PII and ends up in logs/proxies. The topbar fetches
+      // user data from /api/session/me on mount instead.
       givenName: user.givenName,
     },
     e.JWT_ACCESS_SECRET,
@@ -365,7 +320,10 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
   const refreshId = newId('rft');
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
 
-  await tenantTx(user.orgId, async (tx) => {
+  // SEC-012: coerce UA to browser-family/major only before persistence.
+  const normalizedUa = normalizeUserAgent(args.userAgent);
+
+  await prisma().$transaction(async (tx) => {
     if (args.rotateFromId) {
       await tx.refreshToken.update({
         where: { id: args.rotateFromId },
@@ -379,7 +337,7 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
         orgId: user.orgId,
         tokenHash: refresh.hash,
         expiresAt,
-        userAgent: args.userAgent ?? null,
+        userAgent: normalizedUa,
         ip: args.ip ?? null,
       },
     });
@@ -391,7 +349,8 @@ export async function issueTokens(user: IssueUser, args: IssueArgs): Promise<Aut
       action: args.audit,
       resourceType: 'User',
       resourceId: user.id,
-      metadata: { ip: args.ip, userAgent: args.userAgent },
+      // SEC-012: do not log raw IP or UA in audit events.
+      metadata: { userAgent: normalizedUa },
     });
   });
 

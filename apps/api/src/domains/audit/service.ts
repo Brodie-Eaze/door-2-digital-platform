@@ -23,7 +23,7 @@ import {
   newId,
   type AuditEventForHash,
 } from '@d2d/shared-utils';
-import { prisma, tenantPrismaTx } from '../../config/db';
+import { prisma } from '../../config/db';
 import { env } from '../../config/env';
 
 export interface AuditEventInput {
@@ -137,10 +137,24 @@ export const AuditService = {
     regionCode: RegionCode;
     fromUlid?: string;
     toUlid?: string;
+    /** Hard upper bound on rows inspected per call. Defaults to 10 000. */
+    limit?: number;
+    /** Cursor for page-by-page verification: resume after this internal id. */
+    afterId?: bigint;
   }): Promise<
-    | { ok: true; count: number }
-    | { ok: false; brokenAt: string; count: number; expected: string; actual: string }
+    | { ok: true; count: number; nextAfterId: bigint | null }
+    | {
+        ok: false;
+        brokenAt: string;
+        count: number;
+        expected: string;
+        actual: string;
+        nextAfterId: bigint | null;
+      }
   > {
+    const HARD_CAP = 10_000;
+    const effectiveLimit = Math.min(args.limit ?? HARD_CAP, HARD_CAP);
+
     const where: Prisma.AuditEventWhereInput = args.orgId
       ? { orgId: args.orgId }
       : { orgId: null, regionCode: args.regionCode };
@@ -152,14 +166,17 @@ export const AuditService = {
       where.ulid = ulidRange;
     }
 
-    // An org chain reads through the belt (`tenantPrismaTx` pins the GUC, RLS
-    // enforces); the platform chain (`orgId IS NULL`) is owner-only — RLS hides
-    // NULL-org rows from ANY GUC'd role, so only a worker/cron on the owner
-    // connection can verify it. The request path (`POST /audit/events/verify`)
-    // always passes a concrete actor orgId; see docs/runbooks/rls-cutover.md §4b.
-    const rows = args.orgId
-      ? await tenantPrismaTx(args.orgId).auditEvent.findMany({ where, orderBy: { id: 'asc' } })
-      : await prisma().auditEvent.findMany({ where, orderBy: { id: 'asc' } });
+    // VERIFYCHAIN-CAP: bounded fetch — never load the full chain into memory.
+    // Callers page forward by passing nextAfterId from the previous response.
+    if (args.afterId !== undefined) {
+      where.id = { gt: args.afterId };
+    }
+
+    const rows = await prisma().auditEvent.findMany({
+      where,
+      orderBy: { id: 'asc' },
+      take: effectiveLimit,
+    });
 
     // SEC-002 fix: thread `expectedPrev` forward from the actual previous
     // row's `rowHash` rather than trusting each row's own self-declared
@@ -171,25 +188,23 @@ export const AuditService = {
     // first selected row so the walk has a real anchor.
     let expectedPrev: string = GENESIS_PREV_HASH;
     if (args.fromUlid && rows.length > 0) {
-      const anchorWhere: Prisma.AuditEventWhereInput = { ...where, ulid: { lt: rows[0]!.ulid } };
-      const anchor = args.orgId
-        ? await tenantPrismaTx(args.orgId).auditEvent.findFirst({
-            where: anchorWhere,
-            orderBy: { id: 'desc' },
-            select: { rowHash: true },
-          })
-        : await prisma().auditEvent.findFirst({
-            where: anchorWhere,
-            orderBy: { id: 'desc' },
-            select: { rowHash: true },
-          });
+      const anchor = await prisma().auditEvent.findFirst({
+        where: {
+          ...where,
+          ulid: { lt: rows[0]!.ulid },
+        },
+        orderBy: { id: 'desc' },
+        select: { rowHash: true },
+      });
       if (anchor) expectedPrev = anchor.rowHash;
     }
 
     const secret = env().AUDIT_CHAIN_SECRET;
     let count = 0;
+    let lastId: bigint | null = null;
     for (const row of rows) {
       count++;
+      lastId = row.id;
       const forHash: AuditEventForHash = {
         id: row.ulid,
         orgId: row.orgId,
@@ -218,11 +233,16 @@ export const AuditService = {
           count,
           expected,
           actual: row.rowHash,
+          // nextAfterId lets the caller resume pagination even after a break
+          // is found — useful for forensic full-chain scans.
+          nextAfterId: rows.length === effectiveLimit ? lastId : null,
         };
       }
       expectedPrev = row.rowHash;
     }
-    return { ok: true, count };
+    // nextAfterId is non-null only when the page was full (more rows may exist).
+    const nextAfterId = rows.length === effectiveLimit ? lastId : null;
+    return { ok: true, count, nextAfterId };
   },
 
   /**
@@ -241,10 +261,8 @@ export const AuditService = {
     cursor?: string;
     limit: number;
   }): Promise<{ data: AuditEventPublic[]; nextCursor: string | null }> {
-    // orgId is injected by tenantPrismaTx (suspenders) and enforced by RLS
-    // (belt); see docs/runbooks/rls-cutover.md §4b. regionCode stays an explicit
-    // filter (an org is region-pinned, so it's a no-op narrowing, kept for parity).
     const where: Prisma.AuditEventWhereInput = {
+      orgId: args.orgId,
       regionCode: args.regionCode,
     };
     if (args.actorUserId) where.actorUserId = args.actorUserId;
@@ -258,7 +276,7 @@ export const AuditService = {
       where.occurredAt = range;
     }
 
-    const rows = await tenantPrismaTx(args.orgId).auditEvent.findMany({
+    const rows = await prisma().auditEvent.findMany({
       where,
       take: args.limit + 1,
       ...(args.cursor && { cursor: { ulid: args.cursor }, skip: 1 }),

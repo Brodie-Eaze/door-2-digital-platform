@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 interface StripeEvent {
   id: string;
@@ -400,6 +401,11 @@ export default function AuPaymentsPage(): JSX.Element {
           </span>
         </Banner>
 
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted">AU · Phase 2 demo data — live wiring lands in Phase 2.x</span>
+          <DataSourceBadge source="fixture" />
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <KpiCard
             label="Total MTD"
@@ -431,8 +437,8 @@ export default function AuPaymentsPage(): JSX.Element {
           paddedBody={false}
           action={
             <span className="text-[11px] text-muted flex items-center gap-1.5">
-              <RefreshCw size={11} className="text-success" />
-              Streaming · 12s lag
+              <RefreshCw size={11} className="text-soft" />
+              Demo stream · fixture
             </span>
           }
         >

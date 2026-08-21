@@ -29,7 +29,8 @@
     "worker:content-generate": "tsx src/workers/content-generate.worker.ts",
     "worker:ad-deliver": "tsx src/workers/ad-deliver.worker.ts",
     "worker:dnk-sync": "tsx src/workers/dnk-sync.worker.ts",
-    "worker:geo-refresh": "tsx src/workers/geo-refresh.worker.ts"
+    "worker:geo-refresh": "tsx src/workers/geo-refresh.worker.ts",
+    "audit:verify": "tsx src/scripts/audit-chain-verify.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -54,7 +55,8 @@
     "@opentelemetry/resources": "^1.27.0",
     "@opentelemetry/sdk-node": "^0.54.0",
     "@opentelemetry/semantic-conventions": "^1.27.0",
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "^5.22.0",
+    "@simplewebauthn/server": "^13.3.1",
     "argon2": "^0.41.1",
     "bullmq": "^5.21.2",
     "fastify": "^4.28.1",
@@ -62,6 +64,7 @@
     "otplib": "^12.0.1",
     "pino": "^9.4.0",
     "pino-pretty": "^11.2.2",
+    "snowflake-sdk": "^2.4.3",
     "ulid": "^2.3.0",
     "zod": "^3.23.8"
   },

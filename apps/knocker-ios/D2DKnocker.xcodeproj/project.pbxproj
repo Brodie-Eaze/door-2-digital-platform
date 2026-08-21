@@ -1,0 +1,780 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D2D00E0000000000000FF02 /* ReachabilityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F0000000000000FF02 /* ReachabilityMonitor.swift */; };
+		D2D00E0000000000000FF01 /* SaleWonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F0000000000000FF01 /* SaleWonView.swift */; };
+		D2D00E00000000000000020 /* Sale.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000020 /* Sale.swift */; };
+		D2D00E00000000000000021 /* ServiceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000021 /* ServiceCatalog.swift */; };
+		D2D00E00000000000000022 /* ServicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000022 /* ServicePickerView.swift */; };
+		D2D00E00000000000000023 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000023 /* PipelineView.swift */; };
+		D2D00E00000000000000000 /* KnocksHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000000 /* KnocksHistoryView.swift */; };
+		D2D00E00000000000000001 /* KnockDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000001 /* KnockDetailView.swift */; };
+		D2D00E00000000000000002 /* MapLegendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000002 /* MapLegendView.swift */; };
+		D2D00E00000000000000003 /* CoverageStatsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000003 /* CoverageStatsBar.swift */; };
+		D2D00E00000000000000004 /* DailyGoalRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000004 /* DailyGoalRing.swift */; };
+		D2D00E00000000000000005 /* DispositionBreakdownCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000005 /* DispositionBreakdownCard.swift */; };
+		D2D00E00000000000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000006 /* SettingsView.swift */; };
+		D2D00E00000000000000007 /* CameraCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000007 /* CameraCaptureView.swift */; };
+		D2D00E00000000000000008 /* AppointmentPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000008 /* AppointmentPickerView.swift */; };
+		D2D00E00000000000000009 /* OfflineSyncBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F00000000000000009 /* OfflineSyncBanner.swift */; };
+		D2D00E0000000000000000A /* ShiftHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F0000000000000000A /* ShiftHistoryView.swift */; };
+		D2D00E0000000000000000B /* AppointmentsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00F0000000000000000B /* AppointmentsListView.swift */; };
+		D2D003000000000000000001 /* D2DKnockerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000001 /* D2DKnockerApp.swift */; };
+		D2D003000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000002 /* ContentView.swift */; };
+		D2D003000000000000000003 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000003 /* AppState.swift */; };
+		D2D003000000000000000004 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000004 /* Config.swift */; };
+		D2D003000000000000000005 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000005 /* DesignSystem.swift */; };
+		D2D003000000000000000006 /* Knock.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000006 /* Knock.swift */; };
+		D2D003000000000000000007 /* Lead.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000007 /* Lead.swift */; };
+		D2D003000000000000000008 /* Address.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000008 /* Address.swift */; };
+		D2D003000000000000000009 /* KnockSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000009 /* KnockSession.swift */; };
+		D2D00300000000000000000A /* PendingSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000A /* PendingSync.swift */; };
+		D2D00300000000000000000B /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000B /* KeychainService.swift */; };
+		D2D00300000000000000000C /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000C /* LocationService.swift */; };
+		D2D00300000000000000000D /* DTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000D /* DTOs.swift */; };
+		D2D00300000000000000000E /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000E /* APIClient.swift */; };
+		D2D00300000000000000000F /* SyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000000F /* SyncEngine.swift */; };
+		D2D003000000000000000010 /* AttestationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000010 /* AttestationService.swift */; };
+		D2D003000000000000000011 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000011 /* LoginView.swift */; };
+		D2D003000000000000000012 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000012 /* AuthViewModel.swift */; };
+		D2D003000000000000000013 /* MapTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000013 /* MapTabView.swift */; };
+		D2D003000000000000000014 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000014 /* MapViewModel.swift */; };
+		D2D003000000000000000015 /* KnockSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000015 /* KnockSheetView.swift */; };
+		D2D003000000000000000016 /* KnockFlowViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000016 /* KnockFlowViewModel.swift */; };
+		D2D003000000000000000017 /* DispositionPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000017 /* DispositionPicker.swift */; };
+		D2D00300000000000000002A /* IntelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000002A /* IntelCardView.swift */; };
+		D2D003000000000000000018 /* LeadFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000018 /* LeadFormView.swift */; };
+		D2D003000000000000000019 /* SignaturePadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000019 /* SignaturePadView.swift */; };
+		D2D00300000000000000001A /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001A /* ScheduleView.swift */; };
+		D2D00300000000000000001B /* ScheduleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001B /* ScheduleViewModel.swift */; };
+		D2D00300000000000000001C /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001C /* InboxView.swift */; };
+		D2D00300000000000000001D /* InboxViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001D /* InboxViewModel.swift */; };
+		D2D00300000000000000001E /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001E /* ProfileView.swift */; };
+		D2D00300000000000000001F /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D00200000000000000001F /* ProfileViewModel.swift */; };
+		D2D003000000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000020 /* Assets.xcassets */; };
+		D2D003000000000000000021 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000024 /* MapKit.framework */; };
+		D2D003000000000000000022 /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000025 /* CoreLocation.framework */; };
+		D2D003000000000000000023 /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000026 /* LocalAuthentication.framework */; };
+		D2D003000000000000000024 /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000027 /* DeviceCheck.framework */; };
+		D2D003000000000000000025 /* D2DKnockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D002000000000000000023 /* D2DKnockerTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D2D008000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D2D000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D2D005000000000000000001;
+			remoteInfo = D2DKnocker;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		D2D00F0000000000000FF02 /* ReachabilityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/OfflineSync/ReachabilityMonitor.swift"; sourceTree = "<group>"; };
+		D2D00F0000000000000FF01 /* SaleWonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/SignUp/SaleWonView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000020 /* Sale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/Sale.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000021 /* ServiceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/ServiceCatalog.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000022 /* ServicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/SignUp/ServicePickerView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000023 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Pipeline/PipelineView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000000 /* KnocksHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/History/KnocksHistoryView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000001 /* KnockDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/History/KnockDetailView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000002 /* MapLegendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Map/MapLegendView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000003 /* CoverageStatsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Map/CoverageStatsBar.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000004 /* DailyGoalRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Profile/DailyGoalRing.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000005 /* DispositionBreakdownCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Profile/DispositionBreakdownCard.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000006 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Profile/SettingsView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000007 /* CameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/KnockFlow/CameraCaptureView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000008 /* AppointmentPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/KnockFlow/AppointmentPickerView.swift"; sourceTree = "<group>"; };
+		D2D00F00000000000000009 /* OfflineSyncBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Sync/OfflineSyncBanner.swift"; sourceTree = "<group>"; };
+		D2D00F0000000000000000A /* ShiftHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Schedule/ShiftHistoryView.swift"; sourceTree = "<group>"; };
+		D2D00F0000000000000000B /* AppointmentsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Features/Schedule/AppointmentsListView.swift"; sourceTree = "<group>"; };
+		D2D002000000000000000001 /* D2DKnockerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = D2DKnockerApp.swift; sourceTree = "<group>"; };
+		D2D002000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000003 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D2D002000000000000000004 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		D2D002000000000000000005 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		D2D002000000000000000006 /* Knock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knock.swift; sourceTree = "<group>"; };
+		D2D002000000000000000007 /* Lead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lead.swift; sourceTree = "<group>"; };
+		D2D002000000000000000008 /* Address.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Address.swift; sourceTree = "<group>"; };
+		D2D002000000000000000009 /* KnockSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnockSession.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000A /* PendingSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingSync.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000B /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000C /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000D /* DTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOs.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000E /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		D2D00200000000000000000F /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
+		D2D002000000000000000010 /* AttestationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttestationService.swift; sourceTree = "<group>"; };
+		D2D002000000000000000011 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000012 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		D2D002000000000000000013 /* MapTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapTabView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000014 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		D2D002000000000000000015 /* KnockSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnockSheetView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000016 /* KnockFlowViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnockFlowViewModel.swift; sourceTree = "<group>"; };
+		D2D002000000000000000017 /* DispositionPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispositionPicker.swift; sourceTree = "<group>"; };
+		D2D00200000000000000002A /* IntelCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelCardView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000018 /* LeadFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadFormView.swift; sourceTree = "<group>"; };
+		D2D002000000000000000019 /* SignaturePadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignaturePadView.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001A /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001B /* ScheduleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleViewModel.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001C /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001D /* InboxViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxViewModel.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001E /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		D2D00200000000000000001F /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		D2D002000000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D2D002000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D2D002000000000000000022 /* D2DKnocker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = D2DKnocker.entitlements; sourceTree = "<group>"; };
+		D2D002000000000000000023 /* D2DKnockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = D2DKnockerTests.swift; sourceTree = "<group>"; };
+		D2D002000000000000000024 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = System/Library/Frameworks/MapKit.framework; sourceTree = SDKROOT; };
+		D2D002000000000000000025 /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
+		D2D002000000000000000026 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
+		D2D002000000000000000027 /* DeviceCheck.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceCheck.framework; path = System/Library/Frameworks/DeviceCheck.framework; sourceTree = SDKROOT; };
+		D2D002000000000000000028 /* D2DKnocker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = D2DKnocker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2D002000000000000000029 /* D2DKnockerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = D2DKnockerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D2D004000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2D003000000000000000021 /* MapKit.framework in Frameworks */,
+				D2D003000000000000000022 /* CoreLocation.framework in Frameworks */,
+				D2D003000000000000000023 /* LocalAuthentication.framework in Frameworks */,
+				D2D003000000000000000024 /* DeviceCheck.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2D004000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D2D001000000000000000000 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000028 /* D2DKnocker.app */,
+				D2D002000000000000000029 /* D2DKnockerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000010 /* Project root */ = {
+			isa = PBXGroup;
+			children = (
+				D2D001000000000000000001 /* D2DKnocker */,
+				D2D001000000000000000011 /* D2DKnockerTests */,
+				D2D001000000000000000000 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000001 /* D2DKnocker */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000001 /* D2DKnockerApp.swift */,
+				D2D002000000000000000002 /* ContentView.swift */,
+				D2D002000000000000000003 /* AppState.swift */,
+				D2D002000000000000000004 /* Config.swift */,
+				D2D002000000000000000005 /* DesignSystem.swift */,
+				D2D001000000000000000002 /* Models */,
+				D2D001000000000000000003 /* Services */,
+				D2D001000000000000000009 /* Features */,
+				D2D002000000000000000020 /* Assets.xcassets */,
+				D2D002000000000000000021 /* Info.plist */,
+				D2D002000000000000000022 /* D2DKnocker.entitlements */,
+				D2D00F0000000000000FF02 /* ReachabilityMonitor.swift */,
+				D2D00F0000000000000FF01 /* SaleWonView.swift */,
+				D2D00F00000000000000020 /* Sale.swift */,
+				D2D00F00000000000000021 /* ServiceCatalog.swift */,
+				D2D00F00000000000000022 /* ServicePickerView.swift */,
+				D2D00F00000000000000023 /* PipelineView.swift */,
+				D2D00F00000000000000000 /* KnocksHistoryView.swift */,
+				D2D00F00000000000000001 /* KnockDetailView.swift */,
+				D2D00F00000000000000002 /* MapLegendView.swift */,
+				D2D00F00000000000000003 /* CoverageStatsBar.swift */,
+				D2D00F00000000000000004 /* DailyGoalRing.swift */,
+				D2D00F00000000000000005 /* DispositionBreakdownCard.swift */,
+				D2D00F00000000000000006 /* SettingsView.swift */,
+				D2D00F00000000000000007 /* CameraCaptureView.swift */,
+				D2D00F00000000000000008 /* AppointmentPickerView.swift */,
+				D2D00F00000000000000009 /* OfflineSyncBanner.swift */,
+				D2D00F0000000000000000A /* ShiftHistoryView.swift */,
+				D2D00F0000000000000000B /* AppointmentsListView.swift */,
+			);
+			path = D2DKnocker;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000002 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000006 /* Knock.swift */,
+				D2D002000000000000000007 /* Lead.swift */,
+				D2D002000000000000000008 /* Address.swift */,
+				D2D002000000000000000009 /* KnockSession.swift */,
+				D2D00200000000000000000A /* PendingSync.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000003 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				D2D001000000000000000004 /* Keychain */,
+				D2D001000000000000000005 /* Location */,
+				D2D001000000000000000006 /* API */,
+				D2D001000000000000000007 /* OfflineSync */,
+				D2D001000000000000000008 /* Attestation */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000004 /* Keychain */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000000B /* KeychainService.swift */,
+			);
+			path = Keychain;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000005 /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000000C /* LocationService.swift */,
+			);
+			path = Location;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000006 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000000D /* DTOs.swift */,
+				D2D00200000000000000000E /* APIClient.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000007 /* OfflineSync */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000000F /* SyncEngine.swift */,
+			);
+			path = OfflineSync;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000008 /* Attestation */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000010 /* AttestationService.swift */,
+			);
+			path = Attestation;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000009 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00100000000000000000A /* Auth */,
+				D2D00100000000000000000B /* Map */,
+				D2D00100000000000000000C /* KnockFlow */,
+				D2D00100000000000000000D /* Schedule */,
+				D2D00100000000000000000E /* Inbox */,
+				D2D00100000000000000000F /* Profile */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000A /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000011 /* LoginView.swift */,
+				D2D002000000000000000012 /* AuthViewModel.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000B /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000013 /* MapTabView.swift */,
+				D2D002000000000000000014 /* MapViewModel.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000C /* KnockFlow */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000015 /* KnockSheetView.swift */,
+				D2D002000000000000000016 /* KnockFlowViewModel.swift */,
+				D2D002000000000000000017 /* DispositionPicker.swift */,
+				D2D00200000000000000002A /* IntelCardView.swift */,
+				D2D002000000000000000018 /* LeadFormView.swift */,
+				D2D002000000000000000019 /* SignaturePadView.swift */,
+			);
+			path = KnockFlow;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000D /* Schedule */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000001A /* ScheduleView.swift */,
+				D2D00200000000000000001B /* ScheduleViewModel.swift */,
+			);
+			path = Schedule;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000E /* Inbox */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000001C /* InboxView.swift */,
+				D2D00200000000000000001D /* InboxViewModel.swift */,
+			);
+			path = Inbox;
+			sourceTree = "<group>";
+		};
+		D2D00100000000000000000F /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				D2D00200000000000000001E /* ProfileView.swift */,
+				D2D00200000000000000001F /* ProfileViewModel.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		D2D001000000000000000011 /* D2DKnockerTests */ = {
+			isa = PBXGroup;
+			children = (
+				D2D002000000000000000023 /* D2DKnockerTests.swift */,
+			);
+			path = D2DKnockerTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D2D005000000000000000001 /* D2DKnocker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D2D007000000000000000002 /* Build configuration list for PBXNativeTarget "D2DKnocker" */;
+			buildPhases = (
+				D2D004000000000000000001 /* Sources */,
+				D2D004000000000000000002 /* Frameworks */,
+				D2D004000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = D2DKnocker;
+			productName = D2DKnocker;
+			productReference = D2D002000000000000000028 /* D2DKnocker.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D2D005000000000000000002 /* D2DKnockerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D2D007000000000000000003 /* Build configuration list for PBXNativeTarget "D2DKnockerTests" */;
+			buildPhases = (
+				D2D004000000000000000004 /* Sources */,
+				D2D004000000000000000005 /* Frameworks */,
+				D2D004000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D2D009000000000000000001 /* PBXTargetDependency */,
+			);
+			name = D2DKnockerTests;
+			productName = D2DKnockerTests;
+			productReference = D2D002000000000000000029 /* D2DKnockerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D2D000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					D2D005000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					D2D005000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = D2D005000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = D2D007000000000000000001 /* Build configuration list for PBXProject "D2DKnocker" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D2D001000000000000000010 /* Project root */;
+			productRefGroup = D2D001000000000000000000 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D2D005000000000000000001 /* D2DKnocker */,
+				D2D005000000000000000002 /* D2DKnockerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D2D004000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2D003000000000000000020 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2D004000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D2D004000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2D003000000000000000001 /* D2DKnockerApp.swift in Sources */,
+				D2D003000000000000000002 /* ContentView.swift in Sources */,
+				D2D003000000000000000003 /* AppState.swift in Sources */,
+				D2D003000000000000000004 /* Config.swift in Sources */,
+				D2D003000000000000000005 /* DesignSystem.swift in Sources */,
+				D2D003000000000000000006 /* Knock.swift in Sources */,
+				D2D003000000000000000007 /* Lead.swift in Sources */,
+				D2D003000000000000000008 /* Address.swift in Sources */,
+				D2D003000000000000000009 /* KnockSession.swift in Sources */,
+				D2D00300000000000000000A /* PendingSync.swift in Sources */,
+				D2D00300000000000000000B /* KeychainService.swift in Sources */,
+				D2D00300000000000000000C /* LocationService.swift in Sources */,
+				D2D00300000000000000000D /* DTOs.swift in Sources */,
+				D2D00300000000000000000E /* APIClient.swift in Sources */,
+				D2D00300000000000000000F /* SyncEngine.swift in Sources */,
+				D2D003000000000000000010 /* AttestationService.swift in Sources */,
+				D2D003000000000000000011 /* LoginView.swift in Sources */,
+				D2D003000000000000000012 /* AuthViewModel.swift in Sources */,
+				D2D003000000000000000013 /* MapTabView.swift in Sources */,
+				D2D003000000000000000014 /* MapViewModel.swift in Sources */,
+				D2D003000000000000000015 /* KnockSheetView.swift in Sources */,
+				D2D003000000000000000016 /* KnockFlowViewModel.swift in Sources */,
+				D2D003000000000000000017 /* DispositionPicker.swift in Sources */,
+				D2D00300000000000000002A /* IntelCardView.swift in Sources */,
+				D2D003000000000000000018 /* LeadFormView.swift in Sources */,
+				D2D003000000000000000019 /* SignaturePadView.swift in Sources */,
+				D2D00300000000000000001A /* ScheduleView.swift in Sources */,
+				D2D00300000000000000001B /* ScheduleViewModel.swift in Sources */,
+				D2D00300000000000000001C /* InboxView.swift in Sources */,
+				D2D00300000000000000001D /* InboxViewModel.swift in Sources */,
+				D2D00300000000000000001E /* ProfileView.swift in Sources */,
+				D2D00300000000000000001F /* ProfileViewModel.swift in Sources */,
+				D2D00E0000000000000FF02 /* ReachabilityMonitor.swift in Sources */,
+				D2D00E0000000000000FF01 /* SaleWonView.swift in Sources */,
+				D2D00E00000000000000020 /* Sale.swift in Sources */,
+				D2D00E00000000000000021 /* ServiceCatalog.swift in Sources */,
+				D2D00E00000000000000022 /* ServicePickerView.swift in Sources */,
+				D2D00E00000000000000023 /* PipelineView.swift in Sources */,
+				D2D00E00000000000000000 /* KnocksHistoryView.swift in Sources */,
+				D2D00E00000000000000001 /* KnockDetailView.swift in Sources */,
+				D2D00E00000000000000002 /* MapLegendView.swift in Sources */,
+				D2D00E00000000000000003 /* CoverageStatsBar.swift in Sources */,
+				D2D00E00000000000000004 /* DailyGoalRing.swift in Sources */,
+				D2D00E00000000000000005 /* DispositionBreakdownCard.swift in Sources */,
+				D2D00E00000000000000006 /* SettingsView.swift in Sources */,
+				D2D00E00000000000000007 /* CameraCaptureView.swift in Sources */,
+				D2D00E00000000000000008 /* AppointmentPickerView.swift in Sources */,
+				D2D00E00000000000000009 /* OfflineSyncBanner.swift in Sources */,
+				D2D00E0000000000000000A /* ShiftHistoryView.swift in Sources */,
+				D2D00E0000000000000000B /* AppointmentsListView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2D004000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2D003000000000000000025 /* D2DKnockerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D2D009000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D2D005000000000000000001 /* D2DKnocker */;
+			targetProxy = D2D008000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		D2D006000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		D2D006000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D2D006000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATS_ALLOWS_ARBITRARY_LOADS = YES;
+				CODE_SIGN_ENTITLEMENTS = D2DKnocker/D2DKnocker.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"D2D_API_BASE_URL[sdk=iphoneos*]" = "http://192.168.20.41:3010/v1";
+				D2D_API_BASE_URL = "http://localhost:3010/v1";
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = D2DKnocker/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.d2d.knocker;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D2D006000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATS_ALLOWS_ARBITRARY_LOADS = NO;
+				CODE_SIGN_ENTITLEMENTS = D2DKnocker/D2DKnocker.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				D2D_API_BASE_URL = "https://api.d2d.io/v1";
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = D2DKnocker/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.d2d.knocker;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		D2D006000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.d2d.knocker.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/D2DKnocker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/D2DKnocker";
+			};
+			name = Debug;
+		};
+		D2D006000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.d2d.knocker.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/D2DKnocker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/D2DKnocker";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D2D007000000000000000001 /* Build configuration list for PBXProject "D2DKnocker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2D006000000000000000001 /* Debug */,
+				D2D006000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D2D007000000000000000002 /* Build configuration list for PBXNativeTarget "D2DKnocker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2D006000000000000000003 /* Debug */,
+				D2D006000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D2D007000000000000000003 /* Build configuration list for PBXNativeTarget "D2DKnockerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2D006000000000000000005 /* Debug */,
+				D2D006000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = D2D000000000000000000001 /* Project object */;
+}

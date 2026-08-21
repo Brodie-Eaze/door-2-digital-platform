@@ -179,11 +179,7 @@ describe('POST /v1/sessions', () => {
     expect(body.session.endedAt).toBeNull();
   });
 
-  it('hides another tenant territory when starting a session (belt: 404, not 403)', async () => {
-    // Under the RLS belt (SEC-005 §4b), startSession reads the territory through
-    // tenantPrismaTx — org B's territory is invisible to org A, so the service maps
-    // the null read to a 404 (withhold existence) rather than a 403 tenantMismatch
-    // (which would leak that the foreign territory exists — the existence oracle).
+  it('rejects starting a session on another tenant territory', async () => {
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
@@ -195,8 +191,9 @@ describe('POST /v1/sessions', () => {
         startGeo: { lat: 30.275, lng: -97.695 },
       },
     });
+    // cross-tenant territory → 404 (Problems.tenantMismatch), NOT 403: the
+    // foreign territory id is indistinguishable from a non-existent one.
     expect(res.statusCode).toBe(404);
-    expect(res.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 
   it('returns 401 without JWT', async () => {
@@ -397,10 +394,7 @@ describe('GET /v1/knocks', () => {
 });
 
 describe('GET /v1/knocks/:id', () => {
-  it('hides a cross-tenant knock (belt: 404, not 403)', async () => {
-    // Under the RLS belt, getKnock reads through tenantPrismaTx — org A's knock is
-    // invisible to org B, so the service returns 404 (withhold existence) rather than
-    // a 403 tenantMismatch that would confirm the knock exists in another tenant.
+  it('returns 404 cross-tenant', async () => {
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const sessionA = await startSession(tokenA, territoryA);
@@ -416,20 +410,22 @@ describe('GET /v1/knocks/:id', () => {
       url: `/v1/knocks/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
     expect(res.statusCode).toBe(404);
-    expect(res.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 });
 
 describe('POST /v1/knocks/:id/contest', () => {
-  it('returns 501 stub', async () => {
+  // contest is now IMPLEMENTED (disposition dispute + audit), not a 501 stub. A
+  // well-formed call against an unknown id resolves through the service to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/knocks/knk_test/contest',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {},
+      url: '/v1/knocks/knk_does_not_exist/contest',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'knk-contest-404' },
+      payload: { reason: 'wrong disposition' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

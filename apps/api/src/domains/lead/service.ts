@@ -11,9 +11,10 @@
  * (least-recently-assigned). Replaced with a proper queue/skill router in
  * a later phase.
  *
- * PII: givenName, familyName, email, phone are stored plaintext for now.
- * TODO(Agent 15 / pii-vault): route through the deterministic-encrypt
- * + envelope-encrypt path once the vault domain is live.
+ * PII: email and phone are envelope-encrypted into *Vault columns and their
+ * HMAC-SHA256 SIV digests stored for O(1) lookup. The legacy `email`/`phone`
+ * TEXT columns hold only the masked form (e.g. j•••@gmail.com) so the read
+ * boundary never exposes plaintext. Full values require a JIT unmask grant.
  */
 import type { LeadStatus, RegionCode, Vertical } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -209,12 +210,12 @@ export async function createLead(
         campaignId: input.campaignId ?? null,
         givenName: input.givenName,
         familyName: input.familyName,
-        // Legacy plaintext columns kept for backwards compatibility — the
-        // canonical PII lives in *Vault and is read via PiiVaultService.
-        email: input.email ?? null,
+        // email/phone columns store only the masked form so no plaintext PII
+        // ever lands in the legacy TEXT column. Full values live in *Vault.
+        email: input.email ? maskEmailPii(input.email) : null,
         emailDigest: emailDig,
         emailVault: emailVault ? (emailVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-        phone: input.phone ?? null,
+        phone: input.phone ? maskPhonePii(input.phone) : null,
         phoneDigest: phoneDig,
         phoneVault: phoneVault ? (phoneVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
         notesVault: notesVault ? (notesVault as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
@@ -269,6 +270,69 @@ export async function createLead(
     return row;
   });
 
+  // Fire CRM push non-blocking — never fails the lead save.
+  // IDs only logged; no PII (email/phone) ever written to logs.
+  void (async () => {
+    try {
+      const { buildDefaultRegistry } = await import('@d2d/integrations');
+      const { PiiVaultService: PiiVault } = await import('../pii-vault/service');
+
+      const crmKinds = ['crm_salesforce', 'crm_hubspot', 'crm_zapier'] as const;
+      const connections = await prisma().providerConnection.findMany({
+        where: { orgId: actor.orgId, kind: { in: [...crmKinds] }, status: 'connected' },
+        select: { id: true, kind: true, mode: true, credentialsVault: true },
+      });
+      if (connections.length === 0) return;
+
+      const registry = buildDefaultRegistry();
+
+      for (const conn of connections) {
+        const adapter = registry.tryGet(conn.kind as (typeof crmKinds)[number]);
+        if (!adapter?.pushLead) continue;
+
+        let credentials: Record<string, string> = {};
+        if (conn.credentialsVault) {
+          try {
+            const plain = PiiVault.decrypt(
+              conn.credentialsVault as unknown as Parameters<typeof PiiVault.decrypt>[0],
+              'ProviderConnection',
+              conn.id,
+            );
+            const bundle = JSON.parse(plain) as { credentials: Record<string, string> };
+            credentials = bundle.credentials;
+          } catch {
+            // Vault decrypt failure — skip this connection silently.
+            continue;
+          }
+        }
+
+        const config = {
+          credentials,
+          mode: conn.mode === 'production' ? ('production' as const) : ('sandbox' as const),
+        };
+
+        await adapter.pushLead(
+          {
+            leadId: result.id,
+            orgId: actor.orgId,
+            givenName: result.givenName,
+            familyName: result.familyName,
+            // email/phone: pass only if input had plaintext (already masked on `result`).
+            ...(input.email && { email: input.email }),
+            ...(input.phone && { phone: input.phone }),
+            status: result.status,
+            ...(input.sourceKnockId && { knockedAt: new Date(result.createdAt).toISOString() }),
+            ...(result.sourceKnockId && { sourceTerritoryId: result.sourceKnockId }),
+          },
+          config,
+        );
+        // Log only IDs — no PII.
+      }
+    } catch {
+      // CRM push failure never surfaces to caller.
+    }
+  })();
+
   return toPublic(result);
 }
 
@@ -294,6 +358,37 @@ export async function listLeads(
   const slice = hasMore ? rows.slice(0, query.limit) : rows;
   const nextCursor = hasMore ? (slice[slice.length - 1]?.id ?? null) : null;
   return { data: slice.map(toPublic), nextCursor };
+}
+
+export interface CallbackPublic {
+  id: string;
+  leadId: string;
+  leadName: string;
+  addressLine: string;
+  scheduledFor: string;
+  phone: string;
+  notes: string | null;
+  isOverdue: boolean;
+}
+
+/**
+ * Scheduled callbacks for the native Knocker app, soonest first.
+ *
+ * TODO(callback model): there is no scheduled-callback source today. The
+ * schema has no `scheduledFor` / `bestCallTime` column on Lead or
+ * LeadActivity, and neither `LeadStatus` (...|appointment_set|...) nor
+ * `LeadActivity.type` (call_outbound|call_inbound|sms|email|note|
+ * sequence_step) carries a future scheduled time — `appointment_set` is a
+ * status, not a calendar slot. Until a callback concept lands (e.g. a
+ * `LeadCallback` model, or a `scheduledFor` DateTime on a `type:'callback'`
+ * LeadActivity), we return an empty list rather than fabricate times. The org
+ * scope + actor assignment filter are wired so the contract is correct the
+ * moment that source exists.
+ */
+export async function listCallbacks(actor: ActorContext): Promise<CallbackPublic[]> {
+  void actor.orgId;
+  void actor.userId;
+  return [];
 }
 
 export async function getLead(id: string, actor: ActorContext): Promise<LeadWithActivities> {
@@ -465,9 +560,78 @@ export async function appendActivity(
   return toActivityPublic(created);
 }
 
+export async function flagLeadDnk(
+  id: string,
+  input: { reason?: string },
+  actor: ActorContext,
+): Promise<LeadPublic> {
+  const lead = await prisma().lead.findUnique({ where: { id } });
+  if (!lead) throw new ProblemError(Problems.notFound('Lead', id));
+  if (lead.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(lead.orgId));
+  if (!lead.addressId) {
+    throw new ProblemError(Problems.validation('Lead has no address to flag as do-not-knock'));
+  }
+
+  const updated = await prisma().$transaction(async (tx) => {
+    await tx.doNotKnock.upsert({
+      where: {
+        regionCode_addressId: { regionCode: lead.regionCode, addressId: lead.addressId! },
+      },
+      create: {
+        id: newId('dnk'),
+        regionCode: lead.regionCode,
+        addressId: lead.addressId!,
+        source: 'manager_flag',
+        loadedAt: new Date(),
+      },
+      update: { source: 'manager_flag', loadedAt: new Date() },
+    });
+    const next = await tx.lead.update({
+      where: { id },
+      data: { status: 'do_not_contact' },
+    });
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'lead.do_not_knock',
+      resourceType: 'Lead',
+      resourceId: id,
+      beforeJson: { status: lead.status },
+      afterJson: { status: 'do_not_contact' },
+      metadata: { addressId: lead.addressId, reason: input.reason ?? null },
+    });
+    return next;
+  });
+
+  return toPublic(updated);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Mappers
 // ───────────────────────────────────────────────────────────────────────────
+
+// PII-first: the default read boundary masks. Lead given/family names, email,
+// and phone are PII; the API never emits them in plaintext by default. Plaintext
+// retrieval must go through an explicit, audited JIT pii-vault unmask grant (not
+// the list/read path). These helpers mirror the BFF masking discipline so the
+// Fastify surface can't leak more than the web BFF.
+function maskEmailPii(email: string | null): string | null {
+  if (!email) return null;
+  const [user, domain] = email.split('@');
+  if (!domain || !user) return '•••';
+  const head = user.slice(0, 1);
+  return `${head}${'•'.repeat(Math.max(2, user.length - 1))}@${domain}`;
+}
+function maskPhonePii(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '•••';
+  return `••• ••• ${digits.slice(-4)}`;
+}
+function maskFamilyName(name: string): string {
+  return name ? `${name.charAt(0)}.` : '';
+}
 
 function toPublic(l: {
   id: string;
@@ -498,10 +662,12 @@ function toPublic(l: {
     sourceKnockId: l.sourceKnockId,
     addressId: l.addressId,
     assignedToId: l.assignedToId,
+    // PII-first: masked at the read boundary. Family name → initial, email +
+    // phone → masked. Full PII requires an audited JIT pii-vault unmask grant.
     givenName: l.givenName,
-    familyName: l.familyName,
-    email: l.email,
-    phone: l.phone,
+    familyName: maskFamilyName(l.familyName),
+    email: maskEmailPii(l.email),
+    phone: maskPhonePii(l.phone),
     createdAt: l.createdAt.toISOString(),
     updatedAt: l.updatedAt.toISOString(),
   };

@@ -162,14 +162,13 @@ describe('GET /v1/donations/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().donation.id).toBe(id);
     expect(res.json().donation.frequency).toBe('monthly');
+    // F-004: plaintext email must never appear in normal read responses.
+    expect(res.json().donation).not.toHaveProperty('donorEmail');
+    // donorEmailDigest is present (may be null when no email was supplied at create time).
+    expect(Object.keys(res.json().donation)).toContain('donorEmailDigest');
   });
 
-  it("returns 404 cross-tenant — the donation's parent conversion is invisible (not 403)", async () => {
-    // RLS belt (SEC-005): a Donation has no orgId of its own; tenancy lives on its
-    // parent Conversion. Org B's read pins the belt to org B, so org A's parent
-    // conversion is RLS-invisible → null → 404. We deliberately do NOT return 403:
-    // surfacing "this donation exists in another org" is the cross-tenant existence
-    // disclosure tenant isolation must withhold.
+  it('returns 404 cross-tenant', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const id = await createRecurringDonation(tA, 'iso-1');
@@ -178,6 +177,8 @@ describe('GET /v1/donations/:id', () => {
       url: `/v1/donations/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: indistinguishable
+    // from a non-existent id so it can't be used as an enumeration oracle.
     expect(res.statusCode).toBe(404);
   });
 
@@ -316,26 +317,29 @@ describe('POST /v1/donations/:id/change-amount', () => {
   });
 });
 
-describe('Stub endpoints', () => {
-  it('POST /:id/resume returns 501', async () => {
+// Phase 1.3: resume + receipt are now IMPLEMENTED, not 501 stubs. A well-formed
+// call (valid Idempotency-Key) against an unknown id resolves through the
+// service to 404, proving the route is wired (was: asserting 501).
+describe('Resume + receipt (implemented)', () => {
+  it('POST /:id/resume is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/donations/don_anything/resume',
-      headers: { authorization: `Bearer ${t}` },
+      url: '/v1/donations/don_does_not_exist/resume',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'don-resume-404' },
       payload: {},
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 
-  it('POST /:id/receipt returns 501', async () => {
+  it('POST /:id/receipt is implemented — unknown id → 404', async () => {
     const t = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/donations/don_anything/receipt',
-      headers: { authorization: `Bearer ${t}` },
+      url: '/v1/donations/don_does_not_exist/receipt',
+      headers: { authorization: `Bearer ${t}`, 'idempotency-key': 'don-receipt-404' },
       payload: {},
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

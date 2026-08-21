@@ -16,10 +16,11 @@ import type {
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing, stubText } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing, stubText } from './stub';
 
 const OPENAI_BASE = 'https://api.openai.com/v1' as const;
 const DEFAULT_MODEL = 'gpt-4o-mini' as const;
+const OPENAI_TIMEOUT_MS = 60_000 as const;
 
 function estimateCostCents(model: string, inTok: number, outTok: number): number {
   // Cents per million tokens (in / out). May 2026.
@@ -43,37 +44,39 @@ export function createOpenAICopyAdapter(): ProviderAdapter {
     docsUrl: 'https://platform.openai.com/docs',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('OpenAI', 'org_demo_openai') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${OPENAI_BASE}/models`, {
-          headers: { authorization: `Bearer ${apiKey}` },
-        });
-        if (r.status === 401) {
-          return { ok: false, error: new InvalidConfigError(kind, 'invalid apiKey') };
-        }
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `OpenAI ping ${r.status}`, kind, r.status),
-          };
-        }
-        return { ok: true, data: { accountLabel: 'OpenAI', accountId: 'org' } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+      const rr = await fetchWithTimeout(kind, `${OPENAI_BASE}/models`, {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (r.status === 401) {
+        return { ok: false, error: new InvalidConfigError(kind, 'invalid apiKey') };
       }
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `OpenAI ping ${r.status}`, kind, r.status),
+        };
+      }
+      return { ok: true, data: { accountLabel: 'OpenAI', accountId: 'org' } };
     },
 
     async generateText(
       input: GenerateTextInput,
       config: ProviderConfig,
     ): Promise<Result<GenerateTextOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubText(input.prompt, DEFAULT_MODEL, 1) };
       }
       const apiKey = config.credentials.apiKey;
@@ -86,8 +89,10 @@ export function createOpenAICopyAdapter(): ProviderAdapter {
       if (input.vertical) sys.push(`Vertical: ${input.vertical}.`);
       if (input.channel) sys.push(`Channel: ${input.channel}.`);
       if (input.region) sys.push(`Region: ${input.region}.`);
-      try {
-        const r = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${OPENAI_BASE}/chat/completions`,
+        {
           method: 'POST',
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -99,41 +104,42 @@ export function createOpenAICopyAdapter(): ProviderAdapter {
               { role: 'user', content: input.prompt },
             ],
           }),
-        });
-        if (r.status === 429) {
-          const retry = Number(r.headers.get('retry-after') ?? '30');
-          return { ok: false, error: new RateLimitedError(kind, retry) };
-        }
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `OpenAI ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as {
-          choices: Array<{ message: { content: string } }>;
-          model: string;
-          usage?: { prompt_tokens: number; completion_tokens: number };
-        };
-        const text = json.choices[0]?.message?.content ?? '';
-        const costCents = estimateCostCents(
-          json.model,
-          json.usage?.prompt_tokens ?? 0,
-          json.usage?.completion_tokens ?? 0,
-        );
-        return {
-          ok: true,
-          data: {
-            text,
-            modelId: json.model,
-            costCents,
-            promptHash: shortHash(input.prompt),
-            safetyScanResult: 'pass',
-          },
-        };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+        },
+        OPENAI_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (r.status === 429) {
+        const retry = Number(r.headers.get('retry-after') ?? '30');
+        return { ok: false, error: new RateLimitedError(kind, retry) };
       }
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `OpenAI ${r.status}`, kind, r.status),
+        };
+      }
+      const json = (await r.json()) as {
+        choices: Array<{ message: { content: string } }>;
+        model: string;
+        usage?: { prompt_tokens: number; completion_tokens: number };
+      };
+      const text = json.choices[0]?.message?.content ?? '';
+      const costCents = estimateCostCents(
+        json.model,
+        json.usage?.prompt_tokens ?? 0,
+        json.usage?.completion_tokens ?? 0,
+      );
+      return {
+        ok: true,
+        data: {
+          text,
+          modelId: json.model,
+          costCents,
+          promptHash: shortHash(input.prompt),
+          safetyScanResult: 'pass',
+        },
+      };
     },
   };
 }

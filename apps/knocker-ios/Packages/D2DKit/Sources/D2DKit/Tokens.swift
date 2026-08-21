@@ -19,6 +19,8 @@ public enum D2DColor {
     public static let line2       = Color(hex: 0xEEF1F5)
     public static let accent      = Color(hex: 0x3B82F6)
     public static let accentSoft  = Color(hex: 0xDBEAFE)
+    public static let hero        = Color(hex: 0x0F172A)
+    public static let heroLine    = Color(hex: 0x1E293B)
     public static let success     = Color(hex: 0x1D4ED8)
     public static let successSoft = Color(hex: 0xDBEAFE)
     public static let warn        = Color(hex: 0x475569)

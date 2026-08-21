@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Run prettier + eslint on staged files
 pnpm exec lint-staged
 
@@ -8,5 +5,5 @@ pnpm exec lint-staged
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --no-banner --redact
 else
-  echo "⚠️  gitleaks not installed — skipping local secret scan. Install with: brew install gitleaks"
+  echo "Warning: gitleaks not installed — skipping local secret scan. Install with: brew install gitleaks"
 fi

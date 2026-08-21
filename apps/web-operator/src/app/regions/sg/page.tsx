@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Globe2,
   ShieldCheck,
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { toast } from '@/components/Toaster';
 
 /**
  * SG region — operations control panel.
@@ -444,6 +447,9 @@ export default function SgRegionPage(): JSX.Element {
                       <button
                         className="text-[11px] font-semibold text-accent hover:underline"
                         type="button"
+                        onClick={() =>
+                          toast.info(`Cancel & refund ${w.donor} — wiring lands in Phase 1.2`)
+                        }
                       >
                         Cancel & refund
                       </button>

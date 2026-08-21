@@ -1,3 +1,8 @@
+'use client';
+
+import { use } from 'react';
+
+import Link from 'next/link';
 import {
   Sparkles,
   FileCheck2,
@@ -26,6 +31,8 @@ import {
   type AccountMarketing,
 } from '@/lib/account-marketing';
 import { pickCreativeImage } from '@/lib/creative-images';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 /**
  * Per-account Marketing Studio overview — Brodie's mission-control view of a
@@ -34,7 +41,7 @@ import { pickCreativeImage } from '@/lib/creative-images';
  */
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const PIPELINE_STAGES: Array<{
@@ -51,7 +58,8 @@ const PIPELINE_STAGES: Array<{
   { key: 'measure', label: 'Measure', detail: 'conv attributed', icon: TrendingUp },
 ];
 
-export default function Page({ params }: PageProps): JSX.Element {
+export default function Page({ params: paramsPromise }: PageProps): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const data = getAccountMarketing(params.slug);
 
@@ -141,6 +149,7 @@ export default function Page({ params }: PageProps): JSX.Element {
         <Section
           title="Pipeline · today"
           subtitle="Brief → Compose → Variation → Review → Publish → Measure (this account only)"
+          action={<DataSourceBadge source="fixture" />}
         >
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             {PIPELINE_STAGES.map((stage, idx) => {
@@ -181,7 +190,7 @@ export default function Page({ params }: PageProps): JSX.Element {
               {topCreatives.map((c) => (
                 <div
                   key={c.id}
-                  className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0"
+                  className="card hover:ring-1 hover:ring-accent transition overflow-hidden w-[260px] shrink-0"
                 >
                   <div className="aspect-square relative overflow-hidden bg-paper">
                     <img
@@ -236,6 +245,9 @@ export default function Page({ params }: PageProps): JSX.Element {
                       </StatusPill>
                       <button
                         type="button"
+                        onClick={() =>
+                          toast.info(`Inspect "${c.headline}" — full detail lands in Phase 1.2`)
+                        }
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                         title="Inspect"
                       >
@@ -395,44 +407,48 @@ export default function Page({ params }: PageProps): JSX.Element {
               title="Approval queue"
               subtitle={`${reviewQueue.length} creatives awaiting human review`}
               action={
-                <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
-                  Review all
-                </Button>
+                <Link href={`/accounts/${params.slug}/marketing-studio/review-queue`}>
+                  <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
+                    Review all
+                  </Button>
+                </Link>
               }
             >
               <ul className="space-y-2.5">
                 {reviewQueue.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
-                  >
-                    <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
-                      <img
-                        src={pickCreativeImage(c.theme, c.id)}
-                        alt={c.headline}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
-                        {c.headline}
+                  <li key={c.id}>
+                    <Link
+                      href={`/accounts/${params.slug}/marketing-studio/review-queue`}
+                      className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
+                    >
+                      <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
+                        <img
+                          src={pickCreativeImage(c.theme, c.id)}
+                          alt={c.headline}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
                       </div>
-                      <div className="text-[10.5px] text-muted mt-0.5">
-                        {CHANNEL_LABEL[c.channel]} · {c.format}
-                      </div>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
-                            {c.reviewerInitials ?? 'B'}
-                          </span>
-                          <span className="text-[10.5px] text-muted">
-                            {c.reviewerInitials ?? 'Brodie'}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
+                          {c.headline}
                         </div>
-                        <span className="text-[10px] text-soft mono">{c.id}</span>
+                        <div className="text-[10.5px] text-muted mt-0.5">
+                          {CHANNEL_LABEL[c.channel]} · {c.format}
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
+                              {c.reviewerInitials ?? 'B'}
+                            </span>
+                            <span className="text-[10.5px] text-muted">
+                              {c.reviewerInitials ?? 'Brodie'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-soft mono">{c.id}</span>
+                        </div>
                       </div>
-                    </div>
+                    </Link>
                   </li>
                 ))}
                 {reviewQueue.length === 0 && (

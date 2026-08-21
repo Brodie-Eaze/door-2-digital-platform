@@ -354,6 +354,125 @@ export async function transitionRegistration(
   return toRegistrationPublic(row);
 }
 
+/**
+ * Manual state-clearance override — links an existing campaign to an already-
+ * approved registration for cases where the campaign was created AFTER the
+ * registration was approved (the auto-upsert in transitionRegistration only
+ * covers campaigns that existed at approval time).
+ *
+ * Asserts:
+ *   - The registration exists and is `approved` + not expired.
+ *   - The campaign belongs to the registration's `clientOrgId`.
+ *   - The actor's org matches the registration's `entityOrgId` (operator only).
+ */
+export interface ManualClearanceInput {
+  campaignId: string;
+  state: string;
+  paidSolicitorRegistrationId: string;
+}
+
+export interface CampaignStateClearancePublic {
+  campaignId: string;
+  state: string;
+  clearedAt: string;
+  registrationId: string;
+}
+
+export async function manualClearance(
+  input: ManualClearanceInput,
+  actor: ActorContext,
+): Promise<CampaignStateClearancePublic> {
+  const reg = await prisma().paidSolicitorRegistration.findUnique({
+    where: { id: input.paidSolicitorRegistrationId },
+    select: {
+      entityOrgId: true,
+      clientOrgId: true,
+      state: true,
+      status: true,
+      expiresAt: true,
+    },
+  });
+  if (!reg) {
+    throw new ProblemError(
+      Problems.notFound('PaidSolicitorRegistration', input.paidSolicitorRegistrationId),
+    );
+  }
+  // Only the operator entity that filed the registration may create clearances.
+  if (reg.entityOrgId !== actor.orgId) {
+    throw new ProblemError(Problems.tenantMismatch(reg.entityOrgId));
+  }
+  if (reg.status !== 'approved') {
+    throw new ProblemError(
+      Problems.conflict(
+        `Registration is ${reg.status} — only approved registrations may grant clearance`,
+      ),
+    );
+  }
+  if (reg.expiresAt !== null && reg.expiresAt <= new Date()) {
+    throw new ProblemError(Problems.conflict('Registration has expired'));
+  }
+  if (reg.state !== input.state) {
+    throw new ProblemError(
+      Problems.conflict(`Registration covers state ${reg.state}, not ${input.state}`),
+    );
+  }
+
+  // Assert the campaign belongs to the charity client org on the registration.
+  const campaign = await prisma().campaign.findUnique({
+    where: { id: input.campaignId },
+    select: { orgId: true },
+  });
+  if (!campaign) {
+    throw new ProblemError(Problems.notFound('Campaign', input.campaignId));
+  }
+  if (campaign.orgId !== reg.clientOrgId) {
+    throw new ProblemError(
+      Problems.conflict('Campaign does not belong to the registration client org'),
+    );
+  }
+
+  const now = new Date();
+  const clearance = await prisma().$transaction(async (tx) => {
+    const row = await tx.campaignStateClearance.upsert({
+      where: { campaignId_state: { campaignId: input.campaignId, state: input.state } },
+      update: {
+        paidSolicitorRegistrationId: input.paidSolicitorRegistrationId,
+        clearedAt: now,
+      },
+      create: {
+        id: newId('csc'),
+        campaignId: input.campaignId,
+        state: input.state,
+        paidSolicitorRegistrationId: input.paidSolicitorRegistrationId,
+        clearedAt: now,
+      },
+    });
+    await AuditService.recordEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'compliance.state_clearance_changed',
+      resourceType: 'CampaignStateClearance',
+      resourceId: `${input.campaignId}:${input.state}`,
+      afterJson: {
+        campaignId: input.campaignId,
+        state: input.state,
+        registrationId: input.paidSolicitorRegistrationId,
+        cleared: true,
+        manual: true,
+      },
+    });
+    return row;
+  });
+
+  return {
+    campaignId: clearance.campaignId,
+    state: clearance.state,
+    clearedAt: clearance.clearedAt.toISOString(),
+    registrationId: clearance.paidSolicitorRegistrationId,
+  };
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Mapper
 // ───────────────────────────────────────────────────────────────────────────

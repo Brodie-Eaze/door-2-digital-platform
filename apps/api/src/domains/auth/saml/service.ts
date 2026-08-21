@@ -17,18 +17,12 @@
  *   - emailDigest is globally unique → an email already bound to another org
  *     is rejected rather than cross-linked.
  */
-import type {
-  Org,
-  SsoConfiguration,
-  SsoProvider,
-  User,
-  Prisma,
-  PlatformRole,
-  RegionCode,
-} from '@prisma/client';
+import { createHash } from 'node:crypto';
+import type { Org, SsoConfiguration, SsoProvider, User, Prisma } from '@prisma/client';
 import { Problems, ProblemError, emailDigest, newId } from '@d2d/shared-utils';
-import { prisma, tenantPrismaTx, tenantTx } from '../../../config/db';
+import { prisma } from '../../../config/db';
 import { env } from '../../../config/env';
+import { redis } from '../../../config/redis';
 import { writeAudit } from '../../../shared/audit/write';
 import { issueTokens, type IssueUser, type AuthSuccess } from '../service';
 import { buildSaml, encryptIdpCert, entityIdFor, acsUrlFor } from './config';
@@ -39,6 +33,48 @@ import {
   type SamlProfileLike,
 } from './attribute-mapping';
 import type { UpsertSsoConfigInput } from './schemas';
+
+/**
+ * Redis key prefix for the SAML assertion-ID single-use cache (SEC-004).
+ * Each entry lives for SAML_ASSERTION_CACHE_TTL_SECONDS and is SET NX so the
+ * second presentation of the same assertion ID is rejected as a replay.
+ */
+const SAML_ASSERTION_KEY_PREFIX = 'saml:used-assertion:';
+/** 10 min = assertion validity window + generous clock-skew headroom. */
+const SAML_ASSERTION_CACHE_TTL_SECONDS = 10 * 60;
+
+/**
+ * Atomically mark an assertion ID as consumed.
+ * Returns true if this is the FIRST use (SET NX succeeded), false if the ID
+ * was already present (replay). On a Redis error this throws — we treat an
+ * unavailable replay-cache as fail-closed: better to reject a valid login than
+ * to silently accept a replay during a Redis outage.
+ */
+async function consumeAssertionId(assertionId: string): Promise<boolean> {
+  const key = `${SAML_ASSERTION_KEY_PREFIX}${assertionId}`;
+  // SET key 1 EX <ttl> NX — returns 'OK' on first use, null if already set.
+  // ioredis overload order: key, value, 'EX', seconds, 'NX'.
+  const result = await redis().set(key, '1', 'EX', SAML_ASSERTION_CACHE_TTL_SECONDS, 'NX');
+  return result === 'OK';
+}
+
+/**
+ * Truncate an IP address for audit metadata (SEC-012 — PII minimisation).
+ *   IPv4 → drop last octet   (192.168.1.42  → 192.168.1.0   = /24)
+ *   IPv6 → keep first 3 groups  (2001:db8:85a3::1 → 2001:db8:85a3::/48)
+ * Returns undefined for missing / unparseable values.
+ */
+export function truncateIp(ip: string | undefined): string | undefined {
+  if (!ip) return undefined;
+  // IPv4 — four dot-separated octets.
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(ip);
+  if (v4) return `${v4[1]}.${v4[2]}.${v4[3]}.0`;
+  // IPv6 — strip optional zone ID then keep first 3 colon-separated groups.
+  const bare = ip.replace(/%.*$/, '');
+  const groups = bare.split(':');
+  if (groups.length >= 3) return `${groups[0]}:${groups[1]}:${groups[2]}::/48`;
+  return undefined;
+}
 
 /** Caller identity for config mutations (from req.principal). */
 export interface SsoActor {
@@ -68,30 +104,6 @@ export interface AcsDeps {
     slug: string,
     samlResponse: string,
   ) => Promise<SamlProfileLike>;
-}
-
-/**
- * Flat row returned by the §4b SECURITY DEFINER resolver
- * `app_resolve_user_by_email_digest` (see ../service.ts / the preauth_resolvers
- * migration). SSO JIT match keys on the globally-unique emailDigest BEFORE any
- * org context exists, so a direct User read under d2d_app would deny-by-default
- * (orgId compared against a NULL GUC). The resolver runs as the table owner for
- * this one keyed lookup and hands back the owning orgId so the cross-org guard
- * still fires; we re-enter the belt with org.id for the provisioning write. The
- * resolver also returns passwordHash, which SSO never reads, so it is omitted
- * here — `$queryRaw` only narrows the columns we dereference. Enum columns
- * arrive as text and are re-narrowed when building the session user.
- */
-interface ResolvedUserRow {
-  id: string;
-  orgId: string;
-  role: string;
-  regionCode: string;
-  brandCode: string;
-  email: string;
-  givenName: string;
-  familyName: string;
-  status: string;
 }
 
 function toPublic(slug: string, cfg: SsoConfiguration): SsoConfigPublic {
@@ -128,25 +140,17 @@ function toIssueUser(u: User): IssueUser {
 export async function loadActiveConfig(
   slug: string,
 ): Promise<{ org: Org; config: SsoConfiguration }> {
-  // Org is a control-plane table (no orgId, no RLS policy), so the public-slug
-  // lookup is readable pre-auth even as the non-owner d2d_app role. SsoConfiguration
-  // IS RLS-enabled, so it must be read through the belt with the org.id we just
-  // derived from the slug — an `include: { ssoConfiguration }` here would return
-  // null under d2d_app because no GUC is pinned before a session exists.
-  const org = await prisma().org.findUnique({ where: { slug } });
-  if (!org) {
-    throw new ProblemError(Problems.notFound('SsoConfiguration', slug));
-  }
-  const config = await tenantPrismaTx(org.id).ssoConfiguration.findUnique({
-    where: { orgId: org.id },
+  const org = await prisma().org.findUnique({
+    where: { slug },
+    include: { ssoConfiguration: true },
   });
-  if (!config) {
+  if (!org || !org.ssoConfiguration) {
     throw new ProblemError(Problems.notFound('SsoConfiguration', slug));
   }
-  if (config.status === 'revoked') {
+  if (org.ssoConfiguration.status === 'revoked') {
     throw new ProblemError(Problems.forbidden('SSO is revoked for this organization'));
   }
-  return { org, config };
+  return { org, config: org.ssoConfiguration };
 }
 
 /**
@@ -182,7 +186,10 @@ export async function upsertSsoConfigurationBySlug(
   input: UpsertSsoConfigInput,
   actor: SsoActor,
 ): Promise<SsoConfigPublic> {
-  const org = await prisma().org.findUnique({ where: { slug } });
+  const org = await prisma().org.findUnique({
+    where: { slug },
+    include: { ssoConfiguration: true },
+  });
   if (!org) {
     throw new ProblemError(Problems.notFound('Org', slug));
   }
@@ -191,23 +198,14 @@ export async function upsertSsoConfigurationBySlug(
     throw new ProblemError(Problems.forbidden('Cannot configure SSO for another organization'));
   }
 
-  // Read the current config (if any) through the belt. org.id is derived from the
-  // public slug, not from the (possibly cross-org super_admin) actor, so this is
-  // always the correct tenant; a bare include would read null under d2d_app.
-  const existing = await tenantPrismaTx(org.id).ssoConfiguration.findUnique({
-    where: { orgId: org.id },
-  });
-
   // Reuse the existing row id so the cert AAD stays bound to the same row.
-  const configId = existing?.id ?? newId('sso');
+  const configId = org.ssoConfiguration?.id ?? newId('sso');
   const certificateKey = encryptIdpCert(configId, input.idpCertificate);
   const attributeMappingJson = input.attributeMapping as unknown as Prisma.InputJsonValue;
-  const existingStatus = existing?.status;
+  const existingStatus = org.ssoConfiguration?.status;
   const status = existingStatus === 'revoked' ? 'revoked' : (existingStatus ?? 'pending');
 
-  // GUC pinned to org.id so the upsert's WITH CHECK (and the Org/audit co-writes)
-  // pass under d2d_app post-cutover.
-  const saved = await tenantTx(org.id, async (tx) => {
+  const saved = await prisma().$transaction(async (tx) => {
     const cfg = await tx.ssoConfiguration.upsert({
       where: { orgId: org.id },
       create: {
@@ -247,13 +245,12 @@ export async function upsertSsoConfigurationBySlug(
 
 /** Public (cert-free) view of the SSO config, or null if not configured. */
 export async function getSsoConfigPublic(slug: string): Promise<SsoConfigPublic | null> {
-  const org = await prisma().org.findUnique({ where: { slug } });
-  if (!org) return null;
-  const config = await tenantPrismaTx(org.id).ssoConfiguration.findUnique({
-    where: { orgId: org.id },
+  const org = await prisma().org.findUnique({
+    where: { slug },
+    include: { ssoConfiguration: true },
   });
-  if (!config) return null;
-  return toPublic(org.slug ?? slug, config);
+  if (!org || !org.ssoConfiguration) return null;
+  return toPublic(org.slug ?? slug, org.ssoConfiguration);
 }
 
 /** Build the IdP redirect URL for SP-initiated login. */
@@ -309,6 +306,21 @@ export async function consumeAcs(
     throw new ProblemError(Problems.unauthorized('SAML assertion validation failed'));
   }
 
+  // 3a. Single-use assertion-ID cache (SEC-004 — replay defence).
+  //     The assertion ID is the SAML <Assertion ID="..."> attribute, available
+  //     on the validated profile as profile.ID (node-saml Profile type). If the
+  //     IdP omits it we fall back to a hash of the raw response — an assertion
+  //     without an ID is unusual but still needs replay protection.
+  const assertionId: string =
+    typeof profile['ID'] === 'string' && profile['ID'].length > 0
+      ? profile['ID']
+      : createHash('sha256').update(input.samlResponse).digest('hex');
+
+  const firstUse = await consumeAssertionId(assertionId);
+  if (!firstUse) {
+    throw new ProblemError(Problems.forbidden('SAML assertion already consumed (replay rejected)'));
+  }
+
   // 4. Map attributes (throws if no usable email).
   const mapping = config.attributeMappingJson as unknown as SamlAttributeMapping;
   let mapped;
@@ -318,16 +330,9 @@ export async function consumeAcs(
     throw new ProblemError(Problems.unauthorized('SAML assertion missing required attributes'));
   }
 
-  // 5. JIT match-or-provision, keyed on the globally-unique emailDigest. §4b:
-  //    resolve via the SECURITY DEFINER resolver — the IdP's email may belong to
-  //    ANY org (the exact cross-org case we must reject), and there is no org
-  //    context here, so a direct User read under d2d_app would deny-by-default.
-  //    The resolver returns the owning orgId so the cross-org guard still fires.
+  // 5. JIT match-or-provision, keyed on the globally-unique emailDigest.
   const digest = emailDigest(mapped.email, env().PII_SEARCH_KEY);
-  const resolvedRows = await prisma().$queryRaw<ResolvedUserRow[]>`
-    SELECT * FROM app_resolve_user_by_email_digest(${digest})
-  `;
-  const existing = resolvedRows[0];
+  const existing = await prisma().user.findUnique({ where: { emailDigest: digest } });
 
   let userForSession: IssueUser;
   let created = false;
@@ -342,22 +347,10 @@ export async function consumeAcs(
       throw new ProblemError(Problems.forbidden('User is not active'));
     }
     // Returning user: do NOT mutate role from the assertion (anti-escalation).
-    // Enum columns arrive from the resolver as text; re-narrow to the session shape.
-    userForSession = {
-      id: existing.id,
-      email: existing.email,
-      role: existing.role as PlatformRole,
-      orgId: existing.orgId,
-      regionCode: existing.regionCode as RegionCode,
-      brandCode: existing.brandCode,
-      givenName: existing.givenName,
-      familyName: existing.familyName,
-    };
+    userForSession = toIssueUser(existing);
   } else {
     const userId = newId('usr');
-    // GUC pinned to org.id so the User insert's WITH CHECK + the audit co-write
-    // pass under d2d_app post-cutover.
-    const createdUser = await tenantTx(org.id, async (tx) => {
+    const createdUser = await prisma().$transaction(async (tx) => {
       const u = await tx.user.create({
         data: {
           id: userId,
@@ -379,7 +372,8 @@ export async function consumeAcs(
         action: 'auth.sso_provisioned',
         resourceType: 'User',
         resourceId: u.id,
-        metadata: { provider: config.provider, role: mapped.role, ip: input.ip },
+        // SEC-012: store truncated /24 (IPv4) or /48 (IPv6) prefix only.
+        metadata: { provider: config.provider, role: mapped.role, ip: truncateIp(input.ip) },
       });
       return u;
     });
@@ -395,10 +389,8 @@ export async function consumeAcs(
   });
 
   // 7. Mark validated + promote pending→active. updateMany with a status guard
-  //    so a concurrent revoke is never overwritten. Scoped through the belt so
-  //    the GUC admits the row under d2d_app (an un-GUC'd updateMany would match
-  //    zero rows post-cutover); the wrapper also ANDs orgId into the where.
-  await tenantPrismaTx(org.id).ssoConfiguration.updateMany({
+  //    so a concurrent revoke is never overwritten.
+  await prisma().ssoConfiguration.updateMany({
     where: { id: config.id, status: { in: ['pending', 'active'] } },
     data: { lastValidatedAt: new Date(), status: 'active' },
   });

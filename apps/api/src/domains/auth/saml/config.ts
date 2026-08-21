@@ -57,7 +57,11 @@ export function decryptIdpCert(config: Pick<SsoConfiguration, 'id' | 'certificat
  *   - `idpIssuer` is verified against the assertion's Issuer.
  *   - `audience` pinned to our SP entityId so an assertion minted for another
  *     SP is rejected.
- *   - `validateInResponseTo: never` (stateless SP; see relay-state.ts note).
+ *   - `validateInResponseTo: ifPresent` — when the assertion carries an
+ *     InResponseTo attribute (SP-initiated flow) node-saml verifies it matches
+ *     the ID of an AuthnRequest we issued. Combined with the Redis single-use
+ *     assertion-ID cache in consumeAcs, this closes the SAML response replay
+ *     vector (SEC-004).
  */
 export function buildSaml(config: SsoConfiguration, slug: string): SAML {
   const idpCert = decryptIdpCert(config);
@@ -70,7 +74,7 @@ export function buildSaml(config: SsoConfiguration, slug: string): SAML {
     audience: entityIdFor(slug),
     wantAssertionsSigned: true,
     wantAuthnResponseSigned: false,
-    validateInResponseTo: ValidateInResponseTo.never,
+    validateInResponseTo: ValidateInResponseTo.ifPresent,
     acceptedClockSkewMs: 5000,
     identifierFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
   });

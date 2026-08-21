@@ -1,16 +1,11 @@
-import {
-  CreditCard,
-  Download,
-  ExternalLink,
-  Send,
-  AlertTriangle,
-  CheckCircle2,
-} from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { CreditCard, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { InvoicesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { getAccount, type Account } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { ExportCsvButton, InvoiceRowActions } from './InvoiceActions';
 
 interface Invoice {
   id: string;
@@ -72,7 +67,12 @@ function buildInvoiceHistory(account: Account): Invoice[] {
   });
 }
 
-export default function AccountInvoicesPage({ params }: { params: { slug: string } }): JSX.Element {
+export default async function AccountInvoicesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
@@ -120,6 +120,12 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Invoices">
       <div className="space-y-5 max-w-[1400px]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] text-muted">
+            Demo data — live billing wiring lands in Phase 1.2
+          </div>
+          <DataSourceBadge source="fixture" />
+        </div>
         <Banner tone={account.health === 'attention' ? 'warn' : 'info'}>
           <span className="text-[13px] flex items-center gap-2">
             <CreditCard size={13} />
@@ -283,11 +289,7 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
           title="Invoice history"
           subtitle={`${invoices.length} prior invoices · NET-15 terms`}
           paddedBody={false}
-          action={
-            <Button variant="ghost" size="sm" leftIcon={<Download size={13} />}>
-              Export CSV
-            </Button>
-          }
+          action={<ExportCsvButton />}
         >
           {invoices.length === 0 ? (
             <div className="p-5">
@@ -342,20 +344,7 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                         <Money cents={inv.amountCents} region={region} />
                       </td>
                       <td>
-                        <div className="flex items-center gap-1">
-                          <button
-                            className="text-soft hover:text-ink p-1 rounded hover:bg-paper"
-                            title="View PDF"
-                          >
-                            <ExternalLink size={13} />
-                          </button>
-                          <button
-                            className="text-soft hover:text-ink p-1 rounded hover:bg-paper"
-                            title="Resend"
-                          >
-                            <Send size={13} />
-                          </button>
-                        </div>
+                        <InvoiceRowActions invoiceId={inv.id} />
                       </td>
                     </tr>
                   );

@@ -17,9 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Hope Forward · D2D Partner Portal',
-  description:
-    'Billing, attribution, compliance and configuration for your Door 2 Digital engagement.',
+  title: 'Pilot-Charlie · D2D Partner Portal',
+  description: 'Billing, conversions, and compliance for your D2D campaign.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

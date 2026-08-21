@@ -16,6 +16,7 @@
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { db } from '@d2d/database';
 import { getSession, type Session } from '@/lib/session';
 
 const PROBLEM_BASE = 'https://docs.d2d.io/problems';
@@ -114,6 +115,32 @@ export function isCrossTenantOperator(session: Session): boolean {
   return CROSS_TENANT_ROLES.has(session.role);
 }
 
+/**
+ * Roles permitted to mutate the roster (create / edit / delete shifts).
+ * knocker / inside_sales / accountant / auditor / viewer are read-only on
+ * scheduling. Default-deny: unknown roles cannot write.
+ */
+const ROSTER_WRITE_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin', 'manager']);
+
+export function canWriteRoster(session: Session): boolean {
+  return ROSTER_WRITE_ROLES.has(session.role);
+}
+
+/**
+ * Roles permitted to take OPERATOR ACTIONS that mutate org-visible field state
+ * or push to the fleet: territory reassignment, fleet broadcasts, pipeline
+ * lead moves, marketing creative queue/publish/generate. knocker, inside_sales,
+ * accountant, auditor, viewer are read-only on these. Default-deny: an unknown
+ * role gets nothing. Centralised so every privileged BFF action gates identically
+ * — authn (requireSession) is NOT authz; every sensitive POST/PATCH must also
+ * pass canOperate.
+ */
+const OPERATOR_ROLES: ReadonlySet<string> = new Set(['super_admin', 'org_admin', 'manager']);
+
+export function canOperate(session: Session): boolean {
+  return OPERATOR_ROLES.has(session.role);
+}
+
 export function requireIdempotencyKey(req: NextRequest): string | NextResponse {
   const key = req.headers.get('idempotency-key');
   if (!key || key.length < 8) return idempotencyKeyMissing();
@@ -143,4 +170,59 @@ export function ok<T>(
     status: init?.status ?? 200,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
+}
+
+/**
+ * The org the caller is targeting for a slug-addressed sub-account route.
+ * `regionCode` is needed by every write path (audit chain + row regionCode).
+ */
+export interface ResolvedOrg {
+  id: string;
+  slug: string;
+  regionCode: 'US' | 'AU' | 'SG';
+  tradingName: string;
+}
+
+/**
+ * Resolve `[slug]` → Org and authorize the verified session against it.
+ *
+ * Mirrors the authorization in /api/orgs/[slug]/leads exactly: a genuine
+ * cross-tenant operator (super_admin) may target any sub-account; everyone
+ * else is pinned to their own `session.orgId`. Returns the resolved org on
+ * success, or an RFC 7807 NextResponse (404 / 403 / 500) the handler MUST
+ * early-return. Every per-account workspace BFF route funnels through this so
+ * one account can never read or write another's knockers / catalog / shifts.
+ *
+ * Pattern:
+ *   const orgOrErr = await resolveAccountOrg(slug, session);
+ *   if (orgOrErr instanceof NextResponse) return orgOrErr;
+ *   const org = orgOrErr;
+ */
+export async function resolveAccountOrg(
+  slug: string,
+  session: Session,
+): Promise<ResolvedOrg | NextResponse> {
+  if (!slug) return notFound('Org', slug);
+
+  let org: { id: string; slug: string | null; regionCode: 'US' | 'AU' | 'SG'; tradingName: string } | null;
+  try {
+    org = await db.org.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, regionCode: true, tradingName: true },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[resolveAccountOrg] org lookup failed:', err);
+    return internal('Failed to resolve account');
+  }
+  if (!org || !org.slug) return notFound('Org', slug);
+
+  // Authorization over a CRYPTOGRAPHICALLY VERIFIED session: a cross-tenant
+  // operator can target any org; everyone else only their own. Tenant scope is
+  // also re-enforced in every query below (where: { orgId: org.id }).
+  if (!isCrossTenantOperator(session) && session.orgId !== org.id) {
+    return forbidden('You do not have access to this sub-account');
+  }
+
+  return { id: org.id, slug: org.slug, regionCode: org.regionCode, tradingName: org.tradingName };
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { use } from 'react';
+
 import { AccountShell } from '@/components/AccountShell';
 import { PlanningSurface } from '@/components/PlanningSurface';
 import { PlanningEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
@@ -7,7 +9,12 @@ import { getAccount } from '@/lib/accounts';
 import { getAccountPlanning } from '@/lib/account-planning';
 import { firstRunSnapshot } from '@/lib/first-run';
 
-export default function Page({ params }: { params: { slug: string } }): JSX.Element {
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const account = getAccount(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (firstRun.isFirstRun) {

@@ -57,6 +57,25 @@ export const newBrandKitId = (): string => `brk_${ulid()}`;
 export const newBillingId = (): string => `bil_${ulid()}`;
 export const newAuditId = (): string => `aud_${ulid()}`;
 export const newIdempotencyKey = (): string => `idem_${ulid()}`;
+export const newShiftId = (): string => `ksft_${ulid()}`;
+export const newAssignmentId = (): string => `tas_${ulid()}`;
+export const newUserId = (): string => `usr_${ulid()}`;
+export const newOfferingId = (): string => `svo_${ulid()}`;
+export const newTerritoryId = (): string => `ter_${ulid()}`;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Invite tokens — mirrors apps/api domains/auth/tokens.generateInviteToken.
+// The opaque token is base64url(randomBytes(24)); we persist ONLY its SHA-256
+// (UserCredential.inviteTokenHash) and hand the plaintext back once for the
+// manager to send. acceptInvite() in the Fastify API verifies via
+// hashRefreshToken() = sha256(plaintext), so a token minted here unlocks there.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function generateInviteToken(): { plaintext: string; hash: string } {
+  const plaintext = randomBytes(24).toString('base64url');
+  const hash = createHash('sha256').update(plaintext).digest('hex');
+  return { plaintext, hash };
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Slug helpers

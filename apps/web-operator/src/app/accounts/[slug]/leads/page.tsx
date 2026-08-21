@@ -87,12 +87,16 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
       orgName: org.tradingName,
       leads: leads.map((l, i) => ({
         id: l.id,
+        // PII-first: bulk list shows given name + family INITIAL, masked
+        // email/phone, and a COARSE address (locality + region only — no street
+        // or postcode). Full PII for a single lead is gated behind the
+        // lead-detail JIT unmask path, which audits the read.
         givenName: l.givenName,
-        familyName: l.familyName,
+        familyName: l.familyName ? `${l.familyName.charAt(0)}.` : '',
         email: maskEmail(l.email),
         phone: maskPhone(l.phone),
         address: l.address
-          ? `${l.address.street}, ${l.address.locality}${l.address.region ? `, ${l.address.region}` : ''}${l.address.postcode ? ` ${l.address.postcode}` : ''}`
+          ? `${l.address.locality}${l.address.region ? `, ${l.address.region}` : ''}`
           : null,
         status: l.status,
         // Sources are stored at the Knock layer (sourceKnockId); for the demo
@@ -141,10 +145,11 @@ async function loadLeads(slug: string): Promise<LoadResult | 'not-found' | 'forb
 }
 
 export default async function LeadsInboxPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<JSX.Element> {
+  const params = await paramsPromise;
   const session = await getSession();
   if (!session) redirect(`/login?next=/accounts/${params.slug}/leads`);
 

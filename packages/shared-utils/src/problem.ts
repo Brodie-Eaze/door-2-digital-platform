@@ -77,12 +77,18 @@ export const Problems = {
   forbidden: (detail = 'Insufficient permissions'): Problem =>
     problem('forbidden', 'Forbidden', { status: 403, detail }),
 
-  /** Cross-tenant access attempt. Always audit-logged. */
-  tenantMismatch: (orgId: string): Problem =>
-    problem('tenant-mismatch', 'Tenant mismatch', {
-      status: 403,
-      detail: 'You do not have access to this org',
-      extras: { orgId },
+  /**
+   * Cross-tenant access attempt. Always audit-logged server-side (the caller
+   * passes orgId for the audit row). The RESPONSE is a generic 404 with NO orgId
+   * echoed — a cross-tenant id must be indistinguishable from a non-existent one,
+   * else the 403 + leaked orgId becomes an enumeration oracle ("this id exists,
+   * just in another tenant"). The orgId param is retained for the audit only and
+   * is never returned to the caller.
+   */
+  tenantMismatch: (_orgId: string): Problem =>
+    problem('not-found', 'Not found', {
+      status: 404,
+      detail: 'Resource not found',
     }),
 
   /** Cross-region access attempt. Always audit-logged. */

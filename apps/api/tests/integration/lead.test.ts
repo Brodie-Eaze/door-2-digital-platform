@@ -264,14 +264,12 @@ describe('GET /v1/leads/:id', () => {
     expect(get.statusCode).toBe(200);
     expect(get.json().lead.activities).toEqual([]);
 
-    // RLS belt (SEC-005): org B cannot see org A's lead — the row is invisible, so
-    // the read resolves to null → 404 (not 403). Withholding existence is the point
-    // of tenant isolation; a 403 would itself disclose that the resource exists.
     const peek = await app.inject({
       method: 'GET',
       url: `/v1/leads/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
     expect(peek.statusCode).toBe(404);
   });
 });
@@ -433,14 +431,16 @@ describe('POST /v1/leads/:id/activities', () => {
 });
 
 describe('POST /v1/leads/:id/dnk', () => {
-  it('returns 501 — handled by DNK service', async () => {
+  // dnk is now IMPLEMENTED (flags address do-not-knock + archives lead), not a
+  // 501 stub. A well-formed call against an unknown id resolves to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/leads/lead_anything/dnk',
-      headers: { authorization: `Bearer ${token}` },
+      url: '/v1/leads/lead_does_not_exist/dnk',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'lead-dnk-404' },
       payload: {},
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

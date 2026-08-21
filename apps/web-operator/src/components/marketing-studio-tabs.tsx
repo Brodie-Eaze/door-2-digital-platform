@@ -11,6 +11,7 @@ import {
   Wand2,
   Image as ImageIcon,
   Megaphone,
+  ListChecks,
   ShieldCheck,
   Target,
   Plug,
@@ -21,12 +22,14 @@ export type MarketingStudioSurface =
   | 'generate'
   | 'library'
   | 'campaigns'
+  | 'review-queue'
   | 'brand-safety'
   | 'retargeting'
   | 'integrations';
 
 interface MarketingStudioTabsProps {
-  slug: string;
+  /** Per-account tab set is keyed by slug; omit for the HQ tab set. */
+  slug?: string;
   active: MarketingStudioSurface;
 }
 
@@ -40,13 +43,15 @@ const TABS: Array<{
   { key: 'generate', label: 'Generator', path: '/generate', icon: Wand2 },
   { key: 'library', label: 'Library', path: '/library', icon: ImageIcon },
   { key: 'campaigns', label: 'Campaigns', path: '/campaigns', icon: Megaphone },
+  { key: 'review-queue', label: 'Review queue', path: '/review-queue', icon: ListChecks },
   { key: 'brand-safety', label: 'Brand safety', path: '/brand-safety', icon: ShieldCheck },
   { key: 'retargeting', label: 'Retargeting', path: '/retargeting', icon: Target },
   { key: 'integrations', label: 'Integrations', path: '/integrations', icon: Plug },
 ];
 
 export function MarketingStudioTabs({ slug, active }: MarketingStudioTabsProps): JSX.Element {
-  const base = `/accounts/${slug}/marketing-studio`;
+  // HQ surfaces live at /marketing-studio; per-account at /accounts/:slug/marketing-studio.
+  const base = slug ? `/accounts/${slug}/marketing-studio` : '/marketing-studio';
   return (
     <nav
       className="border-b border-line2 flex items-center gap-0 overflow-x-auto"

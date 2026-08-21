@@ -32,7 +32,10 @@ import {
   Sparkles,
   Radio,
   Target,
+  ShoppingBag,
   LogOut,
+  Link2,
+  Database,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';
@@ -130,6 +133,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
         { href: `${base}/live-map`, label: 'Live field map', icon: Radio },
         { href: `${base}/knockers`, label: 'Knockers', icon: MapIcon },
         { href: `${base}/territories`, label: 'Territories', icon: Compass },
+        { href: `${base}/addresses`, label: 'Address Intel', icon: Database },
         { href: `${base}/roster`, label: 'Roster & shifts', icon: CalendarClock },
         { href: `${base}/planning`, label: 'Planning', icon: Target },
         { href: `${base}/knocker-ios`, label: 'Knocker iOS preview', icon: Smartphone },
@@ -142,6 +146,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
         { href: `${base}/forms`, label: 'Forms', icon: FileText },
         { href: `${base}/sites`, label: 'Sites & Funnels', icon: Globe },
         { href: `${base}/memberships`, label: 'Memberships', icon: Heart },
+        { href: `${base}/services`, label: 'Services', icon: ShoppingBag },
         { href: `${base}/tasks`, label: 'Tasks', icon: CheckSquare },
         { href: `${base}/workflows`, label: 'Workflows', icon: Workflow },
         { href: `${base}/files`, label: 'Files', icon: FolderOpen },
@@ -158,6 +163,7 @@ export function AccountShell({ accountSlug, pageTitle, children }: AccountShellP
       label: 'Workspace',
       items: [
         { href: `${base}/team`, label: 'Team', icon: Users },
+        { href: `${base}/integrations`, label: 'CRM Integrations', icon: Link2 },
         { href: `${base}/settings`, label: 'Settings', icon: Settings, roles: ['org_admin'] },
       ],
     },

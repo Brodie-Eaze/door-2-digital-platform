@@ -1,7 +1,7 @@
 /**
  * User routes — invite / accept-invite / list / get / patch / archive.
  *
- * Role / MFA-reset endpoints are still 501 stubs (Phase 1.2).
+ * All endpoints are live: invite / accept-invite / list / get / patch / archive / role / reset-mfa.
  */
 import type { FastifyInstance } from 'fastify';
 import {
@@ -20,7 +20,11 @@ import {
   updateUser,
   changeUserRole,
   archiveUser,
+  resendInvite,
+  resetMfa,
+  unlockUser,
 } from './service';
+import { getDailyStats } from './daily-stats.service';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
@@ -30,7 +34,11 @@ interface UserIdParams {
 }
 
 export async function registerUser(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'user', status: 'live', phase: '1.1' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'user',
+    status: 'live',
+    phase: '1.1',
+  }));
 
   // POST /v1/users — invite a user; returns inviteToken
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -53,13 +61,18 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /v1/users/accept-invite — unauthenticated; invite token is the natural
-  // deduplication key (the service rejects an already-consumed token).
-  app.post('/accept-invite', async (req, reply) => {
-    const body = acceptInviteRequestSchema.parse(req.body);
-    const user = await acceptInvite(body);
-    return reply.code(200).send({ user });
-  });
+  // POST /v1/users/accept-invite — unauthenticated
+  // SEC-003: tight rate limit — 5 attempts per IP per minute. Prevents invite
+  // token brute-force on this unauthenticated endpoint.
+  app.post(
+    '/accept-invite',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = acceptInviteRequestSchema.parse(req.body);
+      const user = await acceptInvite(body);
+      return reply.code(200).send({ user });
+    },
+  );
 
   // GET /v1/users — list within actor's org
   app.get('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -84,7 +97,25 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ user });
   });
 
-  // PATCH /v1/users/:id — idempotent by HTTP definition; no Idempotency-Key required.
+  // GET /v1/users/:userId/daily-stats — today's activity + in-org leaderboard
+  // for the native Knocker "Me" screen. Self-only unless the caller is an
+  // admin/manager (enforced in the service).
+  app.get<{ Params: { userId: string } }>(
+    '/:userId/daily-stats',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      const stats = await getDailyStats(req.params.userId, {
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        regionCode: ctx.regionCode as never,
+        role: ctx.role,
+      });
+      return reply.code(200).send(stats);
+    },
+  );
+
+  // PATCH /v1/users/:id
   app.patch<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
     const ctx = requireTenant(req);
     const body = updateUserRequestSchema.parse(req.body);
@@ -120,17 +151,27 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/users/:id/invite — resend invite (501 until rotation lands)
+  // POST /v1/users/:id/invite — resend invite token
   app.post<{ Params: UserIdParams }>(
     '/:id/invite',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'Invite-resend lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const result = await resendInvite(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: result };
+        },
+      });
+    },
   );
 
   // POST /v1/users/:id/role — guarded role change. requireAuth + org_admin/
@@ -160,16 +201,66 @@ export async function registerUser(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /v1/users/:id/reset-mfa — 501 (Phase 1.2)
+  // POST /v1/users/:id/unlock — clear a login lockout (lockedUntil +
+  // failedLoginCount). org_admin/super_admin only (enforced in the service via
+  // ROLE_GRANT_ROLES — tighter than archive). Idempotent: replays via the
+  // Idempotency-Key, and re-unlocking an unlocked account is a no-op that still
+  // audits. Same-org guard → cross-tenant target is a tenant mismatch (404).
+  app.post<{ Params: UserIdParams }>(
+    '/:id/unlock',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await unlockUser(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
+  );
+
+  // POST /v1/users/:id/reset-mfa — clear TOTP secret; user must re-enroll
   app.post<{ Params: UserIdParams }>(
     '/:id/reset-mfa',
     { preHandler: requireAuth },
-    async (_req, reply) =>
-      reply.code(501).type('application/problem+json').send({
-        type: 'https://docs.d2d.io/problems/not-implemented',
-        title: 'Not implemented',
-        status: 501,
-        detail: 'MFA reset lands in Phase 1.2',
-      }),
+    async (req, reply) => {
+      const ctx = requireTenant(req);
+      await withIdempotency({
+        req,
+        reply,
+        orgId: ctx.orgId,
+        handler: async () => {
+          const user = await resetMfa(req.params.id, {
+            userId: ctx.userId,
+            orgId: ctx.orgId,
+            regionCode: ctx.regionCode as never,
+            role: ctx.role,
+          });
+          return { status: 200, body: { user } };
+        },
+      });
+    },
   );
+
+  // DELETE /v1/users/:id — soft-delete (sets status → 'archived', revokes tokens).
+  // ADR-0013: immutable history — records are never hard-deleted.
+  app.delete<{ Params: UserIdParams }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    const user = await archiveUser(req.params.id, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+      role: ctx.role,
+    });
+    return reply.code(200).send({ user });
+  });
 }

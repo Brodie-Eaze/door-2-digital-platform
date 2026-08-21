@@ -22,9 +22,10 @@ import type {
   ProviderWebhookEvent,
   Result,
 } from '../types';
-import { isStubMode, shortHash, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, shortHash, stubPing } from './stub';
 
 const TIKTOK_BASE = 'https://business-api.tiktok.com/open_api/v1.3' as const;
+const TIKTOK_TIMEOUT_MS = 15_000 as const;
 
 export function createTikTokAdapter(): ProviderAdapter {
   const kind = 'tiktok_marketing' as const;
@@ -42,7 +43,9 @@ export function createTikTokAdapter(): ProviderAdapter {
     docsUrl: 'https://business-api.tiktok.com/portal/docs',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('TikTok Ads', 'tt_demo') };
       }
       const accessToken = config.credentials.accessToken;
@@ -53,35 +56,37 @@ export function createTikTokAdapter(): ProviderAdapter {
           error: new InvalidConfigError(kind, 'accessToken + advertiserId required'),
         };
       }
-      try {
-        const r = await fetch(
-          `${TIKTOK_BASE}/advertiser/info/?advertiser_ids=["${advertiserId}"]`,
-          { headers: { 'Access-Token': accessToken } },
-        );
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `TikTok ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as {
-          data?: { list?: Array<{ advertiser_id: string; name: string }> };
-        };
-        const first = json.data?.list?.[0];
+      const rr = await fetchWithTimeout(
+        kind,
+        `${TIKTOK_BASE}/advertiser/info/?advertiser_ids=["${advertiserId}"]`,
+        { headers: { 'Access-Token': accessToken } },
+        TIKTOK_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            accountLabel: first?.name ?? advertiserId,
-            accountId: first?.advertiser_id ?? advertiserId,
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `TikTok ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as {
+        data?: { list?: Array<{ advertiser_id: string; name: string }> };
+      };
+      const first = json.data?.list?.[0];
+      return {
+        ok: true,
+        data: {
+          accountLabel: first?.name ?? advertiserId,
+          accountId: first?.advertiser_id ?? advertiserId,
+        },
+      };
     },
 
     async buildAudience(input: BuildAudienceInput, config: ProviderConfig) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return {
           ok: true,
           data: { audienceId: `tt_aud_${shortHash(input.name)}` },
@@ -98,7 +103,9 @@ export function createTikTokAdapter(): ProviderAdapter {
     },
 
     async deliverCampaign(input: DeliverCampaignInput, config: ProviderConfig) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return {
           ok: true,
           data: { campaignId: `tt_cmp_${shortHash(input.name)}` },

@@ -41,7 +41,7 @@ enum Vertical {
 
 enum OrgType {
   operator // D2D-internal entity
-  client   // Customer (e.g. Pilot-Charlie)
+  client // Customer (e.g. Pilot-Charlie)
 }
 
 enum PlatformRole {
@@ -149,6 +149,14 @@ enum SsoProvider {
   generic_saml
 }
 
+enum KnockerShiftStatus {
+  scheduled
+  active
+  lunch
+  missed
+  completed
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Org, BrandKit, Billing, SSO
 // ───────────────────────────────────────────────────────────────────────────
@@ -173,89 +181,99 @@ model Org {
   aiRetargetingOptOut Boolean @default(false)
 
   // Enterprise tenant flags (Pilot-Charlie)
-  dedicatedDb Boolean @default(false)
+  dedicatedDb Boolean      @default(false)
   ssoProvider SsoProvider?
   ssoMetadata Json?
 
   createdAt  DateTime  @default(now())
   archivedAt DateTime?
 
-  users                   User[]
-  territories             Territory[]
-  campaigns               Campaign[]
-  leads                   Lead[]
-  knockSessions           KnockSession[]
-  knocks                  Knock[]
-  conversions             Conversion[]
-  commissionPlans         CommissionPlan[]
-  commissions             Commission[]
-  payoutBatches           PayoutBatch[]
-  adAccounts              AdAccount[]
-  creatives               Creative[]
-  adCampaigns             AdCampaign[]
-  webhookEndpoints        WebhookEndpoint[]
-  apiKeys                 ApiKey[]
-  brandKit                BrandKit?
-  billing                 OrgBilling?
-  ssoConfiguration        SsoConfiguration?
+  users                      User[]
+  territories                Territory[]
+  campaigns                  Campaign[]
+  serviceOfferings           ServiceOffering[]
+  leads                      Lead[]
+  knockSessions              KnockSession[]
+  knocks                     Knock[]
+  conversions                Conversion[]
+  commissionPlans            CommissionPlan[]
+  commissions                Commission[]
+  payoutBatches              PayoutBatch[]
+  adAccounts                 AdAccount[]
+  creatives                  Creative[]
+  adCampaigns                AdCampaign[]
+  webhookEndpoints           WebhookEndpoint[]
+  apiKeys                    ApiKey[]
+  brandKit                   BrandKit?
+  billing                    OrgBilling?
+  ssoConfiguration           SsoConfiguration?
   paidSolicitorRegistrations PaidSolicitorRegistration[]
-  providerConnections     ProviderConnection[]
-  contentGenerationJobs   ContentGenerationJob[]
-  providerWebhookEvents   ProviderWebhookEvent[]
+  providerConnections        ProviderConnection[]
+  contentGenerationJobs      ContentGenerationJob[]
+  providerWebhookEvents      ProviderWebhookEvent[]
+  knockerShifts              KnockerShift[]
+  knockPhotos                KnockPhoto[]
+  voiceRecordings            VoiceRecording[]
+  propensityScores           PropensityScore[]
+  analyticsEvents            AnalyticsEvent[]
+  invoices                   Invoice[]
+  dsarRequests               DsarRequest[]
+  crmSequences               CrmSequence[]
+  crmSequenceEnrollments     CrmSequenceEnrollment[]
 
   @@index([regionCode, status])
   @@index([type, status])
 }
 
 model BrandKit {
-  id              String  @id
-  orgId           String  @unique
-  org             Org     @relation(fields: [orgId], references: [id])
-  displayName     String
-  logoLightKey    String? // S3 key (KMS encrypted)
-  logoDarkKey     String?
-  iconKey         String?
-  faviconKey      String?
-  primaryColor    String  @default("#0F172A") // hex ink
-  accentColor     String  @default("#3B82F6") // hex accent
-  customDomain    String? @unique
-  appBundleId     String? // iOS — for white-label Xcode builds
-  appPackageName  String? // Android (Phase 2+)
-  supportEmail    String?
-  supportPhone    String?
+  id               String   @id
+  orgId            String   @unique
+  org              Org      @relation(fields: [orgId], references: [id])
+  displayName      String
+  logoLightKey     String? // S3 key (KMS encrypted)
+  logoDarkKey      String?
+  iconKey          String?
+  faviconKey       String?
+  primaryColor     String   @default("#0F172A") // hex ink
+  accentColor      String   @default("#3B82F6") // hex accent
+  customDomain     String?  @unique
+  appBundleId      String? // iOS — for white-label Xcode builds
+  appPackageName   String? // Android (Phase 2+)
+  supportEmail     String?
+  supportPhone     String?
   privacyPolicyUrl String?
-  termsUrl        String?
-  updatedAt       DateTime @updatedAt
+  termsUrl         String?
+  updatedAt        DateTime @updatedAt
 }
 
 model OrgBilling {
-  id                       String   @id
-  orgId                    String   @unique
-  org                      Org      @relation(fields: [orgId], references: [id])
+  id                      String   @id
+  orgId                   String   @unique
+  org                     Org      @relation(fields: [orgId], references: [id])
   // Pilot-Charlie defaults: $2500/mo + 5/10/15%
-  platformFeeMonthlyCents  BigInt   @default(250000)
-  doorRakePercent          Decimal  @default(15.00) @db.Decimal(5, 2)
-  insideSalesRakePercent   Decimal  @default(10.00) @db.Decimal(5, 2)
-  retargetingRakePercent   Decimal  @default(5.00) @db.Decimal(5, 2)
-  billingDay               Int      @default(1) // day of month (1-28)
-  currency                 String   @default("USD")
-  micampMerchantId         String? // ISO board reference
-  stripeCustomerId         String? // for AU/SG
-  updatedAt                DateTime @updatedAt
+  platformFeeMonthlyCents BigInt   @default(250000)
+  doorRakePercent         Decimal  @default(15.00) @db.Decimal(5, 2)
+  insideSalesRakePercent  Decimal  @default(10.00) @db.Decimal(5, 2)
+  retargetingRakePercent  Decimal  @default(5.00) @db.Decimal(5, 2)
+  billingDay              Int      @default(1) // day of month (1-28)
+  currency                String   @default("USD")
+  micampMerchantId        String? // ISO board reference
+  stripeCustomerId        String? // for AU/SG
+  updatedAt               DateTime @updatedAt
 }
 
 model SsoConfiguration {
-  id                  String      @id
-  orgId               String      @unique
-  org                 Org         @relation(fields: [orgId], references: [id])
-  provider            SsoProvider
-  entityId            String
-  ssoUrl              String
-  certificateKey      String /// PII — S3 KMS
+  id                   String      @id
+  orgId                String      @unique
+  org                  Org         @relation(fields: [orgId], references: [id])
+  provider             SsoProvider
+  entityId             String
+  ssoUrl               String
+  certificateKey       String /// PII — S3 KMS
   attributeMappingJson Json
-  status              String      @default("pending") // pending | active | revoked
-  lastValidatedAt     DateTime?
-  createdAt           DateTime    @default(now())
+  status               String      @default("pending") // pending | active | revoked
+  lastValidatedAt      DateTime?
+  createdAt            DateTime    @default(now())
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -263,37 +281,44 @@ model SsoConfiguration {
 // ───────────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String       @id // usr_*
-  orgId        String
-  org          Org          @relation(fields: [orgId], references: [id])
-  email        String /// PII (vaulted ciphertext column)
-  emailDigest  String       @unique // deterministic-SIV for unique lookup
-  phone        String? /// PII
-  phoneDigest  String?      @unique
-  givenName    String /// PII
-  familyName   String /// PII
-  role         PlatformRole
-  managerId    String? // org-hierarchy parent
-  manager      User?        @relation("ReportsTo", fields: [managerId], references: [id])
-  reports      User[]       @relation("ReportsTo")
-  status       String       @default("active")
-  regionCode   RegionCode
-  brandCode    String       @default("d2d")
-  cognitoSub   String?      @unique // bridge to Cognito user pool
-  webauthnRequired Boolean  @default(false)
-  lastLoginAt  DateTime?
-  createdAt    DateTime     @default(now())
+  id               String       @id // usr_*
+  orgId            String
+  org              Org          @relation(fields: [orgId], references: [id])
+  email            String /// PII — plaintext (used by invite email flow); vault pending notification-service decrypt wiring
+  emailDigest      String       @unique // deterministic-SIV for unique lookup
+  phone            String? /// PII — masked sentinel when phoneVault present
+  phoneDigest      String?      @unique
+  phoneVault       Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
+  givenName        String /// PII — masked sentinel when givenNameVault present
+  givenNameVault   Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
+  familyName       String /// PII — masked sentinel when familyNameVault present
+  familyNameVault  Json? // AES-256-GCM encrypted blob; AAD = 'User:{id}'
+  role             PlatformRole
+  managerId        String? // org-hierarchy parent
+  manager          User?        @relation("ReportsTo", fields: [managerId], references: [id])
+  reports          User[]       @relation("ReportsTo")
+  status           String       @default("active")
+  regionCode       RegionCode
+  brandCode        String       @default("d2d")
+  cognitoSub       String?      @unique // bridge to Cognito user pool
+  webauthnRequired Boolean      @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime     @default(now())
 
-  knockSessions   KnockSession[]
-  knocks          Knock[]
-  leadActivities  LeadActivity[]
-  commissions     Commission[]
-  assignedLeads   Lead[]            @relation("AssignedTo")
-  knockerConversions Conversion[]   @relation("KnockerAttribution")
-  closerConversions  Conversion[]   @relation("CloserAttribution")
+  knockSessions        KnockSession[]
+  knocks               Knock[]
+  leadActivities       LeadActivity[]
+  commissions          Commission[]
+  assignedLeads        Lead[]                @relation("AssignedTo")
+  knockerConversions   Conversion[]          @relation("KnockerAttribution")
+  closerConversions    Conversion[]          @relation("CloserAttribution")
   territoryAssignments TerritoryAssignment[]
-  credential      UserCredential?
-  refreshTokens   RefreshToken[]
+  credential           UserCredential?
+  webAuthnCredentials  WebAuthnCredential[]
+  refreshTokens        RefreshToken[]
+  knockerShifts        KnockerShift[]
+  knockPhotos          KnockPhoto[]
+  voiceRecordings      VoiceRecording[]
 
   @@index([orgId, role])
   @@index([orgId, managerId])
@@ -305,41 +330,48 @@ model User {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Territory {
-  id          String     @id // ter_*
-  orgId       String
-  org         Org        @relation(fields: [orgId], references: [id])
-  regionCode  RegionCode
-  brandCode   String     @default("d2d")
-  name        String
-  vertical    Vertical
+  id           String     @id // ter_*
+  orgId        String
+  org          Org        @relation(fields: [orgId], references: [id])
+  regionCode   RegionCode
+  brandCode    String     @default("d2d")
+  name         String
+  vertical     Vertical
   // PostGIS geometry — Phase 1.1 placeholder as TEXT until PostGIS lands
   // on the dev DB. A follow-up migration enables postgis + ALTERs these
   // to geography(Polygon, 4326) / geography(Point, 4326).
-  polygon     String?
-  centroid    String?
-  s2CellIds   String[]   @default([]) // level-13 covering for fast lookup
-  campaignId  String?
-  campaign    Campaign?  @relation(fields: [campaignId], references: [id])
-  status      String     @default("active")
-  metadata    Json       @default("{}") // SEIFA decile, ACS median income, etc.
-  createdAt   DateTime   @default(now())
+  polygon      String?
+  centroid     String?
+  // Area model: a manager defines the canvass area as EITHER a drawn polygon
+  // ('polygon') OR a center+radius circle ('radius'). The app renders whichever
+  // is set — it pushes the AREA to canvass, never per-house targets. Radius uses
+  // `centroid` as the center ("lng lat") + radiusMeters.
+  areaType     String     @default("polygon") // "polygon" | "radius"
+  radiusMeters Int? // set when areaType = 'radius'
+  s2CellIds    String[]   @default([]) // level-13 covering for fast lookup
+  campaignId   String?
+  campaign     Campaign?  @relation(fields: [campaignId], references: [id])
+  status       String     @default("active")
+  metadata     Json       @default("{}") // SEIFA decile, ACS median income, etc.
+  createdAt    DateTime   @default(now())
 
-  assignments TerritoryAssignment[]
+  assignments   TerritoryAssignment[]
   knockSessions KnockSession[]
-  knocks      Knock[]
+  knocks        Knock[]
+  knockerShifts KnockerShift[]
 
   @@index([orgId, status])
   @@index([campaignId])
 }
 
 model TerritoryAssignment {
-  id           String     @id
-  territoryId  String
-  territory    Territory  @relation(fields: [territoryId], references: [id])
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
-  assignedAt   DateTime   @default(now())
-  expiresAt    DateTime?
+  id          String    @id
+  territoryId String
+  territory   Territory @relation(fields: [territoryId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  assignedAt  DateTime  @default(now())
+  expiresAt   DateTime?
 
   @@unique([territoryId, userId, assignedAt])
 }
@@ -349,27 +381,27 @@ model TerritoryAssignment {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Campaign {
-  id           String     @id // cmp_*
-  orgId        String
-  org          Org        @relation(fields: [orgId], references: [id])
-  regionCode   RegionCode
-  brandCode    String     @default("d2d")
-  name         String
-  vertical     Vertical
+  id                        String     @id // cmp_*
+  orgId                     String
+  org                       Org        @relation(fields: [orgId], references: [id])
+  regionCode                RegionCode
+  brandCode                 String     @default("d2d")
+  name                      String
+  vertical                  Vertical
   // For charity campaigns: link to the registered charity entity
   charityRegistrationNumber String?
-  pitchScriptMd String?   /// optional markdown pitch script
-  budgetCents  BigInt     @default(0)
-  startDate    DateTime?
-  endDate      DateTime?
-  status       String     @default("draft") // draft | active | paused | archived
-  createdAt    DateTime   @default(now())
+  pitchScriptMd             String? /// optional markdown pitch script
+  budgetCents               BigInt     @default(0)
+  startDate                 DateTime?
+  endDate                   DateTime?
+  status                    String     @default("draft") // draft | active | paused | archived
+  createdAt                 DateTime   @default(now())
 
-  territories Territory[]
-  leads       Lead[]
-  conversions Conversion[]
+  territories     Territory[]
+  leads           Lead[]
+  conversions     Conversion[]
   stateClearances CampaignStateClearance[]
-  adCampaigns AdCampaign[]
+  adCampaigns     AdCampaign[]
 
   @@index([orgId, status])
 }
@@ -379,22 +411,22 @@ model Campaign {
 // ───────────────────────────────────────────────────────────────────────────
 
 model PaidSolicitorRegistration {
-  id              String          @id // psr_*
-  regionCode      RegionCode      // currently always US — extend if AU state filings needed
-  state           String          // 2-letter (US: 'CA', 'NY', 'TX', etc.)
-  entityOrgId     String          // D2D operator org doing the soliciting
-  entity          Org             @relation(fields: [entityOrgId], references: [id])
-  clientOrgId     String          // The charity org being solicited for
-  status          SolicitorStatus @default(pending)
-  filedAt         DateTime?
-  approvedAt      DateTime?
-  expiresAt       DateTime?
-  bondAmountCents BigInt          @default(0)
+  id                 String          @id // psr_*
+  regionCode         RegionCode // currently always US — extend if AU state filings needed
+  state              String // 2-letter (US: 'CA', 'NY', 'TX', etc.)
+  entityOrgId        String // D2D operator org doing the soliciting
+  entity             Org             @relation(fields: [entityOrgId], references: [id])
+  clientOrgId        String // The charity org being solicited for
+  status             SolicitorStatus @default(pending)
+  filedAt            DateTime?
+  approvedAt         DateTime?
+  expiresAt          DateTime?
+  bondAmountCents    BigInt          @default(0)
   registrationNumber String?
-  evidenceKey     String?         // S3 path to filing artifact
-  notes           String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  evidenceKey        String? // S3 path to filing artifact
+  notes              String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   clearances CampaignStateClearance[]
 
@@ -403,13 +435,13 @@ model PaidSolicitorRegistration {
 }
 
 model CampaignStateClearance {
-  id                          String                     @id
+  id                          String                    @id
   campaignId                  String
-  campaign                    Campaign                   @relation(fields: [campaignId], references: [id])
+  campaign                    Campaign                  @relation(fields: [campaignId], references: [id])
   state                       String
-  clearedAt                   DateTime                   @default(now())
+  clearedAt                   DateTime                  @default(now())
   paidSolicitorRegistrationId String
-  registration                PaidSolicitorRegistration  @relation(fields: [paidSolicitorRegistrationId], references: [id])
+  registration                PaidSolicitorRegistration @relation(fields: [paidSolicitorRegistrationId], references: [id])
 
   @@unique([campaignId, state])
   @@index([state])
@@ -420,20 +452,20 @@ model CampaignStateClearance {
 // ───────────────────────────────────────────────────────────────────────────
 
 model Address {
-  id           String     @id // adr_*
-  regionCode   RegionCode
-  formatted    String
-  unit         String?
-  street       String
-  locality     String
-  region       String     // state / territory
-  postcode     String
-  countryCode  String     // ISO 3166-1 alpha-2
+  id          String     @id // adr_*
+  regionCode  RegionCode
+  formatted   String
+  unit        String?
+  street      String
+  locality    String
+  region      String // state / territory
+  postcode    String
+  countryCode String // ISO 3166-1 alpha-2
   // PostGIS geometry — TEXT placeholder until postgis is on the dev DB.
-  geo          String?
-  s2CellId     String?
-  hashKey      String     @unique // SHA-256 of normalised fields
-  createdAt    DateTime   @default(now())
+  geo         String?
+  s2CellId    String?
+  hashKey     String     @unique // SHA-256 of normalised fields
+  createdAt   DateTime   @default(now())
 
   knocks Knock[]
   leads  Lead[]
@@ -443,21 +475,21 @@ model Address {
 }
 
 model KnockSession {
-  id           String     @id // sess_*
-  orgId        String
-  org          Org        @relation(fields: [orgId], references: [id])
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
-  territoryId  String
-  territory    Territory  @relation(fields: [territoryId], references: [id])
-  regionCode   RegionCode
-  startedAt    DateTime
-  endedAt      DateTime?
+  id               String     @id // sess_*
+  orgId            String
+  org              Org        @relation(fields: [orgId], references: [id])
+  userId           String
+  user             User       @relation(fields: [userId], references: [id])
+  territoryId      String
+  territory        Territory  @relation(fields: [territoryId], references: [id])
+  regionCode       RegionCode
+  startedAt        DateTime
+  endedAt          DateTime?
   // PostGIS geometry — TEXT placeholder until postgis is on the dev DB.
-  startGeo     String?
-  deviceId     String
-  appVersion   String?
-  osVersion    String?
+  startGeo         String?
+  deviceId         String
+  appVersion       String?
+  osVersion        String?
   attestationToken String? // App Attest (iOS), Play Integrity (Android)
 
   knocks Knock[]
@@ -482,16 +514,17 @@ model Knock {
   disposition      KnockDisposition
   // PostGIS geometry — TEXT placeholder until postgis is on the dev DB.
   geo              String?
-  capturedAt       DateTime          // device clock
-  serverReceivedAt DateTime          @default(now())
-  clientOffsetMs   Int?              // fraud signal: device clock skew
-  photoKey         String?           // S3 KMS encrypted
+  capturedAt       DateTime // device clock
+  serverReceivedAt DateTime         @default(now())
+  clientOffsetMs   Int? // fraud signal: device clock skew
+  photoKey         String? // S3 KMS encrypted
   signatureKey     String?
-  notes            String? /// PII (optional free-text)
+  notes            String? /// PII — sentinel '[vaulted]' stored here when notesVault is present
+  notesVault       Json? // AES-256-GCM encrypted blob; AAD = 'Knock:{id}'
   leadId           String?
-  lead             Lead?             @relation(fields: [leadId], references: [id])
-  syncBatchId      String?           // offline reconciliation
-  idempotencyKey   String            @unique
+  lead             Lead?            @relation(fields: [leadId], references: [id])
+  syncBatchId      String? // offline reconciliation
+  idempotencyKey   String           @unique
 
   conversions Conversion[]
 
@@ -530,10 +563,11 @@ model Lead {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  knocks         Knock[]
-  activities     LeadActivity[]
-  conversions    Conversion[]
-  consentRecords ConsentRecord[]
+  knocks               Knock[]
+  activities           LeadActivity[]
+  conversions          Conversion[]
+  consentRecords       ConsentRecord[]
+  sequenceEnrollments  CrmSequenceEnrollment[]
 
   @@index([orgId, status, assignedToId])
   @@index([phoneDigest])
@@ -555,37 +589,80 @@ model LeadActivity {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// CRM Sequences — multi-touch SMS/email/task campaigns
+// Steps stored as JSON; BullMQ schedules each step per enrollment.
+// ───────────────────────────────────────────────────────────────────────────
+
+model CrmSequence {
+  id          String                 @id // seq_*
+  orgId       String
+  org         Org                    @relation(fields: [orgId], references: [id])
+  regionCode  RegionCode
+  name        String
+  description String?                @db.Text
+  stepsJson   Json                   // array of {order, channel, delayHours, templateId?, body?}
+  status      String                 @default("active") // active | archived
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  enrollments CrmSequenceEnrollment[]
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt(sort: Desc)])
+}
+
+model CrmSequenceEnrollment {
+  id           String      @id // enr_*
+  sequenceId   String
+  sequence     CrmSequence @relation(fields: [sequenceId], references: [id])
+  leadId       String
+  lead         Lead        @relation(fields: [leadId], references: [id])
+  orgId        String
+  org          Org         @relation(fields: [orgId], references: [id])
+  currentStep  Int         @default(0)
+  status       String      @default("active") // active | paused | completed | cancelled
+  startAt      DateTime    @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([sequenceId, leadId]) // one active enrollment per lead per sequence
+  @@index([orgId, status])
+  @@index([sequenceId, status])
+  @@index([leadId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Conversion (polymorphic: Donation | Sale) + AttributionSource → billing
 // ───────────────────────────────────────────────────────────────────────────
 
 model Conversion {
-  id                       String            @id // cnv_*
-  orgId                    String
-  org                      Org               @relation(fields: [orgId], references: [id])
-  regionCode               RegionCode
-  brandCode                String            @default("d2d")
-  leadId                   String
-  lead                     Lead              @relation(fields: [leadId], references: [id])
-  knockId                  String?
-  knock                    Knock?            @relation(fields: [knockId], references: [id])
-  campaignId               String?
-  campaign                 Campaign?         @relation(fields: [campaignId], references: [id])
-  knockerId                String? // door attribution
-  knocker                  User?             @relation("KnockerAttribution", fields: [knockerId], references: [id])
-  closerId                 String? // inside-sales who closed
-  closer                   User?             @relation("CloserAttribution", fields: [closerId], references: [id])
-  type                     ConversionType
-  attributionSource        AttributionSource // drives billing rake bucket
-  retargetingCampaignId    String? // FK to AdCampaign if attribution=retargeting
-  amountCents              BigInt
-  currency                 String            @default("USD")
-  signedAt                 DateTime
-  signatureKey             String? // S3 KMS
-  paymentProvider          PaymentProvider
-  paymentExternalId        String? // MiCamp transaction id / Stripe charge id
-  processorResidualCents   BigInt            @default(0) // computed for MiCamp ISO
-  d2dRakeCents             BigInt            @default(0) // D2D's take per attribution bucket
-  idempotencyKey           String            @unique
+  id                     String            @id // cnv_*
+  orgId                  String
+  org                    Org               @relation(fields: [orgId], references: [id])
+  regionCode             RegionCode
+  brandCode              String            @default("d2d")
+  leadId                 String
+  lead                   Lead              @relation(fields: [leadId], references: [id])
+  knockId                String?
+  knock                  Knock?            @relation(fields: [knockId], references: [id])
+  campaignId             String?
+  campaign               Campaign?         @relation(fields: [campaignId], references: [id])
+  knockerId              String? // door attribution
+  knocker                User?             @relation("KnockerAttribution", fields: [knockerId], references: [id])
+  closerId               String? // inside-sales who closed
+  closer                 User?             @relation("CloserAttribution", fields: [closerId], references: [id])
+  type                   ConversionType
+  attributionSource      AttributionSource // drives billing rake bucket
+  retargetingCampaignId  String? // FK to AdCampaign if attribution=retargeting
+  amountCents            BigInt
+  currency               String            @default("USD")
+  signedAt               DateTime
+  signatureKey           String? // S3 KMS
+  paymentProvider        PaymentProvider
+  paymentExternalId      String? // MiCamp transaction id / Stripe charge id
+  processorResidualCents BigInt            @default(0) // computed for MiCamp ISO
+  d2dRakeCents           BigInt            @default(0) // D2D's take per attribution bucket
+  idempotencyKey         String            @unique
 
   donation Donation?
   sale     Sale?
@@ -599,11 +676,19 @@ model Donation {
   id                        String             @id // don_*
   conversionId              String             @unique
   conversion                Conversion         @relation(fields: [conversionId], references: [id])
-  donorEmail                String /// PII
+  // PII-vault pattern: real email stored AES-256-GCM encrypted; plaintext column holds sentinel.
+  // Write path: donorEmail = 'redacted@vaulted', donorEmailVault = encrypted blob.
+  donorEmail                String             @default("redacted@vaulted") /// PII sentinel
+  // F-004: stores the EncryptedField envelope object (matches User.*Vault). The
+  // unmask resolver reads this as a structured EncryptedField; declaring it
+  // String? broke the vault write path. Json? matches the proven User pattern.
+  donorEmailVault           Json?              /// PII — AES-256-GCM(email, AAD=Donation:id)
+  donorEmailDigest          String?            /// deterministic SIV digest for indexed search
   amountCents               BigInt
   currency                  String
   frequency                 DonationFrequency? // null = one-off
-  paymentMethodToken        String // MiCamp token or Stripe pm_*
+  // SEC-009: renamed from paymentMethodToken; stored encrypted at rest.
+  paymentMethodTokenVault   String? // AES-256-GCM encrypted MiCamp/Stripe token
   externalSubscriptionId    String? // MiCamp recurring id or Stripe sub_*
   status                    String             @default("active")
   // Receipt fields (IRS for US, ACNC for AU, COC for SG)
@@ -617,13 +702,13 @@ model Donation {
 }
 
 model Sale {
-  id                 String    @id // sal_*
-  conversionId       String    @unique
+  id                 String     @id // sal_*
+  conversionId       String     @unique
   conversion         Conversion @relation(fields: [conversionId], references: [id])
   productSku         String
   installerOrgId     String?
   scheduledInstallAt DateTime?
-  status             String    @default("pending_install") // pending_install | installed | cancelled
+  status             String     @default("pending_install") // pending_install | installed | cancelled
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -631,13 +716,13 @@ model Sale {
 // ───────────────────────────────────────────────────────────────────────────
 
 model CommissionPlan {
-  id            String   @id // plan_*
+  id            String    @id // plan_*
   orgId         String
-  org           Org      @relation(fields: [orgId], references: [id])
+  org           Org       @relation(fields: [orgId], references: [id])
   name          String
   vertical      Vertical
   rules         Json // declarative DSL versioned in @d2d/shared-types
-  rulesVersion  String   @default("v0.1")
+  rulesVersion  String    @default("v0.1")
   effectiveFrom DateTime
   effectiveTo   DateTime?
 
@@ -683,7 +768,65 @@ model PayoutBatch {
 
   commissions Commission[]
 
+  @@unique([orgId, periodStart, periodEnd])
   @@index([orgId, status])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Billing — Invoice + line items (Phase 1.3)
+// ───────────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id         String     @id // inv_*
+  orgId      String
+  org        Org        @relation(fields: [orgId], references: [id])
+  regionCode RegionCode
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // Status: draft → sent → paid | void
+  status String @default("draft") // draft | sent | paid | void
+
+  // Computed totals (sum of lineItems)
+  platformFeeCents      BigInt @default(0)
+  doorRakeCents         BigInt @default(0)
+  insideSalesRakeCents  BigInt @default(0)
+  retargetingRakeCents  BigInt @default(0)
+  additionalCents       BigInt @default(0) // overages, credits, one-offs
+  totalCents            BigInt
+  currency              String @default("USD")
+
+  // Idempotency — one invoice per (org, period) pair
+  idempotencyKey String @unique // "inv-${orgId}-${periodStart.slice(0,7)}"
+
+  sentAt DateTime?
+  paidAt DateTime?
+
+  lineItems InvoiceLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, periodStart])
+  @@index([orgId, status])
+}
+
+model InvoiceLineItem {
+  id        String  @id // ili_*
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  // kind drives label + display order
+  kind        String // platform_fee | door_rake | inside_sales_rake | retargeting_rake | overage | credit | one_off
+  description String
+  amountCents BigInt
+  currency    String @default("USD")
+
+  // For rake lines — how many conversions contributed
+  conversionCount Int @default(0)
+
+  @@index([invoiceId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -704,41 +847,41 @@ model AdAccount {
 }
 
 model Creative {
-  id           String   @id // crv_*
-  orgId        String
-  org          Org      @relation(fields: [orgId], references: [id])
-  type         String // copy | image | video
-  assetKey     String // S3 KMS
-  prompt       String?
-  model        String? // e.g. claude-3-5-sonnet, flux-1.1-pro, runway-gen-3
-  modelVersion String?
-  costCents    BigInt   @default(0)
-  safetyScanResult Json @default("{}")
-  c2paManifestId String?
-  approvedAt   DateTime?
-  approvedBy   String?
-  createdAt    DateTime @default(now())
+  id               String    @id // crv_*
+  orgId            String
+  org              Org       @relation(fields: [orgId], references: [id])
+  type             String // copy | image | video
+  assetKey         String // S3 KMS
+  prompt           String?
+  model            String? // e.g. claude-3-5-sonnet, flux-1.1-pro, runway-gen-3
+  modelVersion     String?
+  costCents        BigInt    @default(0)
+  safetyScanResult Json      @default("{}")
+  c2paManifestId   String?
+  approvedAt       DateTime?
+  approvedBy       String?
+  createdAt        DateTime  @default(now())
 
   adCampaigns AdCampaign[]
 }
 
 model AdCampaign {
-  id            String     @id
-  orgId         String
-  org           Org        @relation(fields: [orgId], references: [id])
-  campaignId    String? // link back to D2D Campaign
-  campaign      Campaign?  @relation(fields: [campaignId], references: [id])
-  adAccountId   String
-  adAccount     AdAccount  @relation(fields: [adAccountId], references: [id])
-  provider      String
-  objective     String
-  audienceJson  Json
-  budgetCents   BigInt
-  status        String     @default("draft")
+  id                 String    @id
+  orgId              String
+  org                Org       @relation(fields: [orgId], references: [id])
+  campaignId         String? // link back to D2D Campaign
+  campaign           Campaign? @relation(fields: [campaignId], references: [id])
+  adAccountId        String
+  adAccount          AdAccount @relation(fields: [adAccountId], references: [id])
+  provider           String
+  objective          String
+  audienceJson       Json
+  budgetCents        BigInt
+  status             String    @default("draft")
   externalCampaignId String?
-  startedAt     DateTime?
-  endedAt       DateTime?
-  createdAt     DateTime   @default(now())
+  startedAt          DateTime?
+  endedAt            DateTime?
+  createdAt          DateTime  @default(now())
 
   creatives Creative[]
 }
@@ -748,11 +891,11 @@ model AdCampaign {
 // ───────────────────────────────────────────────────────────────────────────
 
 model DoNotKnock {
-  id          String     @id
-  regionCode  RegionCode
-  addressId   String
-  source      String // FTC | state list name | CHOICE DNK
-  loadedAt    DateTime   @default(now())
+  id         String     @id
+  regionCode RegionCode
+  addressId  String
+  source     String // FTC | state list name | CHOICE DNK
+  loadedAt   DateTime   @default(now())
 
   @@unique([regionCode, addressId])
 }
@@ -768,19 +911,19 @@ model DoNotCall {
 }
 
 model ConsentRecord {
-  id          String         @id
-  leadId      String?
-  lead        Lead?          @relation(fields: [leadId], references: [id])
-  channel     ConsentChannel
-  granted     Boolean
-  text        String // exact wording shown
-  capturedAt  DateTime
-  ip          String?
+  id         String         @id
+  leadId     String?
+  lead       Lead?          @relation(fields: [leadId], references: [id])
+  channel    ConsentChannel
+  granted    Boolean
+  text       String // exact wording shown
+  capturedAt DateTime
+  ip         String?
   // PostGIS geometry — TEXT placeholder until postgis is on the dev DB.
-  geo         String?
-  proofKey    String? // signature/recording in S3 KMS
-  expiresAt   DateTime?
-  revokedAt   DateTime?
+  geo        String?
+  proofKey   String? // signature/recording in S3 KMS
+  expiresAt  DateTime?
+  revokedAt  DateTime?
 
   @@index([leadId, capturedAt])
 }
@@ -790,8 +933,8 @@ model ConsentRecord {
 // ───────────────────────────────────────────────────────────────────────────
 
 model AuditEvent {
-  id            BigInt    @id @default(autoincrement())
-  ulid          String    @unique // aud_* (preferred external ID)
+  id            BigInt     @id @default(autoincrement())
+  ulid          String     @unique // aud_* (preferred external ID)
   orgId         String?
   regionCode    RegionCode
   actorUserId   String?
@@ -800,10 +943,10 @@ model AuditEvent {
   resourceId    String
   beforeJson    Json?
   afterJson     Json?
-  metadata      Json      @default("{}")
+  metadata      Json       @default("{}")
   prevHash      String // hex
   rowHash       String // HMAC-SHA256(prevHash || canonical(rest))
-  occurredAt    DateTime  @default(now())
+  occurredAt    DateTime   @default(now())
   shippedToS3At DateTime?
 
   @@index([orgId, occurredAt])
@@ -834,30 +977,30 @@ model ApiKey {
 }
 
 model WebhookEndpoint {
-  id           String         @id // whk_*
+  id           String   @id // whk_*
   orgId        String
-  org          Org            @relation(fields: [orgId], references: [id])
+  org          Org      @relation(fields: [orgId], references: [id])
   url          String
   secretCipher String /// PII vault (HMAC signing secret)
   eventTypes   String[]
-  status       String         @default("active") // active | paused | archived
-  createdAt    DateTime       @default(now())
+  status       String   @default("active") // active | paused | archived
+  createdAt    DateTime @default(now())
 
   deliveries WebhookDelivery[]
 }
 
 model WebhookDelivery {
-  id           String         @id
-  endpointId   String
-  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id])
-  eventId      String
-  status       WebhookStatus
-  attempts     Int            @default(0)
-  lastError    String?
+  id            String          @id
+  endpointId    String
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  eventId       String
+  status        WebhookStatus
+  attempts      Int             @default(0)
+  lastError     String?
   nextAttemptAt DateTime?
-  payloadKey   String // S3 key
-  createdAt    DateTime       @default(now())
-  deliveredAt  DateTime?
+  payloadKey    String // S3 key
+  createdAt     DateTime        @default(now())
+  deliveredAt   DateTime?
 
   @@index([endpointId, status])
   @@index([status, nextAttemptAt])
@@ -871,7 +1014,7 @@ model IdempotencyRecord {
   bodyHash        String
   responseStatus  Int
   responseBodyKey String // S3 KMS (or inline JSON for small payloads)
-  responseBody    Json?   // inline body for dev/small payloads — S3 path used in prod
+  responseBody    Json? // inline body for dev/small payloads — S3 path used in prod
   expiresAt       DateTime
 
   @@index([expiresAt])
@@ -882,32 +1025,67 @@ model IdempotencyRecord {
 // ───────────────────────────────────────────────────────────────────────────
 
 model UserCredential {
-  userId        String   @id
-  user          User     @relation(fields: [userId], references: [id])
+  userId          String    @id
+  user            User      @relation(fields: [userId], references: [id])
   // scrypt salt:hash hex pair (32-byte salt, 64-byte derived key)
-  passwordHash  String
+  passwordHash    String
   // Optional invite token (HMAC of opaque token), present while user is pending acceptance
-  inviteTokenHash String? @unique
+  inviteTokenHash String?   @unique
   inviteExpiresAt DateTime?
-  updatedAt     DateTime @updatedAt
+  // TOTP MFA — AES-256-GCM encrypted otplib secret; null until setup begins.
+  // mfaEnabledAt is stamped on first successful verify, marking setup complete.
+  totpSecret      String?
+  mfaEnabledAt    DateTime?
+  // SEC-003/SEC-007: per-account brute-force lockout.
+  // failedLoginCount increments on every bad password; never resets on lock, only on success.
+  // lockedUntil is set when count crosses thresholds (10 → 15min, 20 → 1h, 30 → 24h).
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  updatedAt        DateTime  @updatedAt
 }
 
 model RefreshToken {
-  id            String   @id // rft_*
-  userId        String
-  user          User     @relation(fields: [userId], references: [id])
-  orgId         String
+  id          String    @id // rft_*
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  orgId       String
   // SHA-256 of the opaque refresh token (we never store the plaintext)
-  tokenHash     String   @unique
-  expiresAt     DateTime
-  revokedAt     DateTime?
-  rotatedToId   String?  // ID of the replacement token if rotated
-  userAgent     String?
-  ip            String?
-  createdAt     DateTime @default(now())
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  rotatedToId String? // ID of the replacement token if rotated
+  userAgent   String?
+  ip          String?
+  createdAt   DateTime  @default(now())
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// WebAuthn credentials — hardware-key registration per user (ADR-0026)
+// ───────────────────────────────────────────────────────────────────────────
+
+model WebAuthnCredential {
+  id           String    @id // wac_*
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  // Credential ID from the authenticator (base64url-encoded bytes)
+  credentialId String    @unique
+  // COSE public key bytes (base64url-encoded)
+  publicKey    String
+  // Signature counter — monotonic, used for replay-attack detection
+  counter      BigInt    @default(0)
+  // Human-readable label set by the user ("YubiKey 5C", "Touch ID", etc.)
+  deviceName   String?
+  // AAGUID from attestation — identifies the authenticator model family
+  aaguid       String?
+  // Transport hints from the authenticator (usb, nfc, ble, internal, hybrid)
+  transports   String[]
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -915,22 +1093,22 @@ model RefreshToken {
 // ───────────────────────────────────────────────────────────────────────────
 
 model PiiUnmaskRequest {
-  id              String    @id // pur_*
-  orgId           String
-  regionCode      RegionCode
-  requesterId     String
-  approverId      String?
-  rowType         String // Lead | Donation | Sale | Conversion
-  rowId           String
-  fields          String[]  // email | phone | address | fullName | paymentLast4
-  justification   String
-  status          String    @default("pending") // pending | approved | rejected | revealed | expired
-  grantTokenHash  String?
-  grantExpiresAt  DateTime?
-  revealedAt      DateTime?
-  rejectedAt      DateTime?
-  rejectedReason  String?
-  createdAt       DateTime  @default(now())
+  id             String     @id // pur_*
+  orgId          String
+  regionCode     RegionCode
+  requesterId    String
+  approverId     String?
+  rowType        String // Lead | Donation | Sale | Conversion
+  rowId          String
+  fields         String[] // email | phone | address | fullName | paymentLast4
+  justification  String
+  status         String     @default("pending") // pending | approved | rejected | revealed | expired
+  grantTokenHash String?
+  grantExpiresAt DateTime?
+  revealedAt     DateTime?
+  rejectedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime   @default(now())
 
   @@index([orgId, status])
   @@index([rowType, rowId])
@@ -941,7 +1119,7 @@ model PiiUnmaskRequest {
 // ───────────────────────────────────────────────────────────────────────────
 
 model NotificationLog {
-  id                 String    @id // nlg_*
+  id                 String     @id // nlg_*
   orgId              String
   regionCode         RegionCode
   channel            String // sms | email | push
@@ -949,11 +1127,11 @@ model NotificationLog {
   subject            String?
   bodyPreview        String // up to 200 chars (no PII bleed)
   fromBrand          String?
-  status             String    @default("queued") // queued | sent | failed | bounced
+  status             String     @default("queued") // queued | sent | failed | bounced
   providerExternalId String?
   providerError      String?
-  payload            Json      @default("{}")
-  createdAt          DateTime  @default(now())
+  payload            Json       @default("{}")
+  createdAt          DateTime   @default(now())
   sentAt             DateTime?
 
   @@index([orgId, channel, status])
@@ -969,13 +1147,13 @@ model NotificationLog {
 // ───────────────────────────────────────────────────────────────────────────
 
 model ProviderConnection {
-  id                String   @id // prc_*
+  id                String    @id // prc_*
   orgId             String
-  org               Org      @relation(fields: [orgId], references: [id])
-  kind              String   // ProviderKind enum value (meta_marketing, claude_copy, etc.)
+  org               Org       @relation(fields: [orgId], references: [id])
+  kind              String // ProviderKind enum value (meta_marketing, claude_copy, etc.)
   displayName       String
-  mode              String   // 'sandbox' | 'production'
-  status            String   // 'connected' | 'error' | 'disconnected'
+  mode              String // 'sandbox' | 'production'
+  status            String // 'connected' | 'error' | 'disconnected'
   /// PII — encrypted via PII Vault. JSONB.
   credentialsVault  Json?
   accountLabel      String?
@@ -984,9 +1162,9 @@ model ProviderConnection {
   /// returns plaintext once on connect, then only the hash is kept)
   webhookSecretHash String?
   lastPingAt        DateTime?
-  lastPingStatus    String?  // 'ok' | 'fail'
+  lastPingStatus    String? // 'ok' | 'fail'
   lastPingError     String?
-  connectedAt       DateTime @default(now())
+  connectedAt       DateTime  @default(now())
   disconnectedAt    DateTime?
 
   contentGenerationJobs ContentGenerationJob[]
@@ -997,29 +1175,29 @@ model ProviderConnection {
 }
 
 model ContentGenerationJob {
-  id                  String   @id // cgj_*
-  orgId               String
-  org                 Org      @relation(fields: [orgId], references: [id])
+  id                   String             @id // cgj_*
+  orgId                String
+  org                  Org                @relation(fields: [orgId], references: [id])
   providerConnectionId String
-  providerConnection  ProviderConnection @relation(fields: [providerConnectionId], references: [id])
-  providerKind        String
-  capability          String   // ProviderCapability enum value
-  status              String   // 'pending' | 'running' | 'ready' | 'failed' | 'cancelled'
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id])
+  providerKind         String
+  capability           String // ProviderCapability enum value
+  status               String // 'pending' | 'running' | 'ready' | 'failed' | 'cancelled'
   /// Input JSON sent to the adapter.
-  inputJson           Json
+  inputJson            Json
   /// Output JSON returned by the adapter (or error).
-  outputJson          Json?
-  costCents           BigInt   @default(0)
-  modelId             String?
-  promptHash          String?
-  safetyScanResult    String?  // 'pass' | 'fail' | 'review'
-  c2paManifestId      String?
-  externalJobId       String?  // for async providers (Runway, Higgsfield, HeyGen)
-  createdById         String
-  createdAt           DateTime @default(now())
-  completedAt         DateTime?
-  errorCode           String?
-  errorMessage        String?
+  outputJson           Json?
+  costCents            BigInt             @default(0)
+  modelId              String?
+  promptHash           String?
+  safetyScanResult     String? // 'pass' | 'fail' | 'review'
+  c2paManifestId       String?
+  externalJobId        String? // for async providers (Runway, Higgsfield, HeyGen)
+  createdById          String
+  createdAt            DateTime           @default(now())
+  completedAt          DateTime?
+  errorCode            String?
+  errorMessage         String?
 
   @@index([orgId, status, createdAt(sort: Desc)])
   @@index([orgId, providerKind, createdAt(sort: Desc)])
@@ -1027,21 +1205,256 @@ model ContentGenerationJob {
 }
 
 model ProviderWebhookEvent {
-  id                  String   @id // pwe_*
-  orgId               String
-  org                 Org      @relation(fields: [orgId], references: [id])
+  id                   String              @id // pwe_*
+  orgId                String
+  org                  Org                 @relation(fields: [orgId], references: [id])
   providerConnectionId String?
-  providerConnection  ProviderConnection? @relation(fields: [providerConnectionId], references: [id])
-  providerKind        String
-  eventType           String
-  externalId          String
-  occurredAt          DateTime
+  providerConnection   ProviderConnection? @relation(fields: [providerConnectionId], references: [id])
+  providerKind         String
+  eventType            String
+  externalId           String
+  occurredAt           DateTime
   /// Verified inbound payload.
-  payloadJson         Json
-  verifiedSignature   Boolean
-  receivedAt          DateTime @default(now())
-  processedAt         DateTime?
+  payloadJson          Json
+  verifiedSignature    Boolean
+  receivedAt           DateTime            @default(now())
+  processedAt          DateTime?
 
-  @@index([orgId, providerKind, receivedAt(sort: Desc)])
   @@unique([providerKind, externalId])
+  @@index([orgId, providerKind, receivedAt(sort: Desc)])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Roster scheduling — KnockerShift
+//
+// Stores the weekly roster schedule for each knocker. Persisted via the
+// web-operator BFF (Next.js /api/shifts). The weekStart field is the ISO
+// date string of the Monday for that week (e.g. "2026-06-09"), which lets
+// the roster page fetch shifts for any week offset without date arithmetic
+// on the server side.
+// ───────────────────────────────────────────────────────────────────────────
+
+model KnockerShift {
+  id           String             @id // ksft_*
+  orgId        String
+  org          Org                @relation(fields: [orgId], references: [id])
+  weekStart    String // ISO date of the Monday, e.g. "2026-06-09"
+  repInitials  String // e.g. "JM"
+  repName      String // e.g. "Jordan Mosley"
+  account      String // e.g. "Hope Forward"
+  day          Int // 0 = Mon … 6 = Sun
+  start        String // "HH:MM"
+  end          String // "HH:MM"
+  territory    String
+  lunch        String? // "HH:MM-HH:MM" or null
+  status       KnockerShiftStatus @default(scheduled)
+  // Knocker iOS link — the rep + territory this shift is rostered to, so the
+  // native app can query "my shifts" (KnockerShift where userId = me) and open
+  // the map straight onto the rostered territory. Nullable for legacy rows /
+  // unassigned slots created before the field-app integration.
+  userId       String?
+  user         User?              @relation(fields: [userId], references: [id])
+  territoryId  String?
+  territoryRef Territory?         @relation(fields: [territoryId], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([orgId, weekStart])
+  @@index([userId, weekStart])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ServiceOffering — the per-tenant catalog of things a knocker signs a
+// customer up to (charity giving tiers, or commercial product plans). Defined
+// per Org in the Door 2 Digital Platform; Knocker iOS fetches the active set
+// via GET /v1/catalog so each charity/business runs its own offerings.
+// ───────────────────────────────────────────────────────────────────────────
+
+model ServiceOffering {
+  id          String     @id // svo_*
+  orgId       String
+  org         Org        @relation(fields: [orgId], references: [id])
+  regionCode  RegionCode
+  brandCode   String     @default("d2d")
+  campaignId  String? // soft reference to a Campaign (no FK — catalog is org-scoped)
+  name        String // "Hope Plus"
+  blurb       String     @default("") // "Clean water for a family"
+  amountCents BigInt // 4000 = $40
+  frequency   String // "monthly" | "weekly" | "once" (matches field-signup contract)
+  vertical    Vertical
+  highlighted Boolean    @default(false) // suggested / most-popular tier
+  active      Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([orgId, active, sortOrder])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA LAYER — D2D is a data company. Every field action is captured + held +
+// tied to org/user, in shapes a data-science / ML team can plug straight into.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A property photo captured at a knock. Stored server-side (S3 in prod; local
+// blob dir in dev). `knockId` links to the server Knock once the batch syncs;
+// `clientKnockId` is the app's UUID for reconciliation (the Knock arrives on a
+// separate path). ML annotates `mlLabels` later (house type, condition, …).
+model KnockPhoto {
+  id            String     @id // kph_*
+  orgId         String
+  org           Org        @relation(fields: [orgId], references: [id])
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  regionCode    RegionCode
+  knockId       String? // server Knock id once reconciled
+  clientKnockId String? // app-side knock UUID
+  storageKey    String // S3 object key / local blob path
+  contentType   String     @default("image/jpeg")
+  byteSize      Int?
+  capturedAt    DateTime
+  latitude      Float?
+  longitude     Float?
+  addressLine     String? /// PII — masked sentinel '[vaulted]' when addressLineVault present
+  addressLineVault Json? // AES-256-GCM encrypted blob; AAD = 'KnockPhoto:{id}'
+  mlLabels      Json? // data-science annotations (written by the ML pipeline)
+  mlProcessedAt DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([orgId, capturedAt])
+  @@index([knockId])
+  @@index([clientKnockId])
+  @@index([mlProcessedAt])
+}
+
+// Neighbourhood / area propensity score. The ML team WRITES these; the platform
+// READS them to colour the heatmap and inform the manager's area-setting. Keyed
+// flexibly (H3 cell, address hash, lat/lng bin) so the model can evolve. orgId
+// null = a shared/global model; set = org-specific.
+model PropensityScore {
+  id           String     @id // pps_*
+  orgId        String?
+  org          Org?       @relation(fields: [orgId], references: [id])
+  regionCode   RegionCode
+  geoType      String // "h3" | "address" | "bbox" | "latlng"
+  geoKey       String // cell id / hash / bin key
+  centroidLat  Float?
+  centroidLng  Float?
+  score        Float // 0..1 propensity to convert
+  band         String? // "high" | "medium" | "low" — heatmap bucket
+  modelName    String
+  modelVersion String
+  features     Json? // feature vector / SHAP-style explanation
+  computedAt   DateTime   @default(now())
+
+  @@index([orgId, geoType, geoKey])
+  @@index([regionCode, band])
+  @@index([geoType, geoKey])
+}
+
+// Door-conversation voice recording. CAPTURE SCAFFOLD ONLY — the audio is the
+// future fuel for the conversation-intelligence ML pipeline (transcribe →
+// sentiment / objections / outcome signals). ⚠️ LEGAL: many US states require
+// ALL-PARTY consent to record. `consentObtained` MUST be true before any audio
+// is captured; default-off until counsel signs off. Never enable blindly.
+model VoiceRecording {
+  id                  String     @id // vrc_*
+  orgId               String
+  org                 Org        @relation(fields: [orgId], references: [id])
+  userId              String
+  user                User       @relation(fields: [userId], references: [id])
+  regionCode          RegionCode
+  knockId             String?
+  clientKnockId       String?
+  storageKey          String // S3 object key
+  durationMs          Int?
+  capturedAt          DateTime
+  consentObtained     Boolean    @default(false) // all-party consent gate (legal)
+  transcriptionStatus String     @default("pending") // pending|processing|done|failed|skipped
+  transcript          String? /// PII — masked sentinel '[vaulted]' when transcriptVault present; written by ML pipeline
+  transcriptVault     Json? // AES-256-GCM encrypted blob; AAD = 'VoiceRecording:{id}'; written by ML pipeline
+  analysis            Json? // sentiment / objections / outcome (ML)
+  processedAt         DateTime?
+  createdAt           DateTime   @default(now())
+
+  @@index([orgId, transcriptionStatus])
+  @@index([knockId])
+  @@index([processedAt])
+}
+
+// Normalised, append-only analytics event stream — the warehouse outbox. EVERY
+// field action mirrors here as a flat, denormalised row so the data team can
+// export to a warehouse (BigQuery / Snowflake) + dbt without touching OLTP.
+// `shippedAt` is set by the export job. This is the "plug in data scientists"
+// backbone.
+// ───────────────────────────────────────────────────────────────────────────
+// DSAR — Data Subject Access Request lifecycle
+// ───────────────────────────────────────────────────────────────────────────
+
+model DsarRequest {
+  id                 String     @id // dsar_*
+  orgId              String
+  org                Org        @relation(fields: [orgId], references: [id])
+  regionCode         RegionCode
+  kind               String     // access | deletion | portability | restriction
+  jurisdiction       String     // au_privacy_act | ccpa | cpra | pdpa_sg | gdpr | other
+  subjectEmail       String?    /// PII — masked sentinel ('[vaulted]') when vault present
+  subjectEmailVault  Json?      // AES-256-GCM encrypted blob; AAD = 'DsarRequest:{id}'
+  subjectPhone       String?    /// PII — masked sentinel when vault present
+  subjectPhoneVault  Json?      // AES-256-GCM encrypted blob
+  subjectLeadId      String?
+  proofOfIdentityKey String?    // S3 key of uploaded identity proof
+  note               String?    @db.Text
+  status             String     @default("pending") // pending | in_progress | fulfilled | rejected
+  requestedByUserId  String?
+  slaDueAt           DateTime   // per-jurisdiction deadline (30d or 45d from createdAt)
+  fulfilledAt        DateTime?
+  responsePackageKey String?    // S3 key of encrypted response package
+  rejectionReason    String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([slaDueAt, status])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// TerritoryClaim — real-time area ownership signal for the Knocker iOS map.
+// A rep claims a territory when they start working it; the claim auto-expires
+// after 4 hours. Other reps on the same org see the claimant's initials as a
+// badge overlay on the map. Claims are ephemeral — no soft-delete, just expire.
+// ───────────────────────────────────────────────────────────────────────────
+
+model TerritoryClaim {
+  id          String   @id @default(cuid())
+  orgId       String
+  territoryId String
+  userId      String
+  userName    String // denormalized display name — avoids join on hot path
+  claimedAt   DateTime @default(now())
+  expiresAt   DateTime // claims auto-expire; default 4 hours from claim
+
+  @@index([orgId, territoryId])
+  @@index([orgId, expiresAt])
+  @@map("territory_claims")
+}
+
+model AnalyticsEvent {
+  id         String     @id // aev_*
+  orgId      String
+  org        Org        @relation(fields: [orgId], references: [id])
+  regionCode RegionCode
+  userId     String?
+  eventType  String // "knock" | "sale" | "session_start" | "session_end" | "photo" | "lead" | …
+  entityType String?
+  entityId   String?
+  occurredAt DateTime
+  payload    Json // flat analytical payload (geo, disposition, amountCents, …)
+  shippedAt  DateTime? // set when exported to the warehouse
+  createdAt  DateTime   @default(now())
+
+  @@index([orgId, eventType, occurredAt])
+  @@index([shippedAt])
+  @@index([eventType, occurredAt])
 }

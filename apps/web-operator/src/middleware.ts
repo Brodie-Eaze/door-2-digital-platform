@@ -59,7 +59,14 @@ export function middleware(req: NextRequest): NextResponse {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.search = '';
-    loginUrl.searchParams.set('next', pathname + (req.nextUrl.search || ''));
+    // SEC-013: only set ?next= for relative same-origin paths.
+    // Reject empty, absolute URLs (contain ://), and protocol-relative URLs
+    // (start with //). A valid next value must start with exactly one '/'.
+    const rawNext = pathname + (req.nextUrl.search || '');
+    const isSafeRelative = rawNext.startsWith('/') && !rawNext.startsWith('//');
+    if (isSafeRelative) {
+      loginUrl.searchParams.set('next', rawNext);
+    }
     return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();

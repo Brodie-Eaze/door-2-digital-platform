@@ -33,6 +33,9 @@ import {
   type CreativeStatus,
 } from '@d2d/ui-tokens/taxonomy';
 import { PlatformShell } from '@/components/PlatformShell';
+import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
@@ -1152,6 +1155,22 @@ export default function CreativeLibraryPage(): JSX.Element {
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
+  // Local-only approve/reject overrides — no creative-status backend wired yet.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, Status>>({});
+
+  function effectiveStatus(c: LibraryCreative): Status {
+    return statusOverrides[c.id] ?? c.status;
+  }
+
+  function approveCreative(c: LibraryCreative): void {
+    setStatusOverrides((prev) => ({ ...prev, [c.id]: 'approved' }));
+    toast.success(`${c.id} approved locally — review-workflow wiring lands in Phase 1.2`);
+  }
+
+  function rejectCreative(c: LibraryCreative): void {
+    setStatusOverrides((prev) => ({ ...prev, [c.id]: 'blocked' }));
+    toast.success(`${c.id} rejected locally — review-workflow wiring lands in Phase 1.2`);
+  }
 
   const filtered = useMemo(
     () =>
@@ -1201,6 +1220,10 @@ export default function CreativeLibraryPage(): JSX.Element {
   return (
     <PlatformShell pageTitle="Creative library">
       <div className="space-y-5 max-w-[1700px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MarketingStudioTabs active="library" />
+          <DataSourceBadge source="fixture" />
+        </div>
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <ImageIcon size={14} className="text-accent" />
@@ -1289,10 +1312,20 @@ export default function CreativeLibraryPage(): JSX.Element {
                 ))}
               </FilterChipStrip>
               <div className="ml-auto flex items-center gap-2">
-                <Button variant="ghost" size="sm" leftIcon={<SlidersHorizontal size={13} />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<SlidersHorizontal size={13} />}
+                  onClick={() => toast.info('Advanced filters — wiring lands in Phase 1.2')}
+                >
                   Advanced
                 </Button>
-                <Button variant="primary" size="sm" leftIcon={<Plus size={13} />}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Plus size={13} />}
+                  onClick={() => toast.info('New creative — generator wiring lands in Phase 1.2')}
+                >
                   New creative
                 </Button>
               </div>
@@ -1326,6 +1359,11 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Send size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() =>
+                    toast.info(
+                      `Send ${selectedCount} to review — workflow wiring lands in Phase 1.2`,
+                    )
+                  }
                 >
                   Send to review
                 </Button>
@@ -1334,6 +1372,18 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Check size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() => {
+                    setStatusOverrides((prev) => {
+                      const next = { ...prev };
+                      selectedIds.forEach((id) => {
+                        next[id] = 'approved';
+                      });
+                      return next;
+                    });
+                    toast.success(
+                      `${selectedCount} approved locally — review-workflow wiring lands in Phase 1.2`,
+                    );
+                  }}
                 >
                   Approve
                 </Button>
@@ -1342,6 +1392,9 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Archive size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() =>
+                    toast.info(`Archive ${selectedCount} — wiring lands in Phase 1.2`)
+                  }
                 >
                   Archive
                 </Button>
@@ -1350,6 +1403,9 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Download size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() =>
+                    toast.info(`Export ${selectedCount} — wiring lands in Phase 1.2`)
+                  }
                 >
                   Export
                 </Button>
@@ -1358,6 +1414,9 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Trash2 size={13} />}
                   disabled={selectedCount === 0}
+                  onClick={() =>
+                    toast.info(`Delete ${selectedCount} — wiring lands in Phase 1.2`)
+                  }
                 >
                   Delete
                 </Button>
@@ -1380,9 +1439,12 @@ export default function CreativeLibraryPage(): JSX.Element {
                 <LibraryCard
                   key={c.id}
                   creative={c}
+                  status={effectiveStatus(c)}
                   selected={selectedIds.has(c.id)}
                   onToggle={() => toggleSelect(c.id)}
                   onOpen={() => setOpenId(c.id)}
+                  onApprove={() => approveCreative(c)}
+                  onReject={() => rejectCreative(c)}
                 />
               ))}
             </div>
@@ -1390,21 +1452,34 @@ export default function CreativeLibraryPage(): JSX.Element {
         </Section>
       </div>
 
-      {opened && <DetailDrawer creative={opened} onClose={() => setOpenId(null)} />}
+      {opened && (
+        <DetailDrawer
+          creative={opened}
+          onApprove={() => approveCreative(opened)}
+          onReject={() => rejectCreative(opened)}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </PlatformShell>
   );
 }
 
 function LibraryCard({
   creative,
+  status,
   selected,
   onToggle,
   onOpen,
+  onApprove,
+  onReject,
 }: {
   creative: LibraryCreative;
+  status: Status;
   selected: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onApprove: () => void;
+  onReject: () => void;
 }): JSX.Element {
   const dims = aspectDims(creative.aspect);
   return (
@@ -1471,14 +1546,13 @@ function LibraryCard({
           )}
         </div>
         <div className="flex items-center justify-between">
-          <StatusPill tone={statusTone(creative.status)}>
-            {CREATIVE_STATUS_LABEL[creative.status]}
-          </StatusPill>
+          <StatusPill tone={statusTone(status)}>{CREATIVE_STATUS_LABEL[status]}</StatusPill>
           <div className="flex items-center gap-0.5">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                onApprove();
               }}
               className="w-5 h-5 rounded hover:bg-successSoft flex items-center justify-center text-success"
               title="Approve"
@@ -1489,6 +1563,7 @@ function LibraryCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                onReject();
               }}
               className="w-5 h-5 rounded hover:bg-dangerSoft flex items-center justify-center text-danger"
               title="Reject"
@@ -1515,9 +1590,13 @@ function LibraryCard({
 
 function DetailDrawer({
   creative,
+  onApprove,
+  onReject,
   onClose,
 }: {
   creative: LibraryCreative;
+  onApprove: () => void;
+  onReject: () => void;
   onClose: () => void;
 }): JSX.Element {
   const dims = aspectDims(creative.aspect);
@@ -1654,13 +1733,27 @@ function DetailDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2 pt-3 border-t border-line2">
-            <Button variant="primary" size="sm" leftIcon={<Check size={12} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Check size={12} />}
+              onClick={onApprove}
+            >
               Approve
             </Button>
-            <Button variant="ghost" size="sm" leftIcon={<X size={12} />}>
+            <Button variant="ghost" size="sm" leftIcon={<X size={12} />} onClick={onReject}>
               Reject
             </Button>
-            <Button variant="ghost" size="sm" leftIcon={<Send size={12} />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Send size={12} />}
+              onClick={() =>
+                toast.info(
+                  `Send ${creative.id} to review — workflow wiring lands in Phase 1.2`,
+                )
+              }
+            >
               Send to review
             </Button>
           </div>
