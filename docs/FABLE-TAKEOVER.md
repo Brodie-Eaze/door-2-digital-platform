@@ -238,10 +238,18 @@ LIVE against `https://d2d-api-production-895b.up.railway.app`, not dev:
   Release build points at the production API, ATS arbitrary-loads=NO in the
   built plist (F-007). Drove the actual Simulator UI (via generic desktop
   control, since the native integration needs `xcode-select`): logged in as
-  the production knocker Sam (sam.field@northsidetrust.org), and the app
-  landed on the map showing 'Riverside North · 0/0 knocked' — the exact
-  territory the org admin mapped + assigned on the platform. Platform→app
-  flow proven in the real iOS UI, plus the full field-loop API contract.
+  the production knocker Sam (sam.field@northsidetrust.org) — the app
+  authenticated against PRODUCTION and the map showed 'Riverside North · 0/0
+  knocked', the exact territory the org admin mapped + assigned on the
+  platform. The knock-capture UI works (real reverse-geocoded address +
+  disposition grid + save). HONEST GAP: the captured knock saved to the local
+  offline queue but did NOT sync back to production — the API logs show no
+  POST /v1/knocks/batch arrived. This is the app's known offline-sync
+  limitation (elevate/knocker-elevation.md Tier-0 'Sync now is a no-op'),
+  being addressed by the T2-1 task — NOT a platform defect. So D3's read path
+  - auth + capture UI are proven in the real UI against prod; the write-back
+    sync remains the tracked iOS-side gap. The full field-loop write path IS
+    proven end-to-end via the API contract (curl) against production.
 - **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
   return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
 - **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
