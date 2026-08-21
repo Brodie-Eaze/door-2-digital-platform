@@ -394,6 +394,22 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   money-cycle to the cent + human gate, RTBF at-rest erasure, voice double-gate,
   security floor. Full external pen test (D9) remains human-gated.
 
+**Known finding (tracked, low-severity) — "knocks today" counter divergence.**
+Visual verification of the deployed command-centre showed the top KPI "Knocks
+today" (`/api/metrics/realtime`, all users) reading a different value than the
+fleet-map panel "N knocks today" (`HQLiveMapImpl`, summing `/api/fleet`'s
+per-rep `knocksToday`, active-session users only). Both filter
+`capturedAt >= setHours(0,0,0,0)` computed at request time, so the divergence is
+a "today"-window/scope interaction (the Railway container runs UTC; the two
+polls resolve the day boundary at slightly different moments, and one is the
+all-users total vs the other the active-session subset). It is a DISPLAY
+consistency nuance, not a data-correctness bug — the underlying knock rows are
+correct. Proper fix: make "today" a single shared, timezone-explicit definition
+(e.g. a `startOfDayUTC()` helper both endpoints import, or org-local day) so the
+two counters can never disagree. Deferred rather than patched blind — it needs a
+query against the deployed DB + container clock to verify, which shouldn't be
+guessed at.
+
 Still human-gated: **D4** (AWS/Terraform apply — no account), **D5-scale** (50k
 load test on real infra), **D9-external** (CREST pen-test firm), **D11-onboarding
 doc walk by a non-engineer**, **D12** (first real paying org), merge PR #18.
