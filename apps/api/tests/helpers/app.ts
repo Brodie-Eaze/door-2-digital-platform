@@ -25,6 +25,8 @@ import { registerWebhook } from '../../src/domains/webhook/routes';
 import { registerNotification } from '../../src/domains/notification/routes';
 import { registerMarketing } from '../../src/domains/marketing/routes';
 import { registerContentStudio } from '../../src/domains/content-studio/routes';
+import { registerVoice } from '../../src/domains/voice/routes';
+import { registerDsar } from '../../src/domains/dsar/routes';
 import { registerIntegrations } from '../../src/integrations';
 import { prisma, shutdownDb } from '../../src/config/db';
 import { redis } from '../../src/config/redis';
@@ -59,6 +61,8 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await registerIntegrations(app);
   await app.register(registerMarketing, { prefix: '/v1/marketing' });
   await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
+  await app.register(registerVoice, { prefix: '/v1/voice' });
+  await app.register(registerDsar, { prefix: '/v1/dsar' });
   await app.ready();
   return app;
 }
