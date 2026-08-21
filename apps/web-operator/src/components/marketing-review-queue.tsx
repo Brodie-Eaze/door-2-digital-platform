@@ -50,69 +50,6 @@ export interface DraftCampaign {
   creatives: DraftCreative[];
 }
 
-/**
- * Demo fixtures — shown ONLY when the backend isn't configured (the page flags
- * the source as DEMO DATA). They model the exact shape the API returns so the
- * board renders identically live vs demo.
- */
-export const DEMO_DRAFT_CAMPAIGNS: DraftCampaign[] = [
-  {
-    id: 'adc_demo_8841',
-    provider: 'meta',
-    objective: 'conversions',
-    adAccountId: 'pending_connection',
-    status: 'draft',
-    createdAt: '2026-06-12T14:20:00Z',
-    creatives: [
-      {
-        id: 'crv_demo_a01',
-        type: 'image',
-        assetKey: 'pending/demo/var_a01',
-        approvedAt: '2026-06-12T14:20:00Z',
-        approvedBy: 'usr_demo',
-      },
-      {
-        id: 'crv_demo_a02',
-        type: 'copy',
-        assetKey: 'pending/demo/var_a02',
-        approvedAt: '2026-06-12T14:20:00Z',
-        approvedBy: 'usr_demo',
-      },
-      {
-        id: 'crv_demo_a03',
-        type: 'image',
-        assetKey: 'pending/demo/var_a03',
-        approvedAt: '2026-06-12T14:20:00Z',
-        approvedBy: 'usr_demo',
-      },
-    ],
-  },
-  {
-    id: 'adc_demo_8840',
-    provider: 'meta',
-    objective: 'conversions',
-    adAccountId: 'pending_connection',
-    status: 'draft',
-    createdAt: '2026-06-12T11:05:00Z',
-    creatives: [
-      {
-        id: 'crv_demo_a09',
-        type: 'video',
-        assetKey: 'pending/demo/var_a09',
-        approvedAt: '2026-06-12T11:05:00Z',
-        approvedBy: 'usr_demo',
-      },
-      {
-        id: 'crv_demo_a06',
-        type: 'image',
-        assetKey: 'pending/demo/var_a06',
-        approvedAt: '2026-06-12T11:05:00Z',
-        approvedBy: 'usr_demo',
-      },
-    ],
-  },
-];
-
 const PROVIDERS: Array<{ key: 'meta' | 'google'; label: string }> = [
   { key: 'meta', label: 'Meta' },
   { key: 'google', label: 'Google' },

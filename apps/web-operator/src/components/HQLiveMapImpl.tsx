@@ -7,12 +7,15 @@
  *  - Optional Places/Boundaries label overlay on satellite
  *  - Rep pins as CircleMarkers, with pulse halos for active reps — sourced from
  *    live /api/fleet data, polled every 30 seconds.
- *  - AI suggestion zones as labelled CircleMarkers with permanent tooltips
  *  - Built-in zoom + scale + attribution controls
  *
  * Fleet data: GET /api/fleet returns active KnockSessions with the latest
- * Knock.geo parsed into lat/lng. Falls back to the FLEET_REPS fixture if the
- * API returns an empty array or an error (e.g. no active sessions yet in dev).
+ * Knock.geo parsed into lat/lng. An empty array is an honest "nobody's
+ * clocked in" answer, not a loading state — it still marks the badge LIVE.
+ *
+ * There is no backing table for "AI suggested next zones" yet (see
+ * schema.prisma) — this map no longer renders that overlay; command-centre
+ * shows the honest empty state via AiNextZonesPanel instead.
  */
 
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -27,8 +30,14 @@ import {
   ScaleControl,
   useMap,
 } from 'react-leaflet';
-import { Phone, MessageSquare, Coffee, Play, Zap } from 'lucide-react';
-import { FLEET_REPS, AI_ZONES, STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
+import { Phone, MessageSquare, Coffee, Play } from 'lucide-react';
+import {
+  STATUS_COLORS,
+  HQ_FALLBACK_CENTER,
+  apiFleetEntryToRep,
+  type ApiFleetEntry,
+  type FleetRep,
+} from '@/lib/fleet';
 import { toast } from '@/components/Toaster';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
@@ -41,48 +50,6 @@ const STATUS_LABEL: Record<FleetRep['status'], string> = {
   idle: 'Idle > 15min',
   offline: 'Offline',
 };
-
-/** Merge a live API rep with the FleetRep shape, falling back to fixture defaults. */
-function apiRepToFleetRep(r: {
-  id: string;
-  userId: string;
-  initials: string;
-  name: string;
-  territory: string;
-  account: string;
-  status: string;
-  lat: number | null;
-  lng: number | null;
-  knocksToday: number;
-  lastKnockMin: number;
-  shiftStart: string;
-}): FleetRep {
-  // Map API status to FleetRep status (API has active/idle/offline; fixture has active/break/idle/offline).
-  const status: FleetRep['status'] =
-    r.status === 'active' ? 'active' : r.status === 'idle' ? 'idle' : 'offline';
-
-  return {
-    id: r.userId,
-    name: r.name,
-    initials: r.initials,
-    account: r.account,
-    territory: r.territory,
-    status,
-    // Position: use real geo if available, otherwise place off-screen so the pin
-    // doesn't appear (Leaflet renders at 0,0 which is Gulf of Guinea — use the
-    // territory centroid heuristic below when geo is null).
-    lat: r.lat ?? 31.0,
-    lng: r.lng ?? -97.0,
-    knocksToday: r.knocksToday,
-    conversionsToday: 0, // not yet tracked in the fleet endpoint
-    shiftStart: new Date(r.shiftStart).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    hoursToday: '',
-    lastKnockMin: r.lastKnockMin,
-  };
-}
 
 /** Imperative map controller — keyed on `target`, flies the map there. */
 function FlyController({
@@ -105,9 +72,8 @@ export interface HQLiveMapProps {
   flyTarget?: { lat: number; lng: number; zoom?: number } | null;
   /**
    * When set, draws a pulsing amber highlight ring directly at these
-   * coordinates. Keying off coords (not a rep id) keeps the highlight working
-   * across the fixture→live fleet swap, since a fixture rep id never matches a
-   * live /api/fleet id.
+   * coordinates. Keying off coords rather than a rep id keeps the highlight
+   * working even as reps drop off/rejoin the polled /api/fleet response.
    */
   highlightCoords?: { lat: number; lng: number } | null;
 }
@@ -116,8 +82,9 @@ export function HQLiveMapImpl({
   flyTarget = null,
   highlightCoords = null,
 }: HQLiveMapProps): JSX.Element {
-  // Live fleet data — seeded from fixture, updated every 30s from /api/fleet.
-  const [fleet, setFleet] = useState<FleetRep[]>(FLEET_REPS);
+  // Live fleet data, polled every 30s from /api/fleet. Starts empty — there
+  // is no fixture fallback; a genuinely empty fleet is an honest answer.
+  const [fleet, setFleet] = useState<FleetRep[]>([]);
   const { source, updatedAt, markFresh } = useDataFreshness('fixture');
   const inFlight = useRef(false);
 
@@ -132,14 +99,13 @@ export function HQLiveMapImpl({
       try {
         const res = await fetch('/api/fleet');
         if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { fleet?: unknown[] };
-        if (Array.isArray(data.fleet) && data.fleet.length > 0) {
-          setFleet(
-            data.fleet.map((r) => apiRepToFleetRep(r as Parameters<typeof apiRepToFleetRep>[0])),
-          );
+        const data = (await res.json()) as { fleet?: ApiFleetEntry[] };
+        // Any successful, well-formed response — including a genuinely empty
+        // fleet (nobody clocked in) — is real live data, so it marks fresh.
+        if (Array.isArray(data.fleet)) {
+          setFleet(data.fleet.map((r) => apiFleetEntryToRep(r, HQ_FALLBACK_CENTER)));
           markFresh();
         }
-        // Empty array (no active sessions) → keep seed data; badge stays DEMO.
       } catch {
         // Network failure — keep current state; staleness timer downgrades the
         // badge automatically if we'd previously gone live.
@@ -162,7 +128,8 @@ export function HQLiveMapImpl({
   const idleCount = fleet.filter((r) => r.status === 'idle').length;
   const offlineCount = fleet.filter((r) => r.status === 'offline').length;
   const totalKnocks = fleet.reduce((s, r) => s + r.knocksToday, 0);
-  const totalConv = fleet.reduce((s, r) => s + r.conversionsToday, 0);
+  // Per-rep conversions aren't tracked by /api/fleet yet (see
+  // apiFleetEntryToRep) — never sum a hardcoded 0 into a headline stat.
 
   return (
     <div className="relative w-full" style={{ height: 640 }}>
@@ -203,33 +170,6 @@ export function HQLiveMapImpl({
             </LayersControl.Overlay>
           </LayersControl>
 
-          {/* AI suggestion zones — pulsing accent circles */}
-          {AI_ZONES.map((z) => (
-            <CircleMarker
-              key={z.label}
-              center={[z.lat, z.lng]}
-              radius={30}
-              pathOptions={{
-                color: '#3B82F6',
-                weight: 2,
-                fillColor: '#3B82F6',
-                fillOpacity: 0.18,
-              }}
-            >
-              <Tooltip permanent direction="top" offset={[0, -6]} className="d2d-ai-tooltip">
-                <span style={{ fontWeight: 600, fontSize: 11 }}>{z.label}</span>
-              </Tooltip>
-              <Popup>
-                <div style={{ minWidth: 200 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>
-                    AI zone · {z.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>{z.reason}</div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          ))}
-
           {/* Amber highlight ring — drawn directly at the anomaly's coordinates
               (not by matching a rendered pin), so it survives the fixture→live
               fleet swap where rep ids change. */}
@@ -248,8 +188,8 @@ export function HQLiveMapImpl({
             />
           )}
 
-          {/* Rep pins — polled from /api/fleet every 30s. Falls back to seed
-              fixture when no active sessions exist (dev / first-run). */}
+          {/* Rep pins — polled from /api/fleet every 30s. An empty array
+              (nobody clocked in) simply renders no pins. */}
           {fleet.map((r) => {
             const color = STATUS_COLORS[r.status];
             const isActive = r.status === 'active';
@@ -321,16 +261,7 @@ export function HQLiveMapImpl({
           </div>
         </div>
 
-        <div className="absolute top-3 right-14 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-accent/30 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-accent mb-1 font-semibold flex items-center gap-1">
-            <Zap size={11} /> AI suggested next zones
-          </div>
-          <div className="text-[10px] text-muted">
-            {AI_ZONES.length} high-propensity neighbourhoods · click to inspect
-          </div>
-        </div>
-
-        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none">
+        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none max-w-[220px]">
           <div className="mb-1">
             <DataSourceBadge source={source} updatedAt={updatedAt} />
           </div>
@@ -346,8 +277,10 @@ export function HQLiveMapImpl({
             />
             {activeCount} active iPads
           </div>
-          <div className="text-[10px] text-muted">
-            {totalKnocks} knocks today · {totalConv} conversions
+          <div className="text-[10px] text-muted">{totalKnocks} knocks today</div>
+          <div className="text-[9px] text-soft mt-1 leading-snug">
+            Live tracking activates when realtime is configured — positions refresh via 30s poll,
+            not push.
           </div>
         </div>
       </div>
@@ -357,8 +290,6 @@ export function HQLiveMapImpl({
 
 function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
   const color = STATUS_COLORS[rep.status];
-  const convRate =
-    rep.knocksToday > 0 ? `${((rep.conversionsToday / rep.knocksToday) * 100).toFixed(1)}%` : '—';
 
   return (
     <div style={{ minWidth: 240 }}>
@@ -421,12 +352,10 @@ function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
           label="Today"
           value={
             <span>
-              <strong>{rep.knocksToday}</strong> knocks · <strong>{rep.conversionsToday}</strong>{' '}
-              conv
+              <strong>{rep.knocksToday}</strong> knocks
             </span>
           }
         />
-        <Row label="Conv. rate" value={<strong style={{ color: '#16a34a' }}>{convRate}</strong>} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <PopupButton
