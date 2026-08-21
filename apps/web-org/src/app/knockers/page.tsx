@@ -36,9 +36,18 @@ export default async function KnockersPage(): Promise<JSX.Element> {
             hint={`${knockers.length} on roster`}
             animate={false}
           />
-          <KpiCard label="Invited" value={invited.length} hint="pending activation" animate={false} />
+          <KpiCard
+            label="Invited"
+            value={invited.length}
+            hint="pending activation"
+            animate={false}
+          />
           <KpiCard label="Archived" value={archived.length} animate={false} />
-          <KpiCard label="More available" value={userPage.nextCursor ? 'Yes' : 'No'} animate={false} />
+          <KpiCard
+            label="More available"
+            value={userPage.nextCursor ? 'Yes' : 'No'}
+            animate={false}
+          />
         </div>
 
         <Section
@@ -85,7 +94,9 @@ export default async function KnockersPage(): Promise<JSX.Element> {
                     <td className="text-[12px] text-muted">
                       {knocker.managerId ? knocker.managerId : '—'}
                     </td>
-                    <td className="text-[12px] text-muted numeric">{formatDate(knocker.lastLoginAt)}</td>
+                    <td className="text-[12px] text-muted numeric">
+                      {formatDate(knocker.lastLoginAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

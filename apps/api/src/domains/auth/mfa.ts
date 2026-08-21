@@ -46,7 +46,9 @@ function decryptTotpCredential(userId: string, blob: string): string {
   const authTag = packed.subarray(12, 28);
   const ciphertext = packed.subarray(28);
   const aad = Buffer.from(`${MFA_AAD_TAG}${userId}`, 'utf8');
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  // authTagLength pins the expected GCM tag to 16 bytes — without it a
+  // truncated tag can pass verification (semgrep gcm-no-tag-length).
+  const decipher = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
   decipher.setAAD(aad);
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');

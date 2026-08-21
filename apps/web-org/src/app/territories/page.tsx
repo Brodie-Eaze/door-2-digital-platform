@@ -157,7 +157,9 @@ export default async function TerritoriesPage(): Promise<JSX.Element> {
                       {new Date(territory.createdAt).toISOString().slice(0, 10)}
                     </td>
                     <td>
-                      <StatusPill tone={statusTone(territory.status)}>{territory.status}</StatusPill>
+                      <StatusPill tone={statusTone(territory.status)}>
+                        {territory.status}
+                      </StatusPill>
                     </td>
                   </tr>
                 ))}

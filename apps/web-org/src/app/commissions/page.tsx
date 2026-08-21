@@ -68,7 +68,9 @@ export default async function CommissionsPage(): Promise<JSX.Element> {
                     <td>
                       <div className="flex items-center gap-2">
                         <span className="mono">{shortId(commission.userId)}</span>
-                        <span className="text-[13px] text-ink">User {shortId(commission.userId)}</span>
+                        <span className="text-[13px] text-ink">
+                          User {shortId(commission.userId)}
+                        </span>
                       </div>
                     </td>
                     <td>
