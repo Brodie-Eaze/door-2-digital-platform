@@ -19,9 +19,10 @@ import type {
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubImage, stubPing } from './stub';
+import { fetchWithTimeout, guardProduction, stubImage, stubPing } from './stub';
 
 const IDEOGRAM_BASE = 'https://api.ideogram.ai' as const;
+const IDEOGRAM_TIMEOUT_MS = 30_000 as const;
 const MODEL_ID = 'V_2_TURBO' as const;
 
 function mapAspect(a: GenerateImageInput['aspectRatio']): string {
@@ -49,15 +50,17 @@ export function createIdeogramAdapter(): ProviderAdapter {
     docsUrl: 'https://developer.ideogram.ai',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Ideogram', 'ideo_demo') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      // Ideogram has no public account endpoint — issue a no-op generation with min text.
-      // To avoid burning credit we just check key format here.
+      // Ideogram has no public account endpoint and generation burns credit,
+      // so the strongest non-destructive credential check is a format check.
       if (apiKey.length < 12) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey too short') };
       }
@@ -68,7 +71,9 @@ export function createIdeogramAdapter(): ProviderAdapter {
       input: GenerateImageInput,
       config: ProviderConfig,
     ): Promise<Result<GenerateImageOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubImage(input.prompt, MODEL_ID, input.count, 8) };
       }
       const apiKey = config.credentials.apiKey;
@@ -76,8 +81,10 @@ export function createIdeogramAdapter(): ProviderAdapter {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
       const model = config.credentials.model ?? MODEL_ID;
-      try {
-        const r = await fetch(`${IDEOGRAM_BASE}/generate`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${IDEOGRAM_BASE}/generate`,
+        {
           method: 'POST',
           headers: { 'Api-Key': apiKey, 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -89,31 +96,32 @@ export function createIdeogramAdapter(): ProviderAdapter {
               num_images: input.count,
             },
           }),
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Ideogram ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as {
-          data: Array<{ url: string; seed: number; prompt: string }>;
-        };
+        },
+        IDEOGRAM_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            images: json.data.map((d, i) => ({
-              url: d.url,
-              costCents: 8,
-              modelId: model,
-              seed: d.seed,
-              c2paManifestId: `c2pa-ideo-${d.seed}-${i}`,
-            })),
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Ideogram ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as {
+        data: Array<{ url: string; seed: number; prompt: string }>;
+      };
+      return {
+        ok: true,
+        data: {
+          images: json.data.map((d, i) => ({
+            url: d.url,
+            costCents: 8,
+            modelId: model,
+            seed: d.seed,
+            c2paManifestId: `c2pa-ideo-${d.seed}-${i}`,
+          })),
+        },
+      };
     },
   };
 }

@@ -33,6 +33,10 @@ const orgA = 'org_RLS_A';
 const orgB = 'org_RLS_B';
 const leadA = 'lead_RLS_A_1';
 const leadB = 'lead_RLS_B_1';
+// C2 — TerritoryClaim (table "territory_claims") was the last org-scoped table
+// missing from the belt. These ids prove its tenant_isolation policy bites.
+const claimA = 'claim_RLS_A_1';
+const claimB = 'claim_RLS_B_1';
 
 const APP_ROLE = 'd2d_app';
 const APP_PASSWORD = process.env.D2D_APP_PASSWORD ?? 'd2d_app';
@@ -104,10 +108,16 @@ async function appRoleConnectable(): Promise<boolean> {
  *   2. DATABASE_URL itself (CI: the `d2d` service user is the superuser)
  *   3. peer/trust as the OS user (local dev: e.g. `Brodie` is a superuser)
  * Returns a skip-reason string if the belt can't be provisioned, else null.
+ *
+ * We ALWAYS (re)run the privileged bootstrap when a privileged connection is
+ * reachable — even if the role already connects — because `GRANT … ON ALL
+ * TABLES` is idempotent and is the ONLY thing that grants DML on tables created
+ * AFTER a prior bootstrap (e.g. territory_claims, added later). Skipping the
+ * grant-refresh when the role merely exists is what hid the missing grant. If no
+ * privileged connection works but the role already connects, we accept that
+ * (older provisioning) rather than fail the box.
  */
 async function ensureAppRole(): Promise<string | null> {
-  if (await appRoleConnectable()) return null;
-
   const candidates: string[] = [];
   if (process.env.RLS_SUPERUSER_URL) candidates.push(process.env.RLS_SUPERUSER_URL);
   if (process.env.DATABASE_URL) candidates.push(process.env.DATABASE_URL);
@@ -121,6 +131,8 @@ async function ensureAppRole(): Promise<string | null> {
       // try the next privileged candidate
     }
   }
+  // No privileged connection worked — accept a pre-provisioned role if present.
+  if (await appRoleConnectable()) return null;
   return 'no privileged connection could provision the d2d_app role (RLS belt unprovable here)';
 }
 
@@ -158,6 +170,30 @@ async function seed(): Promise<void> {
       vertical: 'commercial',
       givenName: 'Seed',
       familyName: 'B',
+    },
+  });
+  // territory_claims has no FK to Territory (no relation in the model), so a
+  // bare orgId-tagged claim per org is enough to probe the policy. expiresAt is
+  // far-future so the row is "active" regardless of when the suite runs.
+  const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  await prisma().territoryClaim.create({
+    data: {
+      id: claimA,
+      orgId: orgA,
+      territoryId: 'ter_RLS_A',
+      userId: 'usr_RLS_A',
+      userName: 'Knocker A',
+      expiresAt: farFuture,
+    },
+  });
+  await prisma().territoryClaim.create({
+    data: {
+      id: claimB,
+      orgId: orgB,
+      territoryId: 'ter_RLS_B',
+      userId: 'usr_RLS_B',
+      userName: 'Knocker B',
+      expiresAt: farFuture,
     },
   });
 }
@@ -279,5 +315,65 @@ describe('SEC-005 RLS belt — enforced for the non-owner d2d_app role', () => {
     expect(inA).toBe(2);
     const inB = await runTenantTx(app!, orgB, async (tx) => tx.lead.count());
     expect(inB).toBe(1);
+  });
+});
+
+describe('SEC-005 RLS belt — TerritoryClaim (C2 close-out, table "territory_claims")', () => {
+  it('DENY BY DEFAULT — with no org GUC set, the app role sees zero claims', async () => {
+    if (skipReason) return expect(skipReason).toBeTruthy();
+    const rows = await app!.territoryClaim.findMany();
+    expect(rows).toHaveLength(0);
+    // …even though the owner can see both seeded claims.
+    expect(await prisma().territoryClaim.count()).toBe(2);
+  });
+
+  it('runTenantTx(orgA) scopes claims to org A only', async () => {
+    if (skipReason) return expect(skipReason).toBeTruthy();
+    const seenA = await runTenantTx(app!, orgA, async (tx) => tx.territoryClaim.findMany());
+    expect(seenA).toHaveLength(1);
+    expect(seenA[0]?.id).toBe(claimA);
+
+    const seenB = await runTenantTx(app!, orgB, async (tx) => tx.territoryClaim.findMany());
+    expect(seenB).toHaveLength(1);
+    expect(seenB[0]?.id).toBe(claimB);
+  });
+
+  it('cross-tenant READ is invisible — orgA tx cannot fetch orgB claim by primary key', async () => {
+    if (skipReason) return expect(skipReason).toBeTruthy();
+    const leaked = await runTenantTx(app!, orgA, async (tx) =>
+      tx.territoryClaim.findUnique({ where: { id: claimB } }),
+    );
+    expect(leaked).toBeNull();
+  });
+
+  it('cross-tenant WRITE is refused — inserting an orgB-tagged claim inside an orgA tx throws (WITH CHECK)', async () => {
+    if (skipReason) return expect(skipReason).toBeTruthy();
+    await expect(
+      runTenantTx(app!, orgA, async (tx) =>
+        tx.territoryClaim.create({
+          data: {
+            id: 'claim_RLS_SPOOF',
+            orgId: orgB, // spoof another tenant
+            territoryId: 'ter_RLS_B',
+            userId: 'usr_RLS_SPOOF',
+            userName: 'Spoof',
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(
+      await prisma().territoryClaim.findUnique({ where: { id: 'claim_RLS_SPOOF' } }),
+    ).toBeNull();
+  });
+
+  it('cross-tenant DELETE affects zero rows — orgB claim is untouched by an orgA tx', async () => {
+    if (skipReason) return expect(skipReason).toBeTruthy();
+    const del = await runTenantTx(app!, orgA, async (tx) =>
+      tx.territoryClaim.deleteMany({ where: { id: claimB } }),
+    );
+    expect(del.count).toBe(0);
+    // Owner confirms orgB's claim survived.
+    expect(await prisma().territoryClaim.findUnique({ where: { id: claimB } })).not.toBeNull();
   });
 });

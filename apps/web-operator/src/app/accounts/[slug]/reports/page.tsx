@@ -1,93 +1,175 @@
-import { BarChart3, Download, Sparkles, ChevronRight } from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { redirect } from 'next/navigation';
+import { Sparkles } from 'lucide-react';
+import { db } from '@d2d/database';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
-import { ReportsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
-import { seedFor } from '@/lib/seed';
-import { rollupFor } from '@/lib/seed/kpis';
-import { firstRunSnapshot } from '@/lib/first-run';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { ReportsEmpty } from '@/components/AccountEmptyStates';
+import { BuildReportButton, SavedReportCard } from './ReportActions';
 
-export default function ReportsPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+function tenureLabel(days: number): string {
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.round(days / 30)}mo`;
+  return `${(days / 365).toFixed(1)}yr`;
+}
+
+export default async function ReportsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
+
+  const org = await db.org.findUnique({
+    where: { slug: params.slug },
+    select: { id: true, tradingName: true, regionCode: true },
+  });
+  if (!org) redirect('/accounts');
+
+  const region = org.regionCode === 'AU' ? 'AU' : 'US';
+
+  const [everConversionCount, everKnockCount] = await Promise.all([
+    db.conversion.count({ where: { orgId: org.id } }),
+    db.knock.count({ where: { orgId: org.id } }),
+  ]);
+  if (everConversionCount === 0 && everKnockCount === 0) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Reports">
         <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <ReportsEmpty slug={params.slug} accountName={firstRun.accountName} />
+          <ReportsEmpty slug={params.slug} accountName={org.tradingName} />
         </div>
       </AccountShell>
     );
   }
-  const seed = seedFor(params.slug);
-  const rollup = rollupFor(params.slug);
-  const region = account.region === 'AU' ? 'AU' : 'US';
 
-  // 30-day attribution split: derive from the conversions ledger (count) and
-  // multiply by avg-ticket to get GMV. Door / Inside / Retarget mix from the
-  // 60-row ledger is statistically representative of MTD attribution.
-  const ledgerByAttr = seed.conversions.reduce(
-    (acc, c) => {
-      acc[c.attribution] = (acc[c.attribution] ?? 0) + 1;
-      return acc;
-    },
-    { door: 0, inside_sales: 0, retargeting: 0, other: 0 } as Record<string, number>,
-  );
-  const total = ledgerByAttr.door! + ledgerByAttr.inside_sales! + ledgerByAttr.retargeting!;
-  const doorShare = ledgerByAttr.door! / total;
-  const insideShare = ledgerByAttr.inside_sales! / total;
-  const doorConv = Math.round(rollup.conversionsMTD * doorShare);
-  const insideConv = Math.round(rollup.conversionsMTD * insideShare);
-  const retargConv = rollup.conversionsMTD - doorConv - insideConv;
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const mtdStart = new Date();
+  mtdStart.setUTCDate(1);
+  mtdStart.setUTCHours(0, 0, 0, 0);
+  const fourteenDaysAgo = new Date(todayStart);
+  fourteenDaysAgo.setUTCDate(fourteenDaysAgo.getUTCDate() - 13);
 
-  const doorGmv = (rollup.revenueCentsMTD * BigInt(Math.round(doorShare * 1000))) / 1000n;
-  const insideGmv = (rollup.revenueCentsMTD * BigInt(Math.round(insideShare * 1000))) / 1000n;
-  const retargGmv = rollup.revenueCentsMTD - doorGmv - insideGmv;
-  const doorRake = (doorGmv * 15n) / 100n;
-  const insideRake = (insideGmv * 10n) / 100n;
-  const retargRake = (retargGmv * 5n) / 100n;
-  const blendedRake = doorRake + insideRake + retargRake;
-  // Implied CPA — total spend across the marketing studio is ~12% of GMV.
-  const impliedSpendCents = (rollup.revenueCentsMTD * 12n) / 100n;
-  const blendedCpaCents =
-    rollup.conversionsMTD > 0 ? impliedSpendCents / BigInt(rollup.conversionsMTD) : 0n;
+  const [mtdAgg, billing, attrMtd, commissionAgg, knockersToday, conv14d] = await Promise.all([
+    db.conversion.aggregate({
+      where: { orgId: org.id, signedAt: { gte: mtdStart } },
+      _count: { _all: true },
+      _sum: { amountCents: true },
+    }),
+    db.orgBilling.findUnique({
+      where: { orgId: org.id },
+      select: { doorRakePercent: true, insideSalesRakePercent: true, retargetingRakePercent: true },
+    }),
+    db.conversion.groupBy({
+      by: ['attributionSource'],
+      where: { orgId: org.id, signedAt: { gte: mtdStart } },
+      _count: { _all: true },
+      _sum: { amountCents: true },
+    }),
+    db.commission.aggregate({
+      where: { orgId: org.id, periodStart: { lte: new Date() }, periodEnd: { gte: mtdStart } },
+      _sum: { amountCents: true },
+    }),
+    db.knock.groupBy({
+      by: ['userId'],
+      where: { orgId: org.id, capturedAt: { gte: todayStart } },
+      _count: { _all: true },
+    }),
+    db.conversion.findMany({
+      where: { orgId: org.id, signedAt: { gte: fourteenDaysAgo } },
+      select: { signedAt: true },
+    }),
+  ]);
 
-  // Top knockers by today's revenue — pull straight from the seeded roster.
-  const topKnockers = [...seed.knockers]
-    .filter((k) => k.status !== 'offline')
+  const conversionsMTD = mtdAgg._count._all;
+  const revenueCentsMTD = mtdAgg._sum.amountCents ?? 0n;
+  const commissionAccruedCents = commissionAgg._sum.amountCents ?? 0n;
+  const avgDealCents = conversionsMTD > 0 ? revenueCentsMTD / BigInt(conversionsMTD) : 0n;
+
+  const doorRake = billing ? Number(billing.doorRakePercent) : 15;
+  const insideRake = billing ? Number(billing.insideSalesRakePercent) : 10;
+  const retargRake = billing ? Number(billing.retargetingRakePercent) : 5;
+
+  const attrBySource = new Map(attrMtd.map((r) => [r.attributionSource, r]));
+  const attrBars = (
+    [
+      { src: 'Door', key: 'door' as const, rake: doorRake, color: 'bg-success' },
+      { src: 'Inside sales', key: 'inside_sales' as const, rake: insideRake, color: 'bg-accent' },
+      { src: 'Retargeting', key: 'retargeting' as const, rake: retargRake, color: 'bg-accent/60' },
+    ] as const
+  ).map((row) => {
+    const r = attrBySource.get(row.key);
+    const value = r?._sum.amountCents ?? 0n;
+    const rakeAmt = (value * BigInt(Math.round(row.rake * 100))) / 10000n;
+    return { ...row, count: r?._count._all ?? 0, value, rakeAmt };
+  });
+  const maxVal = attrBars.reduce((m, r) => (r.value > m ? r.value : m), 0n);
+
+  // Top knockers today — knock + conversion counts + revenue, joined by userId.
+  const knockerIds = knockersToday.map((r) => r.userId).filter((id): id is string => !!id);
+  const [users, convToday] =
+    knockerIds.length > 0
+      ? await Promise.all([
+          db.user.findMany({
+            where: { id: { in: knockerIds }, orgId: org.id },
+            select: { id: true, givenName: true, familyName: true, createdAt: true },
+          }),
+          db.conversion.groupBy({
+            by: ['knockerId'],
+            where: { orgId: org.id, knockerId: { in: knockerIds }, signedAt: { gte: todayStart } },
+            _count: { _all: true },
+            _sum: { amountCents: true },
+          }),
+        ])
+      : [[], []];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const convTodayMap = new Map(convToday.map((r) => [r.knockerId, r]));
+  const knocksTodayMap = new Map(knockersToday.map((r) => [r.userId, r._count._all]));
+
+  const topKnockers = knockerIds
+    .map((id) => {
+      const u = userMap.get(id);
+      const c = convTodayMap.get(id);
+      const knocksT = knocksTodayMap.get(id) ?? 0;
+      const convT = c?._count._all ?? 0;
+      return {
+        id,
+        initials: u
+          ? `${u.givenName.charAt(0)}${u.familyName.charAt(0) ?? ''}`.toUpperCase()
+          : '??',
+        name: u
+          ? `${u.givenName} ${u.familyName ? `${u.familyName.charAt(0)}.` : ''}`.trim()
+          : 'Knocker',
+        tenureDays: u
+          ? Math.max(0, Math.floor((Date.now() - u.createdAt.getTime()) / (24 * 60 * 60 * 1000)))
+          : 0,
+        knocksToday: knocksT,
+        conversionsToday: convT,
+        revenueCentsToday: c?._sum.amountCents ?? 0n,
+      };
+    })
     .sort((a, b) => b.conversionsToday - a.conversionsToday)
     .slice(0, 8);
 
-  const attrBars = [
-    {
-      src: 'Door',
-      count: doorConv,
-      value: doorGmv,
-      rake: 15,
-      rakeAmt: doorRake,
-      color: 'bg-success',
-    },
-    {
-      src: 'Inside sales',
-      count: insideConv,
-      value: insideGmv,
-      rake: 10,
-      rakeAmt: insideRake,
-      color: 'bg-accent',
-    },
-    {
-      src: 'Retargeting',
-      count: retargConv,
-      value: retargGmv,
-      rake: 5,
-      rakeAmt: retargRake,
-      color: 'bg-accent/60',
-    },
-  ];
-  const maxVal = attrBars.reduce((m, r) => (r.value > m ? r.value : m), 0n);
+  // 14-day conversion trend, daily buckets.
+  const dayBuckets = new Map<string, number>();
+  for (let d = 0; d < 14; d++) {
+    const date = new Date(fourteenDaysAgo);
+    date.setUTCDate(date.getUTCDate() + d);
+    dayBuckets.set(date.toISOString().slice(0, 10), 0);
+  }
+  for (const c of conv14d) {
+    const day = c.signedAt.toISOString().slice(0, 10);
+    dayBuckets.set(day, (dayBuckets.get(day) ?? 0) + 1);
+  }
+  const trend14d = [...dayBuckets.entries()].map(([iso, value]) => ({
+    iso,
+    weekday: new Date(iso).toLocaleDateString('en-US', { weekday: 'short' }),
+    value,
+  }));
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Reports">
@@ -100,27 +182,12 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard
-            label="MTD revenue"
-            value={<Money cents={rollup.revenueCentsMTD} region={region} />}
-            delta="+18.2%"
-            deltaTone="positive"
-          />
-          <KpiCard
-            label="MTD conv."
-            value={rollup.conversionsMTD.toLocaleString()}
-            delta="+12%"
-            deltaTone="positive"
-          />
-          <KpiCard
-            label="Blended CPA"
-            value={<Money cents={blendedCpaCents} region={region} />}
-            delta="-12%"
-            deltaTone="positive"
-          />
+          <KpiCard label="MTD revenue" value={<Money cents={revenueCentsMTD} region={region} />} />
+          <KpiCard label="MTD conv." value={conversionsMTD.toLocaleString()} />
+          <KpiCard label="Avg deal size" value={<Money cents={avgDealCents} region={region} />} />
           <KpiCard
             label="Commission accrued"
-            value={<Money cents={blendedRake} region={region} />}
+            value={<Money cents={commissionAccruedCents} region={region} />}
             hint="platform rake · pre-payout"
           />
         </div>
@@ -156,135 +223,98 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
         </Section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <Section title={`Top Knockers · today`} paddedBody={false}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Knocker</th>
-                  <th>Tenure</th>
-                  <th>Knocks</th>
-                  <th>Conv.</th>
-                  <th>Rate</th>
-                  <th>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topKnockers.map((k) => {
-                  const rate = k.knocksToday > 0 ? (k.conversionsToday / k.knocksToday) * 100 : 0;
-                  const tenure =
-                    k.tenureDays < 30
-                      ? `${k.tenureDays}d`
-                      : k.tenureDays < 365
-                        ? `${Math.round(k.tenureDays / 30)}mo`
-                        : `${(k.tenureDays / 365).toFixed(1)}yr`;
-                  return (
-                    <tr key={k.id}>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <span className="mono">{k.initials}</span>
-                          <span className="text-[13px] text-ink">{k.name}</span>
-                        </div>
-                      </td>
-                      <td className="numeric text-[12px] text-muted">{tenure}</td>
-                      <td className="numeric text-[13px]">{k.knocksToday.toLocaleString()}</td>
-                      <td className="numeric text-[13px]">{k.conversionsToday}</td>
-                      <td>
-                        <StatusPill tone={rate > 18 ? 'success' : rate > 10 ? 'info' : 'muted'}>
-                          {rate.toFixed(1)}%
-                        </StatusPill>
-                      </td>
-                      <td>
-                        <Money cents={k.revenueCentsToday} region={region} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <Section title="Top Knockers · today" paddedBody={false}>
+            {topKnockers.length === 0 ? (
+              <div className="px-5 py-8 text-center text-[12px] text-soft">
+                No field activity yet today
+              </div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Knocker</th>
+                    <th>Tenure</th>
+                    <th>Knocks</th>
+                    <th>Conv.</th>
+                    <th>Rate</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topKnockers.map((k) => {
+                    const rate = k.knocksToday > 0 ? (k.conversionsToday / k.knocksToday) * 100 : 0;
+                    return (
+                      <tr key={k.id}>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <span className="mono">{k.initials}</span>
+                            <span className="text-[13px] text-ink">{k.name}</span>
+                          </div>
+                        </td>
+                        <td className="numeric text-[12px] text-muted">
+                          {tenureLabel(k.tenureDays)}
+                        </td>
+                        <td className="numeric text-[13px]">{k.knocksToday.toLocaleString()}</td>
+                        <td className="numeric text-[13px]">{k.conversionsToday}</td>
+                        <td>
+                          <StatusPill tone={rate > 18 ? 'success' : rate > 10 ? 'info' : 'muted'}>
+                            {rate.toFixed(1)}%
+                          </StatusPill>
+                        </td>
+                        <td>
+                          <Money cents={k.revenueCentsToday} region={region} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </Section>
 
-          <Section title="Pipeline velocity by stage" subtitle="Median time per stage · last 30d">
-            <div className="space-y-3">
-              {[
-                { stage: 'New → Contacted', days: 0.3, prev: 0.5 },
-                { stage: 'Contacted → Qualified', days: 1.2, prev: 1.4 },
-                { stage: 'Qualified → Appointment', days: 0.8, prev: 1.1 },
-                { stage: 'Appointment → Converted', days: 1.4, prev: 2.0 },
-              ].map((s) => (
-                <div key={s.stage} className="flex items-center gap-3">
-                  <div className="flex-1 text-[12px] text-ink">{s.stage}</div>
-                  <div className="w-40 h-5 bg-paper rounded border border-line2 relative overflow-hidden">
-                    <div
-                      className="h-full bg-accent"
-                      style={{ width: `${(s.days / 2.5) * 100}%` }}
-                    />
-                    <div className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-ink numeric">
-                      {s.days}d
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-success numeric w-12 text-right">
-                    -{(s.prev - s.days).toFixed(1)}d
-                  </span>
-                </div>
-              ))}
+          <Section
+            title="Pipeline velocity by stage"
+            subtitle="Median time per stage — awaiting stage-transition tracking"
+          >
+            <div className="px-1 py-6 text-center text-[12px] text-soft">
+              Not yet available. This needs stage-transition timestamps (LeadActivity) that
+              aren&apos;t captured yet — no placeholder numbers shown.
             </div>
           </Section>
         </div>
 
         <Section
           title="14-day conversion trend"
-          subtitle="Weekday peaks · weekend trough · trend +2.2% WoW"
+          subtitle={`${org.tradingName} · daily conversions from Postgres`}
         >
-          <SimpleBarChart
-            data={rollup.conversions14d}
-            label={`${account.shortName} · daily conversions`}
-          />
+          <SimpleBarChart data={trend14d} label={`${org.tradingName} · daily conversions`} />
         </Section>
 
         <Section
           title="Saved reports"
           subtitle="Scheduled to email · click to view"
           action={
-            <Button variant="primary" size="sm" leftIcon={<BarChart3 size={13} />}>
-              Build report
-            </Button>
+            <>
+              <DataSourceBadge source="live" />
+              <BuildReportButton />
+            </>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
-              {
-                title: 'Conversion attribution · weekly',
-                schedule: 'Every Monday 09:00',
-                last: 'Mon May 19',
-              },
-              {
-                title: 'Commission accrual by Knocker',
-                schedule: 'Fortnightly · payroll day',
-                last: 'May 16',
-              },
-              { title: 'CPA by marketing channel', schedule: 'Weekly · Tue 09:00', last: 'May 20' },
-              { title: 'Lead-to-close cycle time', schedule: 'Monthly · 1st', last: 'May 1' },
-              { title: 'Pipeline velocity', schedule: 'Weekly · Fri 17:00', last: 'May 16' },
-              { title: 'Cohort retention (donors)', schedule: 'Monthly · 1st', last: 'May 1' },
+              { title: 'Conversion attribution · weekly', schedule: 'Every Monday 09:00' },
+              { title: 'Commission accrual by Knocker', schedule: 'Fortnightly · payroll day' },
+              { title: 'CPA by marketing channel', schedule: 'Weekly · Tue 09:00' },
+              { title: 'Lead-to-close cycle time', schedule: 'Monthly · 1st' },
+              { title: 'Pipeline velocity', schedule: 'Weekly · Fri 17:00' },
+              { title: 'Cohort retention (donors)', schedule: 'Monthly · 1st' },
             ].map((r) => (
-              <div
+              <SavedReportCard
                 key={r.title}
-                className="card card-pad hover:shadow-md transition cursor-pointer"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-[13px] font-semibold text-ink">{r.title}</div>
-                    <div className="text-[11px] text-muted mt-0.5">{r.schedule}</div>
-                  </div>
-                  <ChevronRight size={14} className="text-soft" />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-[11px]">
-                  <span className="text-muted">Last run {r.last}</span>
-                  <button className="text-accent font-medium hover:underline flex items-center gap-1">
-                    <Download size={11} /> CSV
-                  </button>
-                </div>
-              </div>
+                title={r.title}
+                schedule={r.schedule}
+                last="Not run yet"
+              />
             ))}
           </div>
         </Section>
@@ -294,8 +324,7 @@ export default function ReportsPage({ params }: { params: { slug: string } }): J
 }
 
 /**
- * Hand-rolled bar chart — no external deps. Shows the real weekly pattern
- * (Sun trough, Wed/Thu peak) so the chart looks like a real ops dashboard.
+ * Hand-rolled bar chart — no external deps.
  */
 function SimpleBarChart({
   data,

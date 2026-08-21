@@ -1,0 +1,12 @@
+# Railway service config — D2D partner-portal (Next.js client deliverable)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.partner-portal"
+
+[deploy]
+startCommand = "node apps/partner-portal/server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

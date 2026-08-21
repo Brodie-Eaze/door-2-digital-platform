@@ -1,0 +1,85 @@
+name: iOS
+
+# Knocker iOS build + test gate (F-005) and the Release ATS assertion (F-007).
+# Runs only when the app changes — macOS runners are expensive.
+on:
+  pull_request:
+    paths:
+      - 'apps/knocker-ios/**'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/knocker-ios/**'
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build + unit tests (simulator)
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/knocker-ios
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build + test
+        run: |
+          set -o pipefail
+          # Runners ship different simulator sets — pick the first available iPhone.
+          DEVICE=$(xcrun simctl list devices available | grep -oE 'iPhone [^(]+' | head -1 | sed 's/ *$//')
+          echo "Using simulator: $DEVICE"
+          xcodebuild \
+            -project D2DKnocker.xcodeproj \
+            -scheme D2DKnocker \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            CODE_SIGNING_ALLOWED=NO \
+            test | tail -80
+
+  ats-release-assertion:
+    name: ATS hardening (Release forbids arbitrary loads)
+    runs-on: macos-15
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/knocker-ios
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build Release
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project D2DKnocker.xcodeproj \
+            -scheme D2DKnocker \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath /tmp/dd-release \
+            build | tail -40
+
+      # F-007: a Release build must never ship NSAllowsArbitraryLoads=true.
+      # The Info.plist wires it to $(ATS_ALLOWS_ARBITRARY_LOADS), which must
+      # resolve to NO outside Debug. Fail the gate if the built plist says YES.
+      - name: Assert ATS locked down
+        run: |
+          PLIST=$(find /tmp/dd-release -name Info.plist -path '*D2DKnocker.app*' | head -1)
+          echo "Checking $PLIST"
+          VAL=$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$PLIST" 2>/dev/null || echo 'absent')
+          echo "NSAllowsArbitraryLoads = $VAL"
+          if [ "$VAL" = "true" ]; then
+            echo '::error::Release build allows arbitrary loads (ATS disabled) — F-007 violation'
+            exit 1
+          fi

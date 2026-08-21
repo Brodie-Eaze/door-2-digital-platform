@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Knocker iOS</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>D2D_API_BASE_URL</key>
+	<!-- Env-driven, substituted at build time from the D2D_API_BASE_URL build
+	     setting (see project.pbxproj / STAGING.md). Resolves per configuration:
+	       Debug   (iphoneos)  -> http://<Mac LAN IP>:3010/v1  (real device on same Wi-Fi)
+	       Debug   (simulator) -> http://localhost:3010/v1
+	       Release (default)   -> https://api.d2d.io/v1        (production)
+	       Release (staging)   -> override to https://STAGING-API-HOST/v1
+	     To repoint a real-device Debug build, edit the Debug
+	     "D2D_API_BASE_URL[sdk=iphoneos*]" build setting (current LAN IP via
+	     `ipconfig getifaddr en0`). Config.swift still guards DEBUG so a stray
+	     https value never overrides localhost in the simulator. -->
+	<string>$(D2D_API_BASE_URL)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- ATS is build-config driven via the ATS_ALLOWS_ARBITRARY_LOADS build
+		     setting (Debug = YES, Release = NO; see project.pbxproj).
+		       Debug   -> NSAllowsArbitraryLoads = YES: plaintext HTTP to the local
+		                  Fastify API (localhost / Mac LAN IP) is permitted.
+		       Release -> NSAllowsArbitraryLoads = NO:  ATS is enforced, so only
+		                  https is allowed. Production (api.d2d.io) and a Railway
+		                  https staging host both satisfy ATS with NO exception.
+		     NSAllowsLocalNetworking stays YES so a local-network plaintext dev API
+		     keeps working even under an ATS-enforced (Release) build if someone
+		     manually points a Release build at a LAN host for testing; it never
+		     loosens ATS for public/internet hosts. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<string>$(ATS_ALLOWS_ARBITRARY_LOADS)</string>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>D2D Knocker uses the camera to photograph addresses and capture evidence during knock visits.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to re-authenticate and protect your field data.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>D2D Knocker requires your location to accurately record knock coordinates and track field coverage during your shift.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>D2D Knocker uses your location to record where knocks occur.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

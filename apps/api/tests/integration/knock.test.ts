@@ -191,7 +191,9 @@ describe('POST /v1/sessions', () => {
         startGeo: { lat: 30.275, lng: -97.695 },
       },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant territory → 404 (Problems.tenantMismatch), NOT 403: the
+    // foreign territory id is indistinguishable from a non-existent one.
+    expect(res.statusCode).toBe(404);
   });
 
   it('returns 401 without JWT', async () => {
@@ -392,7 +394,7 @@ describe('GET /v1/knocks', () => {
 });
 
 describe('GET /v1/knocks/:id', () => {
-  it('returns 403 cross-tenant', async () => {
+  it('returns 404 cross-tenant', async () => {
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const sessionA = await startSession(tokenA, territoryA);
@@ -408,19 +410,22 @@ describe('GET /v1/knocks/:id', () => {
       url: `/v1/knocks/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
+    expect(res.statusCode).toBe(404);
   });
 });
 
 describe('POST /v1/knocks/:id/contest', () => {
-  it('returns 501 stub', async () => {
+  // contest is now IMPLEMENTED (disposition dispute + audit), not a 501 stub. A
+  // well-formed call against an unknown id resolves through the service to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/knocks/knk_test/contest',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {},
+      url: '/v1/knocks/knk_does_not_exist/contest',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'knk-contest-404' },
+      payload: { reason: 'wrong disposition' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

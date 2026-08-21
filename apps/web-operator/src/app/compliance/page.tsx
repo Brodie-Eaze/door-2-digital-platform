@@ -1,15 +1,72 @@
-import { ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Banner, Section, StatusPill, KpiCard } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
-import { STATE_CLEARANCE } from '@/lib/fixtures';
+import { db } from '@d2d/database';
+import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
-export default function CompliancePage(): JSX.Element {
-  const approved = STATE_CLEARANCE.filter((s) => s.status === 'approved').length;
-  const pending = STATE_CLEARANCE.filter((s) => s.status !== 'approved').length;
+// Server component reads the DB at request time — never statically built.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+interface ClearanceRow {
+  state: string;
+  status: string;
+}
+
+/**
+ * Live read of PaidSolicitorRegistration. No fixture fallback — zero rows is
+ * an honest "nothing filed yet" state (the matrix below already renders that
+ * correctly: an unmatched state just shows "not filed", which is true), and
+ * a DB error is surfaced to the caller instead of silently swapped for demo
+ * data.
+ */
+async function loadClearances(): Promise<{
+  rows: ClearanceRow[];
+  approvedLast30d: number;
+  error?: string;
+}> {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
+
+    const [regs, approvedLast30d] = await Promise.all([
+      db.paidSolicitorRegistration.findMany({
+        where: { regionCode: 'US' },
+        select: { state: true, status: true },
+        orderBy: { state: 'asc' },
+      }),
+      db.paidSolicitorRegistration.count({
+        where: { regionCode: 'US', status: 'approved', approvedAt: { gte: thirtyDaysAgo } },
+      }),
+    ]);
+    return { rows: regs, approvedLast30d };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[compliance] PaidSolicitorRegistration read failed:', err);
+    return {
+      rows: [],
+      approvedLast30d: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export default async function CompliancePage(): Promise<JSX.Element> {
+  const { rows: clearances, approvedLast30d, error } = await loadClearances();
+  const approved = clearances.filter((s) => s.status === 'approved').length;
+  const pending = clearances.filter((s) => s.status !== 'approved').length;
 
   return (
-    <OperatorShell pageTitle="Compliance">
+    <PlatformShell pageTitle="Compliance">
       <div className="space-y-6 max-w-[1280px]">
+        {error && (
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              Could not load PaidSolicitorRegistration: {error}. Refresh to retry.
+            </span>
+          </Banner>
+        )}
+
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <ShieldCheck size={14} />
@@ -23,7 +80,7 @@ export default function CompliancePage(): JSX.Element {
           <KpiCard
             label="US states cleared"
             value={`${approved} / 50`}
-            delta="+3 this month"
+            delta={approvedLast30d > 0 ? `+${approvedLast30d} last 30d` : undefined}
             deltaTone="positive"
           />
           <KpiCard label="Filings in progress" value={pending} hint="counsel-managed" />
@@ -34,6 +91,7 @@ export default function CompliancePage(): JSX.Element {
         <Section
           title="US state-by-state matrix"
           subtitle="Paid-solicitor registration status"
+          action={<DataSourceBadge source="live" />}
           paddedBody={false}
         >
           <div className="p-5">
@@ -90,7 +148,7 @@ export default function CompliancePage(): JSX.Element {
                 'WI',
                 'WY',
               ].map((state) => {
-                const entry = STATE_CLEARANCE.find((s) => s.state === state);
+                const entry = clearances.find((s) => s.state === state);
                 const tone = !entry
                   ? 'muted'
                   : entry.status === 'approved'
@@ -168,34 +226,34 @@ export default function CompliancePage(): JSX.Element {
             </div>
           </Section>
 
-          <Section title="Notifications">
-            <div className="space-y-3">
-              {[
-                {
-                  icon: AlertTriangle,
-                  tone: 'text-warn',
-                  msg: 'NY paid-solicitor registration ETA week 6. CA week 4.',
-                },
-                {
-                  icon: ShieldCheck,
-                  tone: 'text-success',
-                  msg: 'TCPA consent capture verified — 100% conformance last 30d.',
-                },
-                {
-                  icon: ShieldCheck,
-                  tone: 'text-success',
-                  msg: 'DNC list refresh completed 2026-05-24 03:00 UTC.',
-                },
-              ].map((n, i) => (
-                <div key={i} className="flex items-start gap-2 text-[13px]">
-                  <n.icon size={14} className={`${n.tone} mt-0.5 shrink-0`} />
-                  <span className="text-ink">{n.msg}</span>
-                </div>
-              ))}
-            </div>
+          <Section title="Filings in flight" subtitle="Live — not yet approved">
+            {clearances.filter((s) => s.status !== 'approved').length === 0 ? (
+              <p className="text-[13px] text-muted">
+                Nothing in flight — every filed state is approved.
+              </p>
+            ) : (
+              <div className="space-y-2.5 text-[13px]">
+                {clearances
+                  .filter((s) => s.status !== 'approved')
+                  .map((s) => (
+                    <div key={s.state} className="flex items-center justify-between">
+                      <span className="text-ink">{s.state}</span>
+                      <StatusPill tone={s.status === 'submitted' ? 'info' : 'warn'}>
+                        {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                      </StatusPill>
+                    </div>
+                  ))}
+              </div>
+            )}
+            {/* No ComplianceNotification model exists yet — an honest banner
+                beats a fabricated activity feed. */}
+            <p className="mt-4 text-[11px] text-soft border-t border-line2 pt-3">
+              Notification feed not yet wired — no dedicated model for filing-status alerts or DNC
+              refresh events.
+            </p>
           </Section>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

@@ -25,8 +25,13 @@ import { registerWebhook } from '../../src/domains/webhook/routes';
 import { registerNotification } from '../../src/domains/notification/routes';
 import { registerMarketing } from '../../src/domains/marketing/routes';
 import { registerContentStudio } from '../../src/domains/content-studio/routes';
+import { registerVoice } from '../../src/domains/voice/routes';
+import { registerDsar } from '../../src/domains/dsar/routes';
+import { registerCommission } from '../../src/domains/commission/routes';
+import { registerPayout } from '../../src/domains/payout/routes';
 import { registerIntegrations } from '../../src/integrations';
 import { prisma, shutdownDb } from '../../src/config/db';
+import { redis } from '../../src/config/redis';
 import { newId } from '@d2d/shared-utils';
 
 export async function buildTestApp(): Promise<FastifyInstance> {
@@ -58,6 +63,10 @@ export async function buildTestApp(): Promise<FastifyInstance> {
   await registerIntegrations(app);
   await app.register(registerMarketing, { prefix: '/v1/marketing' });
   await app.register(registerContentStudio, { prefix: '/v1/content-studio' });
+  await app.register(registerVoice, { prefix: '/v1/voice' });
+  await app.register(registerDsar, { prefix: '/v1/dsar' });
+  await app.register(registerCommission, { prefix: '/v1/commissions' });
+  await app.register(registerPayout, { prefix: '/v1/payout-batches' });
   await app.ready();
   return app;
 }
@@ -73,6 +82,7 @@ export async function truncateAll(): Promise<void> {
     'RefreshToken',
     'UserCredential',
     'TerritoryAssignment',
+    'territory_claims', // mapped name (TerritoryClaim @@map); no FK, order-free
     'Knock',
     'KnockSession',
     'LeadActivity',
@@ -111,8 +121,31 @@ export async function truncateAll(): Promise<void> {
   ];
   const list = tables.map((t) => `"${t}"`).join(', ');
   await prisma().$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE;`);
+
+  // Redis carries per-test ephemeral state that TRUNCATE does not touch. The
+  // SAML single-use assertion-replay cache (`saml:used-assertion:<id>`) keys on
+  // a hash of the SAMLResponse; tests that reuse the same fixture string ('seam')
+  // would otherwise see a replay-rejection from a prior test in the same run.
+  // Clear those keys so each test's first ACS consume is genuinely "first use".
+  await flushTestRedisKeys('saml:used-assertion:*');
+}
+
+/** Delete keys matching a glob via SCAN (non-blocking, never KEYS in a shared DB). */
+async function flushTestRedisKeys(pattern: string): Promise<void> {
+  const client = redis();
+  let cursor = '0';
+  do {
+    const [next, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+    cursor = next;
+    if (keys.length > 0) await client.del(...keys);
+  } while (cursor !== '0');
 }
 
 export async function teardown(): Promise<void> {
   await shutdownDb();
+  // NOTE: do NOT shutdownRedis() here. Under the integration runner (forks,
+  // singleFork) every test file shares one process, so the Redis singleton is
+  // shared across files. ioredis does not auto-reconnect after quit(), so
+  // quitting in one file's afterAll would dead-connection every later file.
+  // The connection is reclaimed when the process exits at end of run.
 }

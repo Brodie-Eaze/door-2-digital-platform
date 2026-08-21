@@ -1,12 +1,30 @@
-import { KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
-import { KNOCKERS } from '@/lib/fixtures';
+import { apiFetch, type PageResponse, type UserPublic } from '@/lib/api';
 
-export default function KnockersPage(): JSX.Element {
-  const active = KNOCKERS.filter((k) => k.status === 'active');
-  const idle = KNOCKERS.filter((k) => k.status === 'idle');
-  const totalKnocks = active.reduce((sum, k) => sum + k.knocks, 0);
-  const totalRev = active.reduce((sum, k) => sum + k.revenueCents, 0n);
+function initials(user: UserPublic): string {
+  return `${user.givenName.charAt(0)}${user.familyName.charAt(0) || user.givenName.charAt(1) || 'U'}`
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function statusTone(status: string): 'success' | 'warn' | 'muted' {
+  if (status === 'active') return 'success';
+  if (status === 'invited') return 'warn';
+  return 'muted';
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return 'Never';
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+export default async function KnockersPage(): Promise<JSX.Element> {
+  const userPage = await apiFetch<PageResponse<UserPublic>>('/users?role=knocker');
+  const knockers = userPage.data;
+  const active = knockers.filter((knocker) => knocker.status === 'active');
+  const invited = knockers.filter((knocker) => knocker.status === 'invited');
+  const archived = knockers.filter((knocker) => knocker.status === 'archived');
 
   return (
     <OrgShell pageTitle="Knockers">
@@ -15,66 +33,75 @@ export default function KnockersPage(): JSX.Element {
           <KpiCard
             label="Active today"
             value={active.length}
-            hint={`${KNOCKERS.length} on roster`}
+            hint={`${knockers.length} on roster`}
+            animate={false}
           />
-          <KpiCard label="Idle past start" value={idle.length} hint="SMS auto-sent" />
-          <KpiCard label="Total knocks" value={totalKnocks} delta="+8.4%" deltaTone="positive" />
           <KpiCard
-            label="Total revenue today"
-            value={<Money cents={totalRev} region="US" />}
-            delta="+18.2%"
-            deltaTone="positive"
+            label="Invited"
+            value={invited.length}
+            hint="pending activation"
+            animate={false}
+          />
+          <KpiCard label="Archived" value={archived.length} animate={false} />
+          <KpiCard
+            label="More available"
+            value={userPage.nextCursor ? 'Yes' : 'No'}
+            animate={false}
           />
         </div>
 
         <Section
           title="Today's roster"
-          subtitle="Active rep performance · ranked by conversions"
+          subtitle="Knocker users from the org roster"
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Rep</th>
-                <th>Status</th>
-                <th>Knocks</th>
-                <th>Conversions</th>
-                <th>Conv. rate</th>
-                <th>Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...KNOCKERS]
-                .sort((a, b) => b.conversions - a.conversions)
-                .map((k) => (
-                  <tr key={k.initials}>
+          {knockers.length === 0 ? (
+            <div className="text-[12px] text-muted p-5">
+              No knockers yet — they appear when org admins invite field reps.
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Rep</th>
+                  <th>Status</th>
+                  <th>Email</th>
+                  <th>Region</th>
+                  <th>Manager</th>
+                  <th>Last login</th>
+                </tr>
+              </thead>
+              <tbody>
+                {knockers.map((knocker) => (
+                  <tr key={knocker.id}>
                     <td>
                       <div className="flex items-center gap-2">
-                        <span className="mono">{k.initials}</span>
-                        <span className="text-[13px] text-ink">{k.name}</span>
+                        <span className="mono">{initials(knocker)}</span>
+                        <span className="text-[13px] text-ink">
+                          {knocker.givenName} {knocker.familyName}
+                        </span>
                       </div>
                     </td>
                     <td>
-                      <StatusPill tone={k.status === 'active' ? 'success' : 'warn'}>
-                        {k.status === 'active' ? 'Active' : 'Idle'}
-                      </StatusPill>
-                    </td>
-                    <td className="numeric text-[13px]">{k.knocks}</td>
-                    <td className="numeric text-[13px]">{k.conversions}</td>
-                    <td>
-                      {k.conversionRate > 0 ? (
-                        <span className="numeric text-[13px]">{k.conversionRate}%</span>
-                      ) : (
-                        <span className="text-soft">—</span>
-                      )}
+                      <StatusPill tone={statusTone(knocker.status)}>{knocker.status}</StatusPill>
                     </td>
                     <td>
-                      <Money cents={k.revenueCents} region="US" emptyAsDash />
+                      <span className="text-[12px] text-muted">{knocker.email}</span>
+                    </td>
+                    <td>
+                      <span className="mono !w-7 !h-5 !text-[10px]">{knocker.regionCode}</span>
+                    </td>
+                    <td className="text-[12px] text-muted">
+                      {knocker.managerId ? knocker.managerId : '—'}
+                    </td>
+                    <td className="text-[12px] text-muted numeric">
+                      {formatDate(knocker.lastLoginAt)}
                     </td>
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          )}
         </Section>
       </div>
     </OrgShell>

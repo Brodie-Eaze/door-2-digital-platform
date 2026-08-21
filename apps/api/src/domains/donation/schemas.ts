@@ -28,3 +28,17 @@ export const changeDonationAmountRequestSchema = z
   })
   .strict();
 export type ChangeDonationAmountRequest = z.infer<typeof changeDonationAmountRequestSchema>;
+
+export const resumeDonationRequestSchema = z
+  .object({
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
+export type ResumeDonationRequest = z.infer<typeof resumeDonationRequestSchema>;
+
+export const generateReceiptRequestSchema = z
+  .object({
+    resend: z.boolean().default(false),
+  })
+  .strict();
+export type GenerateReceiptRequest = z.infer<typeof generateReceiptRequestSchema>;

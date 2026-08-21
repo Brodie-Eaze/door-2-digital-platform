@@ -15,6 +15,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY apps/api/package.json apps/api/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/shared-utils/package.json packages/shared-utils/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/database/package.json packages/database/
+COPY packages/integrations/package.json packages/integrations/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/ui-web/package.json packages/ui-web/
 RUN pnpm fetch --frozen-lockfile
 RUN pnpm install --frozen-lockfile --offline
 
@@ -24,21 +29,28 @@ WORKDIR /repo
 COPY apps/api ./apps/api
 COPY packages ./packages
 RUN pnpm --filter api db:generate
-RUN pnpm --filter api build
 
 # ── runner ────────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl tini
 WORKDIR /repo
 ENV NODE_ENV=production
+# PORT CONTRACT (see docs/STAGING-DEPLOY.md): api = 3010, web-operator = 3000.
+# The Fastify app reads PORT via Zod (apps/api/src/config/env.ts, default 3010).
+# Railway injects its own PORT at runtime, which overrides this ENV default.
 ENV PORT=3010
 ENV HOST=0.0.0.0
+# HARDENING-LOG P0-perf: expand libuv thread pool so scrypt password hashing
+# does not starve other async-thread-pool work (fs, dns, crypto) under load.
+# Must also be set in the ECS task container definition (ecs.tf env_vars).
+ENV UV_THREADPOOL_SIZE=16
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 COPY --from=build /repo/package.json /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 COPY --from=build /repo/apps/api/package.json ./apps/api/
 COPY --from=build /repo/packages ./packages
-COPY --from=build /repo/apps/api/dist ./apps/api/dist
+COPY --from=build /repo/apps/api/src ./apps/api/src
+COPY --from=build /repo/apps/api/tsconfig.json ./apps/api/
 COPY --from=build /repo/apps/api/prisma ./apps/api/prisma
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/api/node_modules ./apps/api/node_modules
@@ -47,4 +59,7 @@ USER node
 EXPOSE 3010
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "apps/api/dist/src/index.js"]
+# tsx, not tsc-emitted JS: the codebase is ESM with extensionless TS imports,
+# which compiled output cannot load under Node ESM. tsx resolves them exactly
+# as dev + the CI boot-smoke gate do.
+CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/index.ts"]

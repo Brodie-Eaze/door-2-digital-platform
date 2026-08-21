@@ -8,16 +8,18 @@
  */
 
 import dynamic from 'next/dynamic';
-import type { CellStatus, ZoneSelection } from './territoryCells';
+import type { CellStatus, PropensityHeatPoint, ZoneSelection } from './TerritoryHeatmapImpl';
 
-export type { CellStatus, ZoneSelection };
+export type { CellStatus, PropensityHeatPoint, ZoneSelection };
 
 type Props = {
   onSelect: (cell: ZoneSelection | null) => void;
   assignedSet: Set<string>;
   statusFilter?: 'all' | CellStatus;
-  /** Override cell set (defaults to HQ Texas ALL_CELLS). */
-  cells?: ZoneSelection[];
+  /** Real Territory-derived cells — the clickable "zone" layer. */
+  cells: ZoneSelection[];
+  /** Real PropensityScore points — the non-interactive AI heat layer. */
+  propensityPoints?: PropensityHeatPoint[];
   /** Override map center (defaults to Texas). */
   center?: [number, number];
   /** Override default zoom (defaults to 6). */

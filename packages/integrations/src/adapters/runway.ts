@@ -19,10 +19,11 @@ import type {
   ProviderConfig,
   Result,
 } from '../types';
-import { isStubMode, stubJobStatus, stubPing, stubVideo } from './stub';
+import { fetchWithTimeout, guardProduction, stubJobStatus, stubPing, stubVideo } from './stub';
 
 const RUNWAY_BASE = 'https://api.dev.runwayml.com/v1' as const;
 const RUNWAY_VERSION = '2024-11-06' as const;
+const RUNWAY_TIMEOUT_MS = 30_000 as const;
 
 export function createRunwayAdapter(): ProviderAdapter {
   const kind = 'runway_video' as const;
@@ -34,47 +35,51 @@ export function createRunwayAdapter(): ProviderAdapter {
     docsUrl: 'https://docs.dev.runwayml.com',
 
     async ping(config) {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('Runway Gen-3', 'rw_demo') };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        // Use organization endpoint to verify credentials.
-        const r = await fetch(`${RUNWAY_BASE}/organization`, {
-          headers: { authorization: `Bearer ${apiKey}`, 'x-runway-version': RUNWAY_VERSION },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string; name?: string };
+      // Use organization endpoint to verify credentials.
+      const rr = await fetchWithTimeout(kind, `${RUNWAY_BASE}/organization`, {
+        headers: { authorization: `Bearer ${apiKey}`, 'x-runway-version': RUNWAY_VERSION },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: { accountLabel: json.name ?? json.id, accountId: json.id },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { id: string; name?: string };
+      return {
+        ok: true,
+        data: { accountLabel: json.name ?? json.id, accountId: json.id },
+      };
     },
 
     async generateVideo(
       input: GenerateVideoInput,
       config: ProviderConfig,
     ): Promise<Result<GenerateVideoOutput>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubVideo(input.prompt, 180) };
       }
       const apiKey = config.credentials.apiKey;
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${RUNWAY_BASE}/image_to_video`, {
+      const rr = await fetchWithTimeout(
+        kind,
+        `${RUNWAY_BASE}/image_to_video`,
+        {
           method: 'POST',
           headers: {
             authorization: `Bearer ${apiKey}`,
@@ -92,24 +97,25 @@ export function createRunwayAdapter(): ProviderAdapter {
                   ? '768:1280'
                   : '1024:1024',
           }),
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as { id: string };
+        },
+        RUNWAY_TIMEOUT_MS,
+      );
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
         return {
-          ok: true,
-          data: {
-            jobId: json.id,
-            estimatedReadyAt: new Date(Date.now() + input.durationSec * 20_000).toISOString(),
-          },
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
         };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as { id: string };
+      return {
+        ok: true,
+        data: {
+          jobId: json.id,
+          estimatedReadyAt: new Date(Date.now() + input.durationSec * 20_000).toISOString(),
+        },
+      };
     },
 
     async pollJob(
@@ -117,7 +123,9 @@ export function createRunwayAdapter(): ProviderAdapter {
       config: ProviderConfig,
       createdAtMs?: number,
     ): Promise<Result<JobStatus>> {
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         const s = stubJobStatus(jobId, createdAtMs);
         return { ok: true, data: s };
       }
@@ -125,36 +133,34 @@ export function createRunwayAdapter(): ProviderAdapter {
       if (!apiKey) {
         return { ok: false, error: new InvalidConfigError(kind, 'apiKey required') };
       }
-      try {
-        const r = await fetch(`${RUNWAY_BASE}/tasks/${jobId}`, {
-          headers: { authorization: `Bearer ${apiKey}`, 'x-runway-version': RUNWAY_VERSION },
-        });
-        if (!r.ok) {
-          return {
-            ok: false,
-            error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
-          };
-        }
-        const json = (await r.json()) as {
-          status: string;
-          output?: unknown;
-          failure?: string;
+      const rr = await fetchWithTimeout(kind, `${RUNWAY_BASE}/tasks/${jobId}`, {
+        headers: { authorization: `Bearer ${apiKey}`, 'x-runway-version': RUNWAY_VERSION },
+      });
+      if (!rr.ok) return rr;
+      const r = rr.data;
+      if (!r.ok) {
+        return {
+          ok: false,
+          error: new ProviderError('PROVIDER_5XX', `Runway ${r.status}`, kind, r.status),
         };
-        // Runway: PENDING | RUNNING | SUCCEEDED | FAILED | THROTTLED | CANCELLED
-        const upper = json.status?.toUpperCase?.();
-        if (upper === 'SUCCEEDED') {
-          return { ok: true, data: { status: 'ready', output: json.output } };
-        }
-        if (upper === 'FAILED' || upper === 'CANCELLED') {
-          return {
-            ok: true,
-            data: { status: 'failed', error: json.failure ?? json.status },
-          };
-        }
-        return { ok: true, data: { status: 'running' } };
-      } catch (e) {
-        return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
       }
+      const json = (await r.json()) as {
+        status: string;
+        output?: unknown;
+        failure?: string;
+      };
+      // Runway: PENDING | RUNNING | SUCCEEDED | FAILED | THROTTLED | CANCELLED
+      const upper = json.status?.toUpperCase?.();
+      if (upper === 'SUCCEEDED') {
+        return { ok: true, data: { status: 'ready', output: json.output } };
+      }
+      if (upper === 'FAILED' || upper === 'CANCELLED') {
+        return {
+          ok: true,
+          data: { status: 'failed', error: json.failure ?? json.status },
+        };
+      }
+      return { ok: true, data: { status: 'running' } };
     },
   };
 }

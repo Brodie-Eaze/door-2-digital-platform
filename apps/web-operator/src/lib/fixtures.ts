@@ -2,72 +2,15 @@
  * Demo fixtures — static seed data so the operator console renders
  * realistic content without a backend. Replace with API calls in Phase 1.1.
  *
- * Headline org metadata (knockers / conversions / revenue) is mirrored from
- * the seed rollup so this view reconciles with /command-centre.
+ * PILOT / ORGS / STATE_CLEARANCE / RECENT_AUDIT were removed once /orgs,
+ * /orgs/[slug], /compliance, /compliance/state-clearance, and /audit were
+ * wired to live Prisma reads (no fixture fallback on those surfaces
+ * anymore). ANOMALIES + KPIS remain — /overview still falls back to them
+ * when the DB is unreachable.
  */
-import { rollupFor, hqRollup } from './seed/kpis';
+import { hqRollup, rollupFor } from './seed/kpis';
 
-const HF = rollupFor('hope-forward');
 const HQ = hqRollup();
-
-export const PILOT = {
-  id: 'org_01HXJZP1PILOTCHARLIE',
-  legalName: 'Hope Forward International',
-  tradingName: 'HopeForward',
-  slug: 'pilot-charlie',
-  vertical: 'charity' as const,
-  region: 'US' as const,
-  knockers: HF.rosterSize,
-  insideSalesReps: HF.insideSalesSize,
-  monthlyConversions: HF.conversionsMTD,
-  monthlyRevenueCents: HF.revenueCentsMTD,
-  contractedAt: '2026-04-01',
-  goLiveAt: '2026-09-15',
-};
-
-const PESTMAX = rollupFor('pestmax');
-
-export const ORGS = [
-  {
-    id: PILOT.id,
-    name: 'Hope Forward International',
-    slug: 'pilot-charlie',
-    vertical: 'charity',
-    region: 'US',
-    plan: 'Enterprise',
-    knockers: HF.rosterSize,
-    conversionsMTD: HF.conversionsMTD,
-    revenueCentsMTD: HF.revenueCentsMTD,
-    health: 'healthy',
-    addedAt: '2026-04-01',
-  },
-  {
-    id: 'org_demo_pestmax',
-    name: 'PestMax Services',
-    slug: 'pestmax',
-    vertical: 'commercial',
-    region: 'US',
-    plan: 'Growth',
-    knockers: PESTMAX.rosterSize,
-    conversionsMTD: PESTMAX.conversionsMTD,
-    revenueCentsMTD: PESTMAX.revenueCentsMTD,
-    health: 'attention',
-    addedAt: '2026-04-22',
-  },
-  {
-    id: 'org_demo_solar',
-    name: 'SunHaven Solar',
-    slug: 'sunhaven',
-    vertical: 'commercial',
-    region: 'US',
-    plan: 'Trial',
-    knockers: 6,
-    conversionsMTD: 31,
-    revenueCentsMTD: 18_400_00n,
-    health: 'attention',
-    addedAt: '2026-05-15',
-  },
-];
 
 export const ANOMALIES = [
   {
@@ -111,61 +54,3 @@ export const KPIS = {
     ((rollupFor('hope-forward').revenueCentsMTD + rollupFor('pestmax').revenueCentsMTD) * 105n) /
     10000n,
 };
-
-export const STATE_CLEARANCE = [
-  { state: 'TX', status: 'approved', bondCents: 1_500_000n, approvedAt: '2026-04-18' },
-  { state: 'FL', status: 'approved', bondCents: 1_000_000n, approvedAt: '2026-04-22' },
-  { state: 'GA', status: 'approved', bondCents: 500_000n, approvedAt: '2026-05-01' },
-  { state: 'AZ', status: 'approved', bondCents: 250_000n, approvedAt: '2026-05-08' },
-  { state: 'CA', status: 'pending', bondCents: 2_500_000n, filedAt: '2026-05-12' },
-  { state: 'NY', status: 'submitted', bondCents: 5_000_000n, filedAt: '2026-05-14' },
-  { state: 'IL', status: 'pending', bondCents: 1_500_000n, filedAt: '2026-05-15' },
-  { state: 'NC', status: 'submitted', bondCents: 500_000n, filedAt: '2026-05-18' },
-  { state: 'CO', status: 'pending', bondCents: 750_000n, filedAt: '2026-05-20' },
-  { state: 'OH', status: 'pending', bondCents: 1_000_000n, filedAt: '2026-05-20' },
-];
-
-export const RECENT_AUDIT = [
-  {
-    occurredAt: '2026-05-24T18:42:11Z',
-    actor: 'brodie@door2digital.io',
-    action: 'org.brandkit.updated',
-    resource: 'BrandKit:hopeforward',
-  },
-  {
-    occurredAt: '2026-05-24T17:28:03Z',
-    actor: 'sarah@hopeforward.org',
-    action: 'territory.created',
-    resource: 'Territory:austin-east-residential',
-  },
-  {
-    occurredAt: '2026-05-24T17:22:54Z',
-    actor: 'system',
-    action: 'campaign.state_clearance.updated',
-    resource: 'Campaign:fall-pledge-drive-2026',
-  },
-  {
-    occurredAt: '2026-05-24T16:01:09Z',
-    actor: 'brodie@door2digital.io',
-    action: 'pii.unmask.approved',
-    resource: 'Lead:lead_01HXJZP1ABCDEF',
-  },
-  {
-    occurredAt: '2026-05-24T15:47:28Z',
-    actor: 'jordan@hopeforward.org',
-    action: 'conversion.created',
-    resource: 'Conversion:cnv_01HXJZP1XYZ123',
-  },
-  {
-    occurredAt: '2026-05-24T15:47:28Z',
-    actor: 'system',
-    action: 'commission.accrued',
-    resource: 'Commission:com_01HXJZP1QWE456',
-  },
-  {
-    occurredAt: '2026-05-24T15:46:12Z',
-    actor: 'kim@hopeforward.org',
-    action: 'knock.disposition.recorded',
-    resource: 'Knock:knk_01HXJZP1ASD789',
-  },
-];

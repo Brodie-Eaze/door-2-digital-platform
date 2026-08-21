@@ -1,0 +1,48 @@
+/*
+ * Invoice-detail print stylesheet (route-scoped — imported only by the
+ * invoice [id] page, so it never affects any other surface).
+ *
+ * Browser "Save as PDF" is the honest, dependency-free path to a downloadable
+ * invoice: this hides the app chrome and screen-only controls and un-pins the
+ * viewport shell so the document flows naturally across printed pages.
+ */
+
+@media print {
+  /* Hide chrome + any element explicitly marked screen-only. */
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  /* Un-pin the h-screen/overflow-hidden shell so content paginates. */
+  body > div {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body * {
+    overflow: visible !important;
+  }
+
+  main {
+    height: auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* Strip the card chrome so the printed sheet reads as a document. */
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Plus,
   Filter,
@@ -25,8 +25,9 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { WorkflowsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
 interface WorkflowDef {
   id: string;
@@ -477,15 +478,27 @@ const STATUS_ICONS: Record<WorkflowRun['status'], { icon: typeof CheckCircle2; c
   running: { icon: Play, color: 'text-accent' },
 };
 
-export default function WorkflowsPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
+export default function WorkflowsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'active' | 'paused' | 'failing' | 'draft'
   >('all');
   const [query, setQuery] = useState('');
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, WorkflowDef['status']>>({});
+
+  function toggleWorkflow(w: WorkflowDef): void {
+    const current = statusOverrides[w.id] ?? w.status;
+    const next: WorkflowDef['status'] = current === 'paused' ? 'active' : 'paused';
+    setStatusOverrides((prev) => ({ ...prev, [w.id]: next }));
+    toast.success(`"${w.name}" ${next === 'paused' ? 'paused' : 'resumed'}`);
+  }
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Workflows">
         <div className="space-y-5 max-w-[1400px]">
@@ -498,7 +511,10 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
     );
   }
 
-  const allWfs = buildWorkflows(params.slug);
+  const allWfs = buildWorkflows(params.slug).map((w) => ({
+    ...w,
+    status: statusOverrides[w.id] ?? w.status,
+  }));
   const wfs = allWfs
     .filter((w) => (statusFilter === 'all' ? true : w.status === statusFilter))
     .filter((w) => w.name.toLowerCase().includes(query.toLowerCase()));
@@ -561,10 +577,21 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
               />
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" leftIcon={<GitBranch size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<GitBranch size={12} />}
+              onClick={() => toast.info('Open builder — workflow builder lands in Phase 1.2')}
+            >
               Open builder
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New workflow — builder wiring lands in Phase 1.2')}
+            >
               New workflow
             </Button>
           </div>
@@ -646,10 +673,18 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 pt-2 border-t border-line2">
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Edit "${w.name}" — workflow builder lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Edit3 size={11} /> Edit
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() => toggleWorkflow(w)}
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         {w.status === 'paused' ? (
                           <>
                             <Play size={11} /> Resume
@@ -660,7 +695,10 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
                           </>
                         )}
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() => toast.info(`Clone "${w.name}" — wiring lands in Phase 1.2`)}
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Copy size={11} /> Clone
                       </button>
                     </div>
@@ -774,6 +812,9 @@ export default function WorkflowsPage({ params }: { params: { slug: string } }):
               ].map((t) => (
                 <button
                   key={t.name}
+                  onClick={() =>
+                    toast.info(`Use "${t.name}" template — builder wiring lands in Phase 1.2`)
+                  }
                   className="w-full text-left p-2.5 rounded-lg bg-paper border border-line2 hover:border-line transition flex items-center gap-2"
                 >
                   <t.icon size={12} className="text-accent" />

@@ -144,7 +144,13 @@ const nextConfig = {
   },
   async rewrites() {
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3010';
-    return [{ source: '/proxy/api/:path*', destination: `${apiBase}/v1/:path*` }];
+    return [
+      { source: '/proxy/api/:path*', destination: `${apiBase}/v1/:path*` },
+      // The API scopes the d2d_rt refresh cookie to Path=/v1/auth; the browser
+      // only sends it to same-origin /v1/auth/* paths, so the SessionKeeper's
+      // refresh call must go through this path-preserving rewrite.
+      { source: '/v1/auth/:path*', destination: `${apiBase}/v1/auth/:path*` },
+    ];
   },
 };
 

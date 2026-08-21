@@ -1,92 +1,221 @@
+'use client';
+
+/**
+ * Per-account Marketing Studio overview — real counts rolled up from the
+ * four Marketing Studio BFF routes (providers, jobs, creatives, campaigns).
+ * There is no ROAS/spend/conversion-attribution pipeline in the schema yet,
+ * so this shows what's actually tracked: job status distribution, creative
+ * approval state, campaign budget/status, and provider connectivity.
+ */
+import { use, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Sparkles,
   FileCheck2,
-  Wand2,
   ShieldCheck,
   Megaphone,
-  TrendingUp,
-  Eye,
+  Plug,
+  Clock,
   PlayCircle,
-  Pause,
   CheckCircle2,
+  XCircle,
   Ban,
-  UserCheck,
   Activity,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { MarketingStudioTabs } from '@/components/marketing-studio-tabs';
-import { MarketingStudioEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
-import { firstRunSnapshot } from '@/lib/first-run';
-import {
-  getAccountMarketing,
-  CHANNEL_LABEL,
-  CHANNEL_BADGE,
-  type AccountMarketing,
-} from '@/lib/account-marketing';
-import { pickCreativeImage } from '@/lib/creative-images';
+import { MarketingStudioEmpty } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 
-/**
- * Per-account Marketing Studio overview — Brodie's mission-control view of a
- * single sub-account's creative pipeline. Mirrors the HQ overview surface
- * but every number, creative, and reviewer is scoped to this account only.
- */
-
-interface PageProps {
-  params: { slug: string };
+interface ApiProvider {
+  id: string;
+  kind: string;
+  status: string;
 }
 
-const PIPELINE_STAGES: Array<{
-  key: keyof AccountMarketing['pipelineCounts'];
-  label: string;
-  detail: string;
-  icon: typeof Sparkles;
-}> = [
-  { key: 'brief', label: 'Brief', detail: 'audiences in', icon: FileCheck2 },
-  { key: 'compose', label: 'Compose', detail: 'Claude + GPT', icon: Wand2 },
-  { key: 'variation', label: 'Variation', detail: 'aud × msg × fmt', icon: Sparkles },
-  { key: 'review', label: 'Review', detail: 'human-in-loop', icon: ShieldCheck },
-  { key: 'publish', label: 'Publish', detail: 'channels live', icon: Megaphone },
-  { key: 'measure', label: 'Measure', detail: 'conv attributed', icon: TrendingUp },
-];
+interface ApiJob {
+  id: string;
+  providerKind: string;
+  capability: string;
+  status: string;
+  costCents: string;
+  createdAt: string;
+}
 
-export default function Page({ params }: PageProps): JSX.Element {
-  const account = getAccount(params.slug);
-  const data = getAccountMarketing(params.slug);
+interface ApiCreative {
+  id: string;
+  type: string;
+  prompt: string | null;
+  costCents: string;
+  safetyScanResult: unknown;
+  c2paManifestId: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+}
 
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account || !data || firstRun.isFirstRun) {
+interface ApiCampaign {
+  id: string;
+  provider: string;
+  objective: string;
+  budgetCents: string;
+  status: string;
+  startedAt: string | null;
+}
+
+interface Overview {
+  org: {
+    tradingName: string;
+    regionCode: 'AU' | 'US' | 'SG';
+    vertical: 'charity' | 'commercial' | null;
+  };
+  providers: ApiProvider[];
+  jobs: ApiJob[];
+  creatives: ApiCreative[];
+  campaigns: ApiCampaign[];
+}
+
+const JOB_STATUSES = ['pending', 'running', 'ready', 'failed', 'cancelled'] as const;
+
+function scanFailed(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  return (result as { pass?: unknown }).pass === false;
+}
+function scanPassed(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  return (result as { pass?: unknown }).pass === true;
+}
+
+export default function Page({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
+  const [data, setData] = useState<Overview | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async (): Promise<void> => {
+    setLoadError(null);
+    try {
+      const base = `/api/orgs/${encodeURIComponent(params.slug)}/marketing`;
+      const [providersRes, jobsRes, creativesRes, campaignsRes] = await Promise.all([
+        fetch(`${base}/providers`, { credentials: 'include' }),
+        fetch(`${base}/jobs`, { credentials: 'include' }),
+        fetch(`${base}/creatives`, { credentials: 'include' }),
+        fetch(`${base}/campaigns`, { credentials: 'include' }),
+      ]);
+      if (!providersRes.ok || !jobsRes.ok || !creativesRes.ok || !campaignsRes.ok) {
+        setLoadError('Could not load Marketing Studio — please retry.');
+        return;
+      }
+      const [providersJson, jobsJson, creativesJson, campaignsJson] = await Promise.all([
+        providersRes.json() as Promise<{
+          providers: ApiProvider[];
+          org: Overview['org'];
+        }>,
+        jobsRes.json() as Promise<{ jobs: ApiJob[] }>,
+        creativesRes.json() as Promise<{ creatives: ApiCreative[] }>,
+        campaignsRes.json() as Promise<{ campaigns: ApiCampaign[] }>,
+      ]);
+      setData({
+        org: providersJson.org,
+        providers: providersJson.providers,
+        jobs: jobsJson.jobs,
+        creatives: creativesJson.creatives,
+        campaigns: campaignsJson.campaigns,
+      });
+    } catch {
+      setLoadError('Could not load Marketing Studio — please retry.');
+    }
+  }, [params.slug]);
+
+  useEffect(() => {
+    // W3 fix: this used to gate on the fixture-keyed firstRunSnapshot, which
+    // defaults ANY non-demo-seed slug to isFirstRun=true — silently skipping
+    // this fetch for every real org and stranding it on a generic empty
+    // state forever. Always attempt the real load; `isEmpty` below (driven
+    // by actual API results) already renders the same honest empty state
+    // when there's genuinely nothing yet.
+    void load();
+  }, [load]);
+
+  if (loadError) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio">
-        <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <MarketingStudioEmpty slug={params.slug} accountName={firstRun.accountName} />
+        <div className="card card-pad text-center py-8 max-w-[1400px]">
+          <div className="text-[13px] text-ink mb-2" role="alert">
+            {loadError}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => void load()}>
+            Retry
+          </Button>
         </div>
       </AccountShell>
     );
   }
 
-  const topCreatives = [...data.creatives]
-    .filter((c) => c.status === 'published' && c.roas > 0)
-    .sort((a, b) => b.roas - a.roas)
+  if (!data) {
+    return (
+      <AccountShell accountSlug={params.slug} pageTitle="Marketing Studio">
+        <div className="card card-pad text-center py-10 text-[12px] text-muted max-w-[1400px]">
+          Loading Marketing Studio…
+        </div>
+      </AccountShell>
+    );
+  }
+
+  const isEmpty =
+    data.providers.length === 0 &&
+    data.jobs.length === 0 &&
+    data.creatives.length === 0 &&
+    data.campaigns.length === 0;
+
+  if (isEmpty) {
+    return (
+      <AccountShell
+        accountSlug={params.slug}
+        pageTitle={`Marketing Studio · ${data.org.tradingName}`}
+      >
+        <div className="space-y-5 max-w-[1400px]">
+          <MarketingStudioEmpty slug={params.slug} accountName={data.org.tradingName} />
+        </div>
+      </AccountShell>
+    );
+  }
+
+  const connected = data.providers.filter((p) => p.status === 'connected').length;
+  const approvedCreatives = data.creatives.filter((c) => c.approvedAt !== null).length;
+  const pendingCreatives = data.creatives.length - approvedCreatives;
+  const scannedCreatives = data.creatives.filter(
+    (c) => scanPassed(c.safetyScanResult) || scanFailed(c.safetyScanResult),
+  );
+  const passedCreatives = data.creatives.filter((c) => scanPassed(c.safetyScanResult));
+  const safetyPassPct =
+    scannedCreatives.length > 0 ? (passedCreatives.length / scannedCreatives.length) * 100 : null;
+  const c2paCount = data.creatives.filter((c) => c.c2paManifestId !== null).length;
+  const activeCampaigns = data.campaigns.filter((c) => c.status === 'active').length;
+  const totalBudget = data.campaigns.reduce((s, c) => s + BigInt(c.budgetCents), 0n);
+  const totalAiSpend = data.creatives.reduce((s, c) => s + BigInt(c.costCents), 0n);
+
+  const jobCounts = JOB_STATUSES.reduce<Record<string, number>>((acc, s) => {
+    acc[s] = data.jobs.filter((j) => j.status === s).length;
+    return acc;
+  }, {});
+
+  const recentCreatives = [...data.creatives]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8);
-
-  const reviewQueue = data.creatives.filter((c) => c.status === 'review').slice(0, 6);
-
   const recentCampaigns = [...data.campaigns]
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
     .slice(0, 5);
-
-  const blockedCount = data.recentBlocks.filter((b) => b.status === 'pending').length;
-  const resolvedCount = data.recentBlocks.filter(
-    (b) => b.status === 'released' || b.status === 'rewritten',
-  ).length;
+  const pendingQueue = data.creatives.filter((c) => c.approvedAt === null).slice(0, 6);
 
   return (
-    <AccountShell accountSlug={params.slug} pageTitle={`Marketing Studio · ${account.shortName}`}>
+    <AccountShell
+      accountSlug={params.slug}
+      pageTitle={`Marketing Studio · ${data.org.tradingName}`}
+    >
       <div className="space-y-5 max-w-[1700px]">
         <MarketingStudioTabs slug={params.slug} active="overview" />
 
@@ -94,348 +223,218 @@ export default function Page({ params }: PageProps): JSX.Element {
           <span className="text-[13px] flex items-center gap-2">
             <Sparkles size={14} className="text-accent" />
             <span>
-              <span className="font-semibold">{data.scopeLabel}</span> · vertical-scoped Marketing
-              Studio. Every creative, campaign, and audience is filtered to this account&apos;s{' '}
-              <span className="font-semibold">{data.vertical}</span> playbook,{' '}
-              <span className="font-semibold">{data.region}</span> regulatory stack, and{' '}
-              <span className="font-semibold">{data.currency}</span> budgets.
+              <span className="font-semibold">{data.org.tradingName}</span> · {data.org.regionCode}
+              {data.org.vertical ? ` · ${data.org.vertical}` : ''}. Live counts from
+              ContentGenerationJob, Creative, AdCampaign, and ProviderConnection.
             </span>
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
-            label="Creatives · this week"
-            value={data.kpis.creativesThisWeek.toString()}
-            hint={`${account.shortName} only`}
-            deltaTone="positive"
+            label="Creatives"
+            value={data.creatives.length}
+            hint={`${approvedCreatives} approved`}
           />
           <KpiCard
-            label="Brand-safety pass"
-            value={`${data.kpis.safetyPassPct.toFixed(1)}%`}
-            hint="of recent scans"
-            deltaTone={data.kpis.safetyPassPct > 95 ? 'positive' : 'negative'}
+            label="Safety pass rate"
+            value={safetyPassPct === null ? '—' : `${safetyPassPct.toFixed(1)}%`}
+            hint={`of ${scannedCreatives.length} scanned`}
           />
           <KpiCard
-            label="Avg cost / creative"
-            value={<Money cents={BigInt(data.kpis.avgCostPerCreativeCents)} region={data.region} />}
-            hint="all formats blended"
+            label="AI spend"
+            value={<Money cents={totalAiSpend} region={data.org.regionCode} />}
           />
           <KpiCard
             label="Active campaigns"
-            value={data.kpis.activeCampaigns.toString()}
-            hint={data.channels.map((c) => CHANNEL_LABEL[c]).join(' · ')}
+            value={activeCampaigns}
+            hint={`of ${data.campaigns.length}`}
           />
           <KpiCard
-            label="Rolling ROAS"
-            value={`${data.kpis.rollingRoas.toFixed(1)}x`}
-            deltaTone="positive"
+            label="Campaign budget"
+            value={<Money cents={totalBudget} region={data.org.regionCode} />}
           />
           <KpiCard
-            label="AI assist saved"
-            value={`${data.kpis.aiAssistHoursSaved} hr`}
-            hint="vs manual · 7d"
+            label="Providers connected"
+            value={connected}
+            hint={`of ${data.providers.length}`}
           />
         </div>
 
         <Section
-          title="Pipeline · today"
-          subtitle="Brief → Compose → Variation → Review → Publish → Measure (this account only)"
+          title="Generation pipeline · job status"
+          subtitle="ContentGenerationJob rows for this account, by status"
+          action={<DataSourceBadge source="live" />}
         >
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            {PIPELINE_STAGES.map((stage, idx) => {
-              const Icon = stage.icon;
-              const count = data.pipelineCounts[stage.key];
-              return (
-                <div key={stage.key} className="card card-pad relative">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 rounded bg-accentSoft text-accent flex items-center justify-center">
-                      <Icon size={13} />
-                    </span>
-                    <div className="text-[11.5px] font-semibold uppercase tracking-wider text-muted">
-                      {stage.label}
-                    </div>
-                  </div>
-                  <div className="text-[22px] font-semibold text-ink tracking-tight numeric">
-                    {count.toLocaleString()}
-                  </div>
-                  <div className="text-[10.5px] text-muted mt-0.5">{stage.detail}</div>
-                  {idx < PIPELINE_STAGES.length - 1 && (
-                    <div className="hidden md:block absolute right-[-9px] top-1/2 -translate-y-1/2 text-soft text-[14px]">
-                      →
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Section>
-
-        <Section
-          title={`Top-performing creatives · ${account.shortName}`}
-          subtitle="Ranked by ROAS · scoped to this account · scroll horizontally"
-          paddedBody={false}
-        >
-          <div className="overflow-x-auto px-4 py-4">
-            <div className="flex gap-3 min-w-max">
-              {topCreatives.map((c) => (
-                <div
-                  key={c.id}
-                  className="card hover:ring-1 hover:ring-accent transition cursor-pointer overflow-hidden w-[260px] shrink-0"
-                >
-                  <div className="aspect-square relative overflow-hidden bg-paper">
-                    <img
-                      src={pickCreativeImage(c.theme, c.id)}
-                      alt={c.headline}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-transparent" />
-                    <div className="absolute top-2 left-2 flex items-center gap-1">
-                      <span
-                        className={`rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold ${CHANNEL_BADGE[c.channel]}`}
-                      >
-                        {CHANNEL_LABEL[c.channel]}
-                      </span>
-                      <span className="bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-ink">
-                        {c.format}
-                      </span>
-                    </div>
-                    <div className="absolute top-2 right-2">
-                      <span
-                        className="inline-flex items-center gap-1 bg-surface/95 backdrop-blur rounded text-[9px] uppercase tracking-wider px-1.5 py-0.5 font-semibold text-success"
-                        title="C2PA signed"
-                      >
-                        <FileCheck2 size={9} /> C2PA
-                      </span>
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 p-3">
-                      <div className="text-surface text-[12.5px] font-semibold leading-snug drop-shadow-md line-clamp-3">
-                        {c.headline}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted capitalize">
-                        {data.vertical} · {data.region}
-                      </span>
-                      <span className="text-success font-semibold">{c.roas.toFixed(1)}x ROAS</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-line2">
-                      <Mini label="Conv %" value={`${c.convRate.toFixed(1)}%`} />
-                      <Mini
-                        label="Spend"
-                        value={<Money cents={BigInt(c.spendCents)} region={data.region} />}
-                      />
-                      <Mini label="Conv" value={c.conversions.toString()} />
-                    </div>
-                    <div className="flex items-center justify-between pt-1.5 border-t border-line2">
-                      <StatusPill tone="success">
-                        <PlayCircle size={9} className="-ml-0.5" /> live
-                      </StatusPill>
-                      <button
-                        type="button"
-                        className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
-                        title="Inspect"
-                      >
-                        <Eye size={12} />
-                      </button>
-                    </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {JOB_STATUSES.map((status) => (
+              <div key={status} className="card card-pad relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded bg-accentSoft text-accent flex items-center justify-center">
+                    {status === 'ready' && <CheckCircle2 size={13} />}
+                    {status === 'running' && <PlayCircle size={13} />}
+                    {status === 'pending' && <Clock size={13} />}
+                    {status === 'failed' && <XCircle size={13} />}
+                    {status === 'cancelled' && <Ban size={13} />}
+                  </span>
+                  <div className="text-[11.5px] font-semibold uppercase tracking-wider text-muted">
+                    {status}
                   </div>
                 </div>
-              ))}
-              {topCreatives.length === 0 && (
-                <div className="text-[12.5px] text-muted py-8 px-4">
-                  No published creatives yet for this account.
+                <div className="text-[22px] font-semibold text-ink tracking-tight numeric">
+                  {jobCounts[status] ?? 0}
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
         </Section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 space-y-5">
             <Section
-              title="Recent campaigns"
-              subtitle={`Latest 5 paid pushes for ${account.shortName}`}
+              title={`Recent creatives · ${recentCreatives.length}`}
+              subtitle="Newest first"
+              paddedBody={false}
+              action={
+                <Link href={`/accounts/${params.slug}/marketing-studio/library`}>
+                  <Button variant="ghost" size="sm">
+                    Open library
+                  </Button>
+                </Link>
+              }
+            >
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Prompt</th>
+                    <th>Type</th>
+                    <th>Cost</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentCreatives.map((c) => (
+                    <tr key={c.id}>
+                      <td className="text-[12.5px] text-ink leading-snug line-clamp-1">
+                        {c.prompt ?? '—'}
+                      </td>
+                      <td className="text-[12px] text-muted capitalize">{c.type}</td>
+                      <td className="text-[12px] text-ink">
+                        <Money
+                          cents={BigInt(c.costCents)}
+                          region={data.org.regionCode}
+                          emptyAsDash
+                        />
+                      </td>
+                      <td>
+                        {scanFailed(c.safetyScanResult) ? (
+                          <StatusPill tone="danger">safety failed</StatusPill>
+                        ) : c.approvedAt ? (
+                          <StatusPill tone="success">approved</StatusPill>
+                        ) : (
+                          <StatusPill tone="muted">pending</StatusPill>
+                        )}
+                      </td>
+                      <td className="text-[11px] text-muted">
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                  {recentCreatives.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-[12.5px] text-muted py-8 text-center">
+                        No creatives yet for this account.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </Section>
+
+            <Section
+              title={`Recent campaigns · ${recentCampaigns.length}`}
+              subtitle="Latest 5 by start date"
               paddedBody={false}
             >
               <table className="tbl">
                 <thead>
                   <tr>
                     <th>Campaign</th>
-                    <th>Channel</th>
-                    <th>Spend</th>
-                    <th>Conv</th>
-                    <th>ROAS</th>
+                    <th>Provider</th>
+                    <th>Budget</th>
                     <th>Status</th>
                     <th>Started</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentCampaigns.map((c) => (
-                    <tr key={c.id} className="hover:bg-paper">
+                    <tr key={c.id}>
                       <td>
                         <div className="text-[12.5px] font-medium text-ink leading-snug">
-                          {c.name}
+                          {c.objective}
                         </div>
                         <div className="text-[10px] text-muted font-mono">{c.id}</div>
                       </td>
-                      <td>
-                        <span
-                          className={`inline-flex items-center text-[10px] font-semibold rounded px-2 py-0.5 ${CHANNEL_BADGE[c.channel]}`}
-                        >
-                          {CHANNEL_LABEL[c.channel]}
-                        </span>
-                      </td>
+                      <td className="text-[12px] text-ink capitalize">{c.provider}</td>
                       <td className="text-[12px] text-ink">
-                        <Money cents={BigInt(c.spendCents)} region={data.region} emptyAsDash />
-                      </td>
-                      <td className="text-[12px] text-ink numeric font-semibold">
-                        {c.conversions.toLocaleString()}
-                      </td>
-                      <td className="text-[12px]">
-                        {c.roas === 0 ? (
-                          <span className="text-muted">—</span>
-                        ) : (
-                          <span
-                            className={
-                              c.roas >= 5
-                                ? 'text-success font-semibold'
-                                : c.roas >= 3
-                                  ? 'text-accent font-semibold'
-                                  : 'text-warn font-semibold'
-                            }
-                          >
-                            {c.roas.toFixed(1)}x
-                          </span>
-                        )}
+                        <Money
+                          cents={BigInt(c.budgetCents)}
+                          region={data.org.regionCode}
+                          emptyAsDash
+                        />
                       </td>
                       <td>
-                        <StatusPill
-                          tone={
-                            c.status === 'active'
-                              ? 'success'
-                              : c.status === 'paused'
-                                ? 'warn'
-                                : c.status === 'scheduled'
-                                  ? 'info'
-                                  : 'muted'
-                          }
-                        >
-                          {c.status === 'active' && <PlayCircle size={9} className="-ml-0.5" />}
-                          {c.status === 'paused' && <Pause size={9} className="-ml-0.5" />}
+                        <StatusPill tone={c.status === 'active' ? 'success' : 'muted'}>
                           {c.status}
                         </StatusPill>
                       </td>
-                      <td className="text-[11.5px] text-muted numeric">{c.startedAt}</td>
+                      <td className="text-[11.5px] text-muted numeric">
+                        {c.startedAt ? new Date(c.startedAt).toLocaleDateString() : '—'}
+                      </td>
                     </tr>
                   ))}
+                  {recentCampaigns.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-[12.5px] text-muted py-8 text-center">
+                        No campaigns yet for this account.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
-            </Section>
-
-            <Section
-              title="Safety activity"
-              subtitle={`Last ${data.recentBlocks.length} blocks · scoped to ${account.shortName}`}
-            >
-              <ol className="space-y-0">
-                {data.recentBlocks.map((b, idx) => (
-                  <li
-                    key={b.id}
-                    className={
-                      idx < data.recentBlocks.length - 1
-                        ? 'flex items-start gap-3 pb-3 mb-3 border-b border-line2'
-                        : 'flex items-start gap-3'
-                    }
-                  >
-                    <span className="w-7 h-7 rounded-full bg-paper border border-line2 flex items-center justify-center shrink-0 mt-0.5">
-                      {b.status === 'released' || b.status === 'rewritten' ? (
-                        <CheckCircle2 size={13} className="text-success" />
-                      ) : (
-                        <Ban size={13} className="text-danger" />
-                      )}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                        <div className="text-[12.5px] font-semibold text-ink leading-snug">
-                          {b.creativeHeadline}
-                        </div>
-                        <div className="text-[10.5px] text-muted mono shrink-0">{b.blockedAt}</div>
-                      </div>
-                      <div className="text-[11.5px] text-muted leading-snug">{b.ruleViolated}</div>
-                      <div className="text-[10px] text-soft mt-0.5 flex items-center gap-2">
-                        <span>reviewer: {b.reviewer}</span>
-                        <span className="text-soft">·</span>
-                        <StatusPill
-                          tone={
-                            b.severity === 'critical'
-                              ? 'danger'
-                              : b.severity === 'warn'
-                                ? 'warn'
-                                : 'info'
-                          }
-                        >
-                          {b.severity}
-                        </StatusPill>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-                {data.recentBlocks.length === 0 && (
-                  <li className="text-[12px] text-muted">No safety blocks for this account.</li>
-                )}
-              </ol>
             </Section>
           </div>
 
           <div className="space-y-5">
             <Section
               title="Approval queue"
-              subtitle={`${reviewQueue.length} creatives awaiting human review`}
+              subtitle={`${pendingQueue.length} of ${pendingCreatives} pending creatives`}
               action={
-                <Button variant="ghost" size="sm" leftIcon={<UserCheck size={12} />}>
-                  Review all
-                </Button>
+                <Link href={`/accounts/${params.slug}/marketing-studio/library`}>
+                  <Button variant="ghost" size="sm">
+                    Review all
+                  </Button>
+                </Link>
               }
             >
               <ul className="space-y-2.5">
-                {reviewQueue.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
-                  >
-                    <div className="w-14 h-14 rounded-md overflow-hidden border border-line2 shrink-0">
-                      <img
-                        src={pickCreativeImage(c.theme, c.id)}
-                        alt={c.headline}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
-                        {c.headline}
-                      </div>
-                      <div className="text-[10.5px] text-muted mt-0.5">
-                        {CHANNEL_LABEL[c.channel]} · {c.format}
-                      </div>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-accent text-surface flex items-center justify-center text-[8.5px] font-bold">
-                            {c.reviewerInitials ?? 'B'}
-                          </span>
-                          <span className="text-[10.5px] text-muted">
-                            {c.reviewerInitials ?? 'Brodie'}
-                          </span>
+                {pendingQueue.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/accounts/${params.slug}/marketing-studio/library`}
+                      className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-ink leading-snug line-clamp-2">
+                          {c.prompt ?? c.id}
                         </div>
-                        <span className="text-[10px] text-soft mono">{c.id}</span>
+                        <div className="text-[10.5px] text-muted mt-0.5 capitalize">{c.type}</div>
                       </div>
-                    </div>
+                    </Link>
                   </li>
                 ))}
-                {reviewQueue.length === 0 && (
+                {pendingQueue.length === 0 && (
                   <li className="text-[12px] text-muted text-center py-4">
                     Approval queue is clear.
                   </li>
@@ -443,55 +442,48 @@ export default function Page({ params }: PageProps): JSX.Element {
               </ul>
             </Section>
 
-            <Section title="Provenance & safety" subtitle="C2PA · moderation · resolution">
+            <Section title="Provenance & safety" subtitle="C2PA · moderation · approval">
               <div className="grid grid-cols-2 gap-3">
                 <ProvCard
                   icon={<Activity size={14} className="text-accent" />}
-                  label="Creatives · 7d"
-                  value={data.kpis.creativesThisWeek.toString()}
+                  label="Creatives"
+                  value={data.creatives.length.toString()}
                 />
                 <ProvCard
                   icon={<ShieldCheck size={14} className="text-success" />}
-                  label="Open blocks"
-                  value={blockedCount.toString()}
+                  label="Safety failed"
+                  value={data.creatives
+                    .filter((c) => scanFailed(c.safetyScanResult))
+                    .length.toString()}
                 />
                 <ProvCard
                   icon={<FileCheck2 size={14} className="text-accent" />}
                   label="C2PA issued"
-                  value={data.kpis.creativesThisWeek.toString()}
+                  value={c2paCount.toString()}
                 />
                 <ProvCard
-                  icon={<CheckCircle2 size={14} className="text-success" />}
-                  label="Resolved blocks"
-                  value={resolvedCount.toString()}
+                  icon={<Plug size={14} className="text-accent" />}
+                  label="Providers connected"
+                  value={connected.toString()}
                 />
               </div>
-              <div className="mt-4 space-y-2">
-                <ProvDetail
-                  icon={<CheckCircle2 size={13} className="text-success" />}
-                  title="Per-vertical rule pack"
-                  detail={`${data.brandRules.length} rules · ${data.region} · ${data.vertical}`}
-                />
-                <ProvDetail
-                  icon={<Sparkles size={13} className="text-accent" />}
-                  title="Brand voice"
-                  detail={`${data.themes.length} themes calibrated for ${account.shortName}`}
-                />
+              <div className="mt-4">
+                <Link href={`/accounts/${params.slug}/marketing-studio/integrations`}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Megaphone size={12} />}
+                    className="w-full"
+                  >
+                    Manage integrations
+                  </Button>
+                </Link>
               </div>
             </Section>
           </div>
         </div>
       </div>
     </AccountShell>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: React.ReactNode }): JSX.Element {
-  return (
-    <div>
-      <div className="text-[9.5px] uppercase tracking-wider text-muted">{label}</div>
-      <div className="text-[12px] font-semibold text-ink numeric">{value}</div>
-    </div>
   );
 }
 
@@ -513,26 +505,6 @@ function ProvCard({
       <div className="mt-1.5 text-[18px] font-semibold text-ink tracking-tight numeric">
         {value}
       </div>
-    </div>
-  );
-}
-
-function ProvDetail({
-  icon,
-  title,
-  detail,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  detail: string;
-}): JSX.Element {
-  return (
-    <div className="border border-line2 rounded-md p-2.5">
-      <div className="flex items-center gap-1.5 mb-0.5">
-        {icon}
-        <div className="text-[12px] font-semibold text-ink">{title}</div>
-      </div>
-      <div className="text-[10.5px] text-muted leading-snug">{detail}</div>
     </div>
   );
 }

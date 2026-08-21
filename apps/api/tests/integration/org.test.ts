@@ -219,15 +219,17 @@ describe('GET / PATCH / POST .../archive', () => {
     expect(res.json().org.id).toBe(adminOrgId);
   });
 
-  it('tenant guard blocks cross-org reads (403)', async () => {
+  it('tenant guard blocks cross-org reads (404)', async () => {
     const token = await getAdminToken();
     const res = await app.inject({
       method: 'GET',
       url: '/v1/orgs/org_NOT_OURS',
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().type).toBe('https://docs.d2d.io/problems/tenant-mismatch');
+    // cross-org → 404, NOT 403: Problems.tenantMismatch renders as a generic
+    // not-found so a foreign org id is indistinguishable from a non-existent one.
+    expect(res.statusCode).toBe(404);
+    expect(res.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 
   it('PATCH rejects regionCode mutation with 400 (region pinned at create)', async () => {

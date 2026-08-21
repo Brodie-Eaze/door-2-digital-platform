@@ -1,0 +1,36 @@
+import '@d2d/ui-tokens/globals.css';
+import type { Metadata } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import { SessionKeeper } from '@/components/SessionKeeper';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+  weight: ['400', '500', '600'],
+  display: 'swap',
+});
+
+export const metadata: Metadata = {
+  // Multi-tenant surface — never a specific client's name. Per-org branding
+  // comes from the org's own record at render time.
+  title: 'D2D Partner Portal',
+  description: 'Billing, conversions, and compliance for your D2D campaign.',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-screen font-sans">
+        <SessionKeeper />
+        {children}
+      </body>
+    </html>
+  );
+}

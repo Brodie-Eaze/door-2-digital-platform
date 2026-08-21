@@ -11,10 +11,15 @@
  * the *batch* call as a whole; the per-knock key dedupes individual rows
  * within a batch and across retries.
  */
-import type { RegionCode, Prisma, KnockDisposition } from '@prisma/client';
+import { Prisma, type RegionCode, type KnockDisposition } from '@prisma/client';
 import { newId, Problems, ProblemError, addressHash } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
 import { writeAudit } from '../../shared/audit/write';
+import { emitAnalyticsEvent } from '../analytics/service';
+import { accrueKnockCommission } from '../commission/service';
+import { PiiVaultService } from '../pii-vault/service';
+import { enqueueEnrichAddress } from '../../workers/address-enrich.worker';
+import { env } from '../../config/env';
 import type {
   StartSessionRequest,
   CreateKnockRequest,
@@ -90,19 +95,33 @@ export async function startSession(
   }
 
   const id = newId('sess');
-  const created = await prisma().knockSession.create({
-    data: {
-      id,
+  const startedAt = new Date();
+  const created = await prisma().$transaction(async (tx) => {
+    const row = await tx.knockSession.create({
+      data: {
+        id,
+        orgId: actor.orgId,
+        userId: actor.userId,
+        territoryId: input.territoryId,
+        regionCode: actor.regionCode,
+        startedAt,
+        startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
+        deviceId: input.deviceId,
+        appVersion: input.appVersion ?? null,
+        osVersion: input.osVersion ?? null,
+      },
+    });
+    await emitAnalyticsEvent(tx, {
       orgId: actor.orgId,
-      userId: actor.userId,
-      territoryId: input.territoryId,
       regionCode: actor.regionCode,
-      startedAt: new Date(),
-      startGeo: `${input.startGeo.lng} ${input.startGeo.lat}`,
-      deviceId: input.deviceId,
-      appVersion: input.appVersion ?? null,
-      osVersion: input.osVersion ?? null,
-    },
+      userId: actor.userId,
+      eventType: 'session_start',
+      entityType: 'KnockSession',
+      entityId: id,
+      occurredAt: startedAt,
+      payload: { territoryId: input.territoryId, deviceId: input.deviceId },
+    });
+    return row;
   });
   return toSessionPublic(created);
 }
@@ -116,9 +135,23 @@ export async function endSession(sessionId: string, actor: ActorContext): Promis
   if (existing.endedAt) {
     return toSessionPublic(existing); // idempotent
   }
-  const updated = await prisma().knockSession.update({
-    where: { id: sessionId },
-    data: { endedAt: new Date() },
+  const endedAt = new Date();
+  const updated = await prisma().$transaction(async (tx) => {
+    const row = await tx.knockSession.update({
+      where: { id: sessionId },
+      data: { endedAt },
+    });
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'session_end',
+      entityType: 'KnockSession',
+      entityId: sessionId,
+      occurredAt: endedAt,
+      payload: { territoryId: existing.territoryId },
+    });
+    return row;
   });
   return toSessionPublic(updated);
 }
@@ -234,6 +267,10 @@ export async function createKnock(
       throw new ProblemError(Problems.validation('Either addressId or rawAddress required'));
     }
 
+    const notesVault = input.notes
+      ? (PiiVaultService.encryptForRow('Knock', id, input.notes) as unknown as Prisma.JsonObject)
+      : Prisma.DbNull;
+
     const row = await tx.knock.create({
       data: {
         id,
@@ -249,10 +286,13 @@ export async function createKnock(
         clientOffsetMs,
         photoKey: input.photoKey ?? null,
         signatureKey: input.signatureKey ?? null,
-        notes: input.notes ?? null,
+        notes: input.notes ? '[vaulted]' : null,
+        notesVault,
         idempotencyKey: input.idempotencyKey,
       },
     });
+    await accrueKnockCommission({ orgId: actor.orgId, userId: actor.userId, knockId: id }, tx);
+
     await writeAudit(tx, {
       orgId: actor.orgId,
       regionCode: actor.regionCode,
@@ -269,8 +309,39 @@ export async function createKnock(
       },
       metadata: { clientOffsetMs },
     });
+    // Real-time warehouse outbox: emit "knock" in the SAME tx as the insert so
+    // the event commits atomically with its Knock row (only on the non-duplicate
+    // path — a deduped knock short-circuits above and never reaches here).
+    await emitAnalyticsEvent(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      userId: actor.userId,
+      eventType: 'knock',
+      entityType: 'Knock',
+      entityId: row.id,
+      occurredAt: capturedAt,
+      payload: {
+        disposition: row.disposition,
+        latitude: input.geo.lat,
+        longitude: input.geo.lng,
+        territoryId,
+      },
+    });
     return row;
   });
+
+  // Fire-and-forget: enrich the address with Snowflake data after knock saved.
+  // Only queues when SNOWFLAKE_ACCOUNT is configured — no-op in dev without keys.
+  if (env().SNOWFLAKE_ACCOUNT && result.addressId) {
+    void enqueueEnrichAddress({
+      addressId: result.addressId,
+      orgId: actor.orgId,
+      userId: actor.userId,
+      regionCode: actor.regionCode,
+    }).catch(() => {
+      // Non-fatal: enrichment is best-effort; log is emitted inside the worker.
+    });
+  }
 
   return { knock: toKnockPublic(result), deduped: false };
 }
@@ -554,6 +625,9 @@ export async function createKnockBatch(
         photoKey: string | null;
         signatureKey: string | null;
         notes: string | null;
+        // Encrypted vault blob (InputJsonValue) or Prisma.DbNull when absent —
+        // matches the nullable `notesVault Json?` column and createMany's input.
+        notesVault: Prisma.InputJsonValue | typeof Prisma.DbNull;
         idempotencyKey: string;
       }> = [];
       const allocatedKnockIds: string[] = [];
@@ -588,7 +662,14 @@ export async function createKnockBatch(
           clientOffsetMs: serverNow.getTime() - capturedAt.getTime(),
           photoKey: c.k.photoKey ?? null,
           signatureKey: c.k.signatureKey ?? null,
-          notes: c.k.notes ?? null,
+          notes: c.k.notes ? '[vaulted]' : null,
+          notesVault: c.k.notes
+            ? (PiiVaultService.encryptForRow(
+                'Knock',
+                id,
+                c.k.notes,
+              ) as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
           idempotencyKey: c.k.idempotencyKey,
         });
       }
@@ -637,6 +718,42 @@ export async function createKnockBatch(
               where: { id: { in: allocatedKnockIds } },
             })
           : [];
+
+      // Real-time warehouse outbox: one "knock" event per NEWLY-CREATED knock,
+      // emitted in the SAME tx as the batch insert. `out` is the re-read of rows
+      // we allocated this turn — a row that lost the skipDuplicates race kept the
+      // winner's (different) id, so it isn't in `out`; deduped/in-batch dups never
+      // reach here. Hence exactly-once per new knock, never for a duplicate.
+      // We read disposition/territoryId/geo off the persisted row (full-precision
+      // geo, not the coarsened read projection) so the warehouse sees the truth.
+      for (const k of out) {
+        const geo = toGeo(k.geo);
+        await emitAnalyticsEvent(tx, {
+          orgId: actor.orgId,
+          regionCode: actor.regionCode,
+          userId: actor.userId,
+          eventType: 'knock',
+          entityType: 'Knock',
+          entityId: k.id,
+          occurredAt: k.capturedAt,
+          payload: {
+            disposition: k.disposition,
+            latitude: geo?.lat ?? null,
+            longitude: geo?.lng ?? null,
+            territoryId: k.territoryId,
+          },
+        });
+      }
+
+      // Accrue per-knock commission for every newly-inserted knock.
+      // Must run inside the transaction so a rollback undoes commission rows too.
+      for (const k of out) {
+        await accrueKnockCommission(
+          { orgId: actor.orgId, userId: actor.userId, knockId: k.id },
+          tx,
+        );
+      }
+
       return { insertedCount, out };
     },
     { timeout: 30_000 },
@@ -690,6 +807,32 @@ export async function getKnock(id: string, actor: ActorContext): Promise<KnockPu
   if (row.orgId !== actor.orgId) {
     throw new ProblemError(Problems.tenantMismatch(row.orgId));
   }
+  return toKnockPublic(row);
+}
+
+export async function contestKnock(
+  id: string,
+  input: { reason: string },
+  actor: ActorContext,
+): Promise<KnockPublic> {
+  const row = await prisma().knock.findUnique({ where: { id } });
+  if (!row) throw new ProblemError(Problems.notFound('Knock', id));
+  if (row.orgId !== actor.orgId) throw new ProblemError(Problems.tenantMismatch(row.orgId));
+
+  await prisma().$transaction(async (tx) => {
+    await writeAudit(tx, {
+      orgId: actor.orgId,
+      regionCode: actor.regionCode,
+      actorUserId: actor.userId,
+      action: 'knock.disposition_contested',
+      resourceType: 'Knock',
+      resourceId: id,
+      beforeJson: { disposition: row.disposition },
+      afterJson: { contested: true },
+      metadata: { reason: input.reason },
+    });
+  });
+
   return toKnockPublic(row);
 }
 
@@ -751,6 +894,15 @@ function toKnockPublic(k: {
   leadId: string | null;
   idempotencyKey: string;
 }): KnockPublic {
+  // PII-first: a knock pinpoints a resident's doorstep + the rep's free-text
+  // notes about them. The default read boundary coarsens geo to a ~100m grid
+  // (3dp), redacts the free-text notes, and never returns the raw photo/signature
+  // S3 object keys. Precise geo, notes, and signed-consent artifacts require an
+  // audited JIT unmask / signed-URL grant — never this list/read path.
+  const rawGeo = toGeo(k.geo);
+  const geo = rawGeo
+    ? { lng: Math.round(rawGeo.lng * 1000) / 1000, lat: Math.round(rawGeo.lat * 1000) / 1000 }
+    : null;
   return {
     id: k.id,
     sessionId: k.sessionId,
@@ -761,13 +913,13 @@ function toKnockPublic(k: {
     regionCode: k.regionCode,
     brandCode: k.brandCode,
     disposition: k.disposition,
-    geo: toGeo(k.geo),
+    geo,
     capturedAt: k.capturedAt.toISOString(),
     serverReceivedAt: k.serverReceivedAt.toISOString(),
     clientOffsetMs: k.clientOffsetMs,
-    photoKey: k.photoKey,
-    signatureKey: k.signatureKey,
-    notes: k.notes,
+    photoKey: null,
+    signatureKey: null,
+    notes: null,
     leadId: k.leadId,
     idempotencyKey: k.idempotencyKey,
   };

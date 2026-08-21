@@ -240,7 +240,7 @@ describe('GET /v1/territories', () => {
 });
 
 describe('GET /v1/territories/:id', () => {
-  it('returns 403 cross-tenant (RFC 7807 tenant-mismatch)', async () => {
+  it('returns 404 cross-tenant (RFC 7807 not-found, no info leak)', async () => {
     const tokenA = await tokenFor(emailA, passwordA);
     const tokenB = await tokenFor(emailB, passwordB);
     const created = await app.inject({
@@ -255,8 +255,10 @@ describe('GET /v1/territories/:id', () => {
       url: `/v1/territories/${id}`,
       headers: { authorization: `Bearer ${tokenB}` },
     });
-    expect(peek.statusCode).toBe(403);
-    expect(peek.json().type).toBe('https://docs.d2d.io/problems/tenant-mismatch');
+    // cross-tenant → 404, NOT 403: Problems.tenantMismatch renders as a generic
+    // not-found so a foreign id is indistinguishable from a non-existent one.
+    expect(peek.statusCode).toBe(404);
+    expect(peek.json().type).toBe('https://docs.d2d.io/problems/not-found');
   });
 });
 
@@ -355,6 +357,164 @@ describe('Territory assignments', () => {
   });
 });
 
+describe('GET /v1/territories/assigned', () => {
+  const knockerId = 'usr_TEST_TER_ASSIGNED_KNOCKER';
+  const knockerEmail = 'assigned-knocker@territory.test';
+  const knockerPwd = 'AssignedKnockerPwd_1';
+
+  async function makeKnocker(): Promise<void> {
+    await prisma().user.create({
+      data: {
+        id: knockerId,
+        orgId: orgA,
+        email: knockerEmail,
+        emailDigest: emailDigest(knockerEmail, process.env.PII_SEARCH_KEY!),
+        givenName: 'Assigned',
+        familyName: 'Knocker',
+        role: 'knocker',
+        regionCode: 'US',
+      },
+    });
+    await setUserPassword(knockerId, knockerPwd);
+  }
+
+  async function createAndAssign(
+    name: string,
+    opts: { assign?: boolean; expiresAt?: string; status?: string } = {},
+  ): Promise<string> {
+    // Idempotency-Key charset is [a-zA-Z0-9._-] — slug out the name's spaces.
+    const slug = name.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const adminToken = await tokenFor(emailA, passwordA);
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/territories',
+      headers: { authorization: `Bearer ${adminToken}`, 'idempotency-key': `assigned-${slug}` },
+      payload: { name, vertical: 'charity', polygonWkt: samplePolygon },
+    });
+    const tid = created.json().territory.id;
+    if (opts.status && opts.status !== 'active') {
+      await prisma().territory.update({ where: { id: tid }, data: { status: opts.status } });
+    }
+    if (opts.assign) {
+      await app.inject({
+        method: 'POST',
+        url: `/v1/territories/${tid}/assignments`,
+        headers: { authorization: `Bearer ${adminToken}`, 'idempotency-key': `assign-${slug}` },
+        payload: { userId: knockerId, ...(opts.expiresAt && { expiresAt: opts.expiresAt }) },
+      });
+    }
+    return tid;
+  }
+
+  it('returns active, non-expired assigned territories as a bare array, ordered by name', async () => {
+    await makeKnocker();
+    await createAndAssign('Zulu Ward', { assign: true });
+    await createAndAssign('Alpha Ward', { assign: true });
+    await createAndAssign('Unassigned Ward', { assign: false });
+
+    const token = await tokenFor(knockerEmail, knockerPwd);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/territories/assigned',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.map((t: { name: string }) => t.name)).toEqual(['Alpha Ward', 'Zulu Ward']);
+    expect(body[0]).toEqual({
+      id: expect.stringMatching(/^ter_/),
+      name: 'Alpha Ward',
+      vertical: 'charity',
+      polygon: samplePolygon,
+      centroid: expect.any(String),
+      campaignId: null,
+      status: 'active',
+      // areaType + radiusMeters were added so the Knocker iOS map can render a
+      // radius circle. A polygon-created territory defaults to areaType='polygon'.
+      areaType: 'polygon',
+      radiusMeters: null,
+    });
+  });
+
+  it('excludes expired and just-revoked assignments', async () => {
+    await makeKnocker();
+    // Expired in the past.
+    await createAndAssign('Past Ward', { assign: true, expiresAt: '2020-01-01T00:00:00.000Z' });
+    // Live, then revoke (sets expiresAt = now).
+    const adminToken = await tokenFor(emailA, passwordA);
+    const tid = await createAndAssign('Revoked Ward', { assign: true });
+    const ter = await app.inject({
+      method: 'GET',
+      url: `/v1/territories/${tid}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    const aid = ter.json().territory.assignments[0].id;
+    await app.inject({
+      method: 'DELETE',
+      url: `/v1/territories/${tid}/assignments/${aid}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+
+    const token = await tokenFor(knockerEmail, knockerPwd);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/territories/assigned',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
+  it('excludes non-active territories even when assigned', async () => {
+    await makeKnocker();
+    await createAndAssign('Paused Ward', { assign: true, status: 'paused' });
+
+    const token = await tokenFor(knockerEmail, knockerPwd);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/territories/assigned',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
+  it("is tenant-scoped — a knocker never sees another org's assignments", async () => {
+    await makeKnocker();
+    // Assign an orgA territory to the orgA knocker.
+    await createAndAssign('Org A Ward', { assign: true });
+    // orgB admin has no assignments and must see an empty array, not orgA's.
+    const tokenB = await tokenFor(emailB, passwordB);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/territories/assigned',
+      headers: { authorization: `Bearer ${tokenB}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
+  it('returns 401 when JWT missing', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/territories/assigned' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('does not let GET /:id capture the literal "assigned" segment', async () => {
+    await makeKnocker();
+    const token = await tokenFor(knockerEmail, knockerPwd);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/territories/assigned',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    // A /:id hit would 404 (no territory "assigned"); a 200 array proves the
+    // static route wins.
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json())).toBe(true);
+  });
+});
+
 describe('GET /v1/territories/heatmap', () => {
   it('returns a bbox-scoped knock-density aggregate (mock)', async () => {
     const token = await tokenFor(emailA, passwordA);
@@ -382,14 +542,16 @@ describe('GET /v1/territories/heatmap', () => {
 });
 
 describe('POST /v1/territories/:id/draft', () => {
-  it('returns 501 — draft workflow still pending', async () => {
+  // draft is now IMPLEMENTED (creates a draft copy with a new polygon), not a
+  // 501 stub. A well-formed call against an unknown id resolves to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(emailA, passwordA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/territories/ter_anything/draft',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {},
+      url: '/v1/territories/ter_does_not_exist/draft',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'ter-draft-404' },
+      payload: { polygonWkt: samplePolygon, reason: 'boundary correction' },
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

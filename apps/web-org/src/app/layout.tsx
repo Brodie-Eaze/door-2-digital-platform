@@ -1,5 +1,6 @@
 import '@d2d/ui-tokens/globals.css';
 import type { Metadata } from 'next';
+import { SessionKeeper } from '@/components/SessionKeeper';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
 const inter = Inter({
@@ -17,14 +18,19 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Hope Forward · D2D Org Console',
-  description: 'Field operations command centre for Hope Forward International.',
+  // Multi-tenant surface — never a specific client's name. Per-org branding
+  // comes from the org's BrandKit at render time.
+  title: 'D2D Org Console',
+  description: 'Field operations command centre for your door-to-door campaigns.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-screen font-sans">
+        <SessionKeeper />
+        {children}
+      </body>
     </html>
   );
 }

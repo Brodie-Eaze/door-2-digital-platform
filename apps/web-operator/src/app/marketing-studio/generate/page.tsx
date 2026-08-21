@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Wand2,
   Sparkles,
@@ -13,9 +13,12 @@ import {
   RefreshCw,
   Lock,
   Eye,
+  ShieldAlert,
 } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, Skeleton, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge, type DataSource } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { pickCreativeImage, inferTheme } from '@/lib/creative-images';
 
 /**
@@ -51,118 +54,8 @@ interface Variant {
   capability: 'image' | 'carousel' | 'video' | 'avatar';
 }
 
-const VARIANT_SEEDS: Variant[] = [
-  {
-    id: 'var_a01',
-    seed: 'tampines-door-story-a01',
-    headline: "Every door is someone's story.",
-    copy: 'Sponsor a child in Tampines for just S$45/month. PayNow today, see your impact tomorrow.',
-    safetyPass: true,
-    cost: 0.42,
-    c2paId: 'c2pa-9421a',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a02',
-    seed: 'tampines-5min-change-a02',
-    headline: "In 5 minutes you can change a Tampines family's year.",
-    copy: 'S$45/mo via PayNow corporate UEN T26CC0021K. Tax-deductible 250% (IPC).',
-    safetyPass: true,
-    cost: 0.38,
-    c2paId: 'c2pa-9421b',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a03',
-    seed: 'tampines-school-meals-a03',
-    headline: 'Your S$45 buys a week of school meals.',
-    copy: "House-to-house permit PLRD/H2H/2026/0188. Knocker shows you the schools you're feeding.",
-    safetyPass: true,
-    cost: 0.41,
-    c2paId: 'c2pa-9421c',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a04',
-    seed: 'tampines-8210-doors-a04',
-    headline: 'We knocked on 8,210 doors in your block.',
-    copy: 'Less than 4% give. Be one of them. Recurring S$45/mo · cancel anytime.',
-    safetyPass: true,
-    cost: 0.39,
-    c2paId: 'c2pa-9421d',
-    status: 'preview',
-    capability: 'carousel',
-  },
-  {
-    id: 'var_a05',
-    seed: 'tampines-quiet-8-pct-a05',
-    headline: "Singapore's quiet 8% live below the line.",
-    copy: 'Tampines FSC reaches them. You can too. S$45/mo via PayNow.',
-    safetyPass: false,
-    cost: 0.44,
-    c2paId: 'c2pa-9421e',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a06',
-    seed: 'tampines-door-fed-a06',
-    headline: 'A door knocked is a child fed.',
-    copy: 'Our PLRD-permitted Knockers walk Tampines daily. Sponsor for S$45/mo.',
-    safetyPass: true,
-    cost: 0.4,
-    c2paId: 'c2pa-9421f',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a07',
-    seed: 'tampines-cdc-voucher-a07',
-    headline: 'Your CDC voucher? Stretch it twice as far.',
-    copy: 'Round-up at point of sale → recurring S$5/mo to Tampines FSC. PayNow today.',
-    safetyPass: true,
-    cost: 0.43,
-    c2paId: 'c2pa-9421g',
-    status: 'preview',
-    capability: 'carousel',
-  },
-  {
-    id: 'var_a08',
-    seed: 'tampines-knockknock-a08',
-    headline: 'Knock-knock. Tampines is here.',
-    copy: 'Our youngest sponsor is 16, our oldest 92. Join them with S$45/mo.',
-    safetyPass: true,
-    cost: 0.45,
-    c2paId: 'c2pa-9421h',
-    status: 'preview',
-    capability: 'image',
-  },
-  {
-    id: 'var_a09',
-    seed: 'tampines-recovery-video-a09',
-    headline: 'One block, 412 sponsors, and counting.',
-    copy: 'A short film from a single Tampines HDB block. Tap to watch · 28s.',
-    safetyPass: true,
-    cost: 0.62,
-    c2paId: 'c2pa-9421i',
-    status: 'preview',
-    capability: 'video',
-  },
-  {
-    id: 'var_a10',
-    seed: 'tampines-avatar-thanks-a10',
-    headline: 'A personal thanks from our Tampines team.',
-    copy: 'AI-presented avatar segment · CEO-recorded script · 18s.',
-    safetyPass: true,
-    cost: 1.84,
-    c2paId: 'c2pa-9421j',
-    status: 'preview',
-    capability: 'avatar',
-  },
-];
+/** Default number of variants requested per brief. */
+const DEFAULT_VARIANT_COUNT = 10;
 
 export default function GenerateCreativePage(): JSX.Element {
   const [vertical, setVertical] = useState<Vertical>('charity');
@@ -175,18 +68,115 @@ export default function GenerateCreativePage(): JSX.Element {
   const [format, setFormat] = useState<Format>('image');
   const [brandKit, setBrandKit] = useState('Tampines FSC · navy + amber · Inter');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [variants, setVariants] = useState<Variant[]>(VARIANT_SEEDS);
-  const [selectedId, setSelectedId] = useState<string | null>(VARIANT_SEEDS[0]?.id ?? null);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Data-source badge is only ever shown once real variants are on screen
+  // (see the Preview Section action below), so this only ever reads 'live'.
+  const [dataSource, setDataSource] = useState<DataSource>('live');
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  // Honest failure surface: when the upstream call fails we keep the brief and
+  // show this banner rather than pretending the generation succeeded.
+  const [genError, setGenError] = useState<string | null>(null);
+  // "Still working…" hint once a generation passes 30s.
+  const [slowHint, setSlowHint] = useState(false);
+  // View-issue panel for safety-failed variants.
+  const [issueVariantId, setIssueVariantId] = useState<string | null>(null);
+  // In-flight controller so a new generate (or unmount) aborts the previous.
+  const abortRef = useRef<AbortController | null>(null);
 
-  function handleGenerate(): void {
+  const GENERATE_TIMEOUT_MS = 90_000;
+  const SLOW_HINT_MS = 30_000;
+
+  async function handleGenerate(): Promise<void> {
+    // Cancel any prior in-flight generation.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setGenError(null);
+    setSlowHint(false);
     setIsGenerating(true);
-    setTimeout(() => {
+
+    const slowTimer = setTimeout(() => setSlowHint(true), SLOW_HINT_MS);
+    const timeoutTimer = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
+
+    try {
+      const res = await fetch('/api/marketing/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          vertical,
+          region,
+          audience,
+          headlineGoal,
+          channel,
+          format,
+          brandKit,
+          variantCount: DEFAULT_VARIANT_COUNT,
+        }),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          variants?: Variant[];
+          job?: { id: string; status: string };
+        };
+
+        if (Array.isArray(data.variants) && data.variants.length > 0) {
+          // Sync result: real AI variants from the upstream service.
+          setVariants(data.variants);
+          setSelectedId(data.variants[0]?.id ?? null);
+          setDataSource('live');
+          setGeneratedAt(new Date());
+        } else {
+          // 200 but no variants yet (async job). The brief was accepted but no
+          // creatives are ready synchronously — never fabricate placeholder
+          // variants; the job is tracked server-side and lands in the Library
+          // once it completes.
+          setVariants([]);
+          setSelectedId(null);
+          setGenError(
+            'Generation was accepted as an async job — no AI variants are ready yet. Your brief is saved; check the Library shortly.',
+          );
+        }
+      } else {
+        // API error (e.g. NEXT_PUBLIC_API_URL not set in this environment).
+        // Never fabricate sample variants — show the empty state and say why.
+        console.warn('[generate] API returned', res.status);
+        setVariants([]);
+        setSelectedId(null);
+        setGenError("AI generation isn't connected in this environment — no variants to show.");
+      }
+    } catch (err) {
+      const aborted = err instanceof DOMException && err.name === 'AbortError';
+      console.error('[generate] fetch failed:', err);
+      setVariants([]);
+      setSelectedId(null);
+      setGenError(
+        aborted
+          ? 'Generation timed out after 90s. Your brief is saved; tap Retry to try again.'
+          : "AI generation isn't connected in this environment — no variants to show.",
+      );
+    } finally {
+      clearTimeout(slowTimer);
+      clearTimeout(timeoutTimer);
+      setSlowHint(false);
       setIsGenerating(false);
-      setVariants(VARIANT_SEEDS.map((v) => ({ ...v, status: 'preview' })));
-    }, 1400);
+      abortRef.current = null;
+    }
   }
 
   function approve(id: string): void {
+    // SAFETY HARD-BLOCK: a safety-failed variant can never be approved, no
+    // matter which control invoked approve(). Open its issue panel instead.
+    const target = variants.find((v) => v.id === id);
+    if (target && !target.safetyPass) {
+      setIssueVariantId(id);
+      setSelectedId(id);
+      toast.error('Safety-failed variant cannot be approved — resolve the flag first.');
+      return;
+    }
     setVariants((vs) => vs.map((v) => (v.id === id ? { ...v, status: 'approved' as const } : v)));
   }
 
@@ -205,15 +195,111 @@ export default function GenerateCreativePage(): JSX.Element {
     );
   }
 
+  async function sendToQueue(ids: string[]): Promise<void> {
+    // Defence in depth: never queue a safety-failed variant even if one slips in.
+    const safe = ids.filter((id) => variants.find((v) => v.id === id)?.safetyPass);
+    if (safe.length === 0) {
+      toast.error('No queue-eligible variants — safety-failed creatives are blocked.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/marketing/queue', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ variantIds: safe }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { queued?: number };
+        const n = typeof data.queued === 'number' ? data.queued : safe.length;
+        // Mark the queued variants approved so the UI reflects the action.
+        setVariants((vs) =>
+          vs.map((v) => (safe.includes(v.id) ? { ...v, status: 'approved' as const } : v)),
+        );
+        toast.success(`${n} creative${n === 1 ? '' : 's'} sent to review queue`);
+      } else {
+        toast.error('Could not reach the review queue — try again.');
+      }
+    } catch (err) {
+      console.error('[queue] fetch failed:', err);
+      toast.error('Could not reach the review queue — try again.');
+    }
+  }
+
   const selected = variants.find((v) => v.id === selectedId);
+  const issueVariant = variants.find((v) => v.id === issueVariantId && !v.safetyPass);
   const approvedCount = variants.filter((v) => v.status === 'approved').length;
   const rejectedCount = variants.filter((v) => v.status === 'rejected').length;
   const safetyPassCount = variants.filter((v) => v.safetyPass).length;
   const totalCost = variants.reduce((s, v) => s + v.cost, 0);
+  // Variants eligible to queue: safety-passed, not already rejected.
+  const queueableIds = variants
+    .filter((v) => v.safetyPass && v.status !== 'rejected')
+    .map((v) => v.id);
 
   return (
     <PlatformShell pageTitle="Generate creative">
       <div className="space-y-4 max-w-[1700px]">
+        {genError && (
+          <Banner
+            tone="warn"
+            action={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<RefreshCw size={12} />}
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                >
+                  Retry
+                </Button>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={() => setGenError(null)}
+                  className="text-muted hover:text-ink transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            }
+          >
+            <span className="text-[13px] flex items-center gap-2">
+              <AlertTriangle size={14} className="text-warn shrink-0" />
+              <span>{genError}</span>
+            </span>
+          </Banner>
+        )}
+
+        {issueVariant && (
+          <Banner
+            tone="warn"
+            action={
+              <button
+                type="button"
+                aria-label="Dismiss safety issue detail"
+                onClick={() => setIssueVariantId(null)}
+                className="text-muted hover:text-ink transition-colors"
+              >
+                <X size={14} />
+              </button>
+            }
+          >
+            <span className="text-[13px] flex items-start gap-2">
+              <ShieldAlert size={14} className="text-danger shrink-0 mt-0.5" />
+              <span>
+                <span className="font-semibold">Safety flag on “{issueVariant.headline}”</span> —
+                this copy was flagged for potential emotional-pressure language under the{' '}
+                {vertical === 'charity' ? 'charity fundraising' : 'commercial advertising'} rule
+                pack for {region}. Ambiguous statistical claims (no citable source) and guilt-frame
+                phrasing can breach platform ad policy and{' '}
+                {region === 'US' ? 'FTC' : region === 'AU' ? 'ACL' : 'COC'} standards. Edit the copy
+                or regenerate this variant — approval stays blocked until the scan passes.
+              </span>
+            </span>
+          </Banner>
+        )}
+
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Wand2 size={14} className="text-accent" />
@@ -355,18 +441,50 @@ export default function GenerateCreativePage(): JSX.Element {
             <Section
               title={`Preview · ${variants.length} variants`}
               subtitle="Click a tile to inspect provenance + safety detail"
+              action={
+                variants.length > 0 ? (
+                  <DataSourceBadge source={dataSource} updatedAt={generatedAt} />
+                ) : undefined
+              }
             >
               {isGenerating ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="card overflow-hidden">
-                      <Skeleton height="aspect-[4/5]" rounded="rounded-none" />
-                      <div className="p-2.5 space-y-2">
-                        <Skeleton height="h-3" width="w-3/4" />
-                        <Skeleton height="h-3" width="w-1/2" />
-                      </div>
+                <div className="space-y-3">
+                  {slowHint && (
+                    <div className="text-[12px] text-muted flex items-center gap-2">
+                      <RefreshCw size={12} className="animate-spin" />
+                      Still working — image + video generation can take up to 90 seconds…
                     </div>
-                  ))}
+                  )}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i} className="card overflow-hidden">
+                        <Skeleton height="aspect-[4/5]" rounded="rounded-none" />
+                        <div className="p-2.5 space-y-2">
+                          <Skeleton height="h-3" width="w-3/4" />
+                          <Skeleton height="h-3" width="w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : variants.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-16 px-6">
+                  <div className="w-12 h-12 rounded-2xl bg-accentSoft/40 flex items-center justify-center mb-4">
+                    <Sparkles size={20} className="text-accent" />
+                  </div>
+                  <div className="text-[14px] font-semibold text-ink mb-1">No variants yet</div>
+                  <p className="text-[12px] text-muted max-w-[340px] leading-relaxed mb-5">
+                    Fill your brief on the left and generate — your first batch of brand-safe AI
+                    variants appears here, moderation-scanned and C2PA-stamped.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Sparkles size={13} />}
+                    onClick={handleGenerate}
+                  >
+                    Generate 10 variants
+                  </Button>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -437,7 +555,14 @@ export default function GenerateCreativePage(): JSX.Element {
                       <div>temperature: 0.72</div>
                       <div>prompt_hash: 0x9f12c8…</div>
                       <div>cost_cents: {Math.round(selected.cost * 100)}</div>
-                      <div>safety_scan: pass</div>
+                      <div>
+                        safety_scan:{' '}
+                        {selected.safetyPass ? (
+                          'pass'
+                        ) : (
+                          <span className="text-danger font-semibold">FAILED</span>
+                        )}
+                      </div>
                       <div>signed_at: 2026-05-24T09:42:18Z</div>
                     </div>
                     <div className="mt-2.5">
@@ -464,16 +589,33 @@ export default function GenerateCreativePage(): JSX.Element {
                       </div>
                     </div>
                   </div>
+                  {!selected.safetyPass && (
+                    <div className="flex items-center gap-2 text-[11.5px] text-danger bg-danger/5 border border-danger/20 rounded-md px-2.5 py-2">
+                      <ShieldAlert size={13} className="shrink-0" />
+                      <span>Safety failed — approval blocked until the flag is resolved.</span>
+                    </div>
+                  )}
                   <div className="pt-3 border-t border-line2 grid grid-cols-2 gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      leftIcon={<Check size={12} />}
-                      onClick={() => approve(selected.id)}
-                      disabled={selected.status === 'approved'}
-                    >
-                      Approve
-                    </Button>
+                    {selected.safetyPass ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        leftIcon={<Check size={12} />}
+                        onClick={() => approve(selected.id)}
+                        disabled={selected.status === 'approved'}
+                      >
+                        Approve
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Eye size={12} />}
+                        onClick={() => setIssueVariantId(selected.id)}
+                      >
+                        View issue
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -488,8 +630,15 @@ export default function GenerateCreativePage(): JSX.Element {
                       size="sm"
                       leftIcon={<Send size={12} />}
                       className="col-span-2"
+                      onClick={() => void sendToQueue(queueableIds)}
+                      disabled={queueableIds.length === 0}
+                      title={
+                        queueableIds.length === 0
+                          ? 'No queue-eligible variants — safety-failed creatives are blocked'
+                          : `Queue ${queueableIds.length} safety-passed variant${queueableIds.length === 1 ? '' : 's'}`
+                      }
                     >
-                      Send to review queue
+                      Send {queueableIds.length > 0 ? `${queueableIds.length} ` : ''}to review queue
                     </Button>
                   </div>
                 </div>

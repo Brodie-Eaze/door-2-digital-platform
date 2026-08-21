@@ -16,6 +16,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY apps/api/package.json apps/api/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/shared-utils/package.json packages/shared-utils/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/database/package.json packages/database/
+COPY packages/integrations/package.json packages/integrations/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/ui-web/package.json packages/ui-web/
 RUN pnpm fetch --frozen-lockfile
 RUN pnpm install --frozen-lockfile --offline
 

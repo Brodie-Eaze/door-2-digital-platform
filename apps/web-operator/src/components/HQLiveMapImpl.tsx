@@ -5,12 +5,20 @@
  * `HQLiveMap` dynamic wrapper. Renders:
  *  - Streets (OSM) + Satellite (Esri World Imagery) base layers via switcher
  *  - Optional Places/Boundaries label overlay on satellite
- *  - Rep pins as CircleMarkers, with pulse halos for active reps
- *  - AI suggestion zones as labelled CircleMarkers with permanent tooltips
+ *  - Rep pins as CircleMarkers, with pulse halos for active reps — sourced from
+ *    live /api/fleet data, polled every 30 seconds.
  *  - Built-in zoom + scale + attribution controls
+ *
+ * Fleet data: GET /api/fleet returns active KnockSessions with the latest
+ * Knock.geo parsed into lat/lng. An empty array is an honest "nobody's
+ * clocked in" answer, not a loading state — it still marks the badge LIVE.
+ *
+ * There is no backing table for "AI suggested next zones" yet (see
+ * schema.prisma) — this map no longer renders that overlay; command-centre
+ * shows the honest empty state via AiNextZonesPanel instead.
  */
 
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -20,9 +28,18 @@ import {
   LayersControl,
   ZoomControl,
   ScaleControl,
+  useMap,
 } from 'react-leaflet';
-import { Phone, MessageSquare, Coffee, Play, Zap } from 'lucide-react';
-import { FLEET_REPS, AI_ZONES, STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
+import { Phone, MessageSquare, Coffee, Play } from 'lucide-react';
+import {
+  STATUS_COLORS,
+  HQ_FALLBACK_CENTER,
+  apiFleetEntryToRep,
+  type ApiFleetEntry,
+  type FleetRep,
+} from '@/lib/fleet';
+import { toast } from '@/components/Toaster';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
 const TEXAS_CENTER: [number, number] = [31.0, -97.0];
 const INITIAL_ZOOM = 6;
@@ -34,13 +51,85 @@ const STATUS_LABEL: Record<FleetRep['status'], string> = {
   offline: 'Offline',
 };
 
-export function HQLiveMapImpl(): JSX.Element {
-  const activeCount = FLEET_REPS.filter((r) => r.status === 'active').length;
-  const breakCount = FLEET_REPS.filter((r) => r.status === 'break').length;
-  const idleCount = FLEET_REPS.filter((r) => r.status === 'idle').length;
-  const offlineCount = FLEET_REPS.filter((r) => r.status === 'offline').length;
-  const totalKnocks = FLEET_REPS.reduce((s, r) => s + r.knocksToday, 0);
-  const totalConv = FLEET_REPS.reduce((s, r) => s + r.conversionsToday, 0);
+/** Imperative map controller — keyed on `target`, flies the map there. */
+function FlyController({
+  target,
+}: {
+  target: { lat: number; lng: number; zoom?: number } | null;
+}): null {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo([target.lat, target.lng], target.zoom ?? 13, { duration: 0.8 });
+    // Re-fly whenever the target identity changes (lat/lng/zoom).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.lat, target?.lng, target?.zoom]);
+  return null;
+}
+
+export interface HQLiveMapProps {
+  /** When set, the map flies to these coordinates (signature interaction). */
+  flyTarget?: { lat: number; lng: number; zoom?: number } | null;
+  /**
+   * When set, draws a pulsing amber highlight ring directly at these
+   * coordinates. Keying off coords rather than a rep id keeps the highlight
+   * working even as reps drop off/rejoin the polled /api/fleet response.
+   */
+  highlightCoords?: { lat: number; lng: number } | null;
+}
+
+export function HQLiveMapImpl({
+  flyTarget = null,
+  highlightCoords = null,
+}: HQLiveMapProps): JSX.Element {
+  // Live fleet data, polled every 30s from /api/fleet. Starts empty — there
+  // is no fixture fallback; a genuinely empty fleet is an honest answer.
+  const [fleet, setFleet] = useState<FleetRep[]>([]);
+  const { source, updatedAt, markFresh } = useDataFreshness('fixture');
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchFleet(): Promise<void> {
+      // Skip when the previous poll is still in flight (prevents out-of-order
+      // responses overwriting newer data) or the tab is backgrounded.
+      if (inFlight.current || document.visibilityState === 'hidden') return;
+      inFlight.current = true;
+      try {
+        const res = await fetch('/api/fleet');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { fleet?: ApiFleetEntry[] };
+        // Any successful, well-formed response — including a genuinely empty
+        // fleet (nobody clocked in) — is real live data, so it marks fresh.
+        if (Array.isArray(data.fleet)) {
+          setFleet(data.fleet.map((r) => apiFleetEntryToRep(r, HQ_FALLBACK_CENTER)));
+          markFresh();
+        }
+      } catch {
+        // Network failure — keep current state; staleness timer downgrades the
+        // badge automatically if we'd previously gone live.
+      } finally {
+        inFlight.current = false;
+      }
+    }
+
+    void fetchFleet();
+    const interval = setInterval(() => void fetchFleet(), 30_000);
+    return (): void => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const activeCount = fleet.filter((r) => r.status === 'active').length;
+  const breakCount = fleet.filter((r) => r.status === 'break').length;
+  const idleCount = fleet.filter((r) => r.status === 'idle').length;
+  const offlineCount = fleet.filter((r) => r.status === 'offline').length;
+  const totalKnocks = fleet.reduce((s, r) => s + r.knocksToday, 0);
+  // Per-rep conversions aren't tracked by /api/fleet yet (see
+  // apiFleetEntryToRep) — never sum a hardcoded 0 into a headline stat.
 
   return (
     <div className="relative w-full" style={{ height: 640 }}>
@@ -53,6 +142,8 @@ export function HQLiveMapImpl(): JSX.Element {
           style={{ height: '100%', width: '100%', background: '#0b1220' }}
           attributionControl={true}
         >
+          <FlyController target={flyTarget} />
+
           <LayersControl position="topright">
             <LayersControl.BaseLayer name="Streets (OSM)">
               <TileLayer
@@ -79,36 +170,27 @@ export function HQLiveMapImpl(): JSX.Element {
             </LayersControl.Overlay>
           </LayersControl>
 
-          {/* AI suggestion zones — pulsing accent circles */}
-          {AI_ZONES.map((z) => (
+          {/* Amber highlight ring — drawn directly at the anomaly's coordinates
+              (not by matching a rendered pin), so it survives the fixture→live
+              fleet swap where rep ids change. */}
+          {highlightCoords && (
             <CircleMarker
-              key={z.label}
-              center={[z.lat, z.lng]}
-              radius={30}
+              center={[highlightCoords.lat, highlightCoords.lng]}
+              radius={20}
               pathOptions={{
-                color: '#3B82F6',
-                weight: 2,
-                fillColor: '#3B82F6',
-                fillOpacity: 0.18,
+                color: '#F59E0B',
+                weight: 3,
+                fillColor: '#F59E0B',
+                fillOpacity: 0.12,
+                className: 'd2d-knock-pulse',
               }}
-            >
-              <Tooltip permanent direction="top" offset={[0, -6]} className="d2d-ai-tooltip">
-                <span style={{ fontWeight: 600, fontSize: 11 }}>{z.label}</span>
-              </Tooltip>
-              <Popup>
-                <div style={{ minWidth: 200 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>
-                    AI zone · {z.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>{z.reason}</div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          ))}
+              interactive={false}
+            />
+          )}
 
-          {/* Rep pins — react-leaflet requires Leaflet components as direct children,
-              so we use Fragment (no DOM wrapper) for the active-pulse halo + pin pair. */}
-          {FLEET_REPS.map((r) => {
+          {/* Rep pins — polled from /api/fleet every 30s. An empty array
+              (nobody clocked in) simply renders no pins. */}
+          {fleet.map((r) => {
             const color = STATUS_COLORS[r.status];
             const isActive = r.status === 'active';
             return (
@@ -179,25 +261,26 @@ export function HQLiveMapImpl(): JSX.Element {
           </div>
         </div>
 
-        <div className="absolute top-3 right-14 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-accent/30 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-accent mb-1 font-semibold flex items-center gap-1">
-            <Zap size={11} /> AI suggested next zones
-          </div>
-          <div className="text-[10px] text-muted">
-            {AI_ZONES.length} high-propensity neighbourhoods · click to inspect
-          </div>
-        </div>
-
-        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold">
-            Live · all accounts
+        <div className="absolute bottom-3 right-3 z-[400] bg-surface/95 backdrop-blur rounded-lg px-3 py-2 border border-line2 shadow-sm pointer-events-none max-w-[220px]">
+          <div className="mb-1">
+            <DataSourceBadge source={source} updatedAt={updatedAt} />
           </div>
           <div className="text-[14px] font-bold text-ink numeric flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                source === 'live'
+                  ? 'bg-green-500 animate-pulse'
+                  : source === 'stale'
+                    ? 'bg-rose-500'
+                    : 'bg-amber-500'
+              }`}
+            />
             {activeCount} active iPads
           </div>
-          <div className="text-[10px] text-muted">
-            {totalKnocks} knocks today · {totalConv} conversions
+          <div className="text-[10px] text-muted">{totalKnocks} knocks today</div>
+          <div className="text-[9px] text-soft mt-1 leading-snug">
+            Live tracking activates when realtime is configured — positions refresh via 30s poll,
+            not push.
           </div>
         </div>
       </div>
@@ -207,8 +290,6 @@ export function HQLiveMapImpl(): JSX.Element {
 
 function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
   const color = STATUS_COLORS[rep.status];
-  const convRate =
-    rep.knocksToday > 0 ? `${((rep.conversionsToday / rep.knocksToday) * 100).toFixed(1)}%` : '—';
 
   return (
     <div style={{ minWidth: 240 }}>
@@ -271,31 +352,29 @@ function RepPopupCard({ rep }: { rep: FleetRep }): JSX.Element {
           label="Today"
           value={
             <span>
-              <strong>{rep.knocksToday}</strong> knocks · <strong>{rep.conversionsToday}</strong>{' '}
-              conv
+              <strong>{rep.knocksToday}</strong> knocks
             </span>
           }
         />
-        <Row label="Conv. rate" value={<strong style={{ color: '#16a34a' }}>{convRate}</strong>} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <PopupButton
-          onClick={() => alert(`Calling ${rep.name}…`)}
+          onClick={() => toast.info(`Dialling ${rep.name}… telephony wiring lands in Phase 1.2`)}
           icon={<Phone size={11} />}
           label="Call"
           primary
         />
         <PopupButton
-          onClick={() => alert(`Messaging ${rep.name}…`)}
+          onClick={() => toast.info(`Message composer for ${rep.name} lands in Phase 1.2`)}
           icon={<MessageSquare size={11} />}
           label="Msg"
         />
         <PopupButton
           onClick={() =>
-            alert(
+            toast.info(
               rep.status === 'break'
-                ? `Resuming ${rep.name}'s shift…`
-                : `Sending ${rep.name} on break…`,
+                ? `Resume command for ${rep.name} lands in Phase 1.2`
+                : `Break command for ${rep.name} lands in Phase 1.2`,
             )
           }
           icon={rep.status === 'break' ? <Play size={11} /> : <Coffee size={11} />}

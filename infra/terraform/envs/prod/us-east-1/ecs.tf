@@ -172,6 +172,10 @@ module "api_service" {
   task_memory       = var.api_task_memory
   desired_count     = var.api_desired_count
 
+  # M2: autoscaling bounds sized for 50k concurrent users.
+  min_count = var.api_min_count
+  max_count = var.api_max_count
+
   subnet_ids         = module.network.private_subnet_ids
   security_group_ids = [aws_security_group.app.id]
   target_group_arn   = module.alb.target_group_arn
@@ -191,6 +195,11 @@ module "api_service" {
     { name = "S3_BUCKET_AUDIT", value = module.s3_audit.bucket_name },
     { name = "S3_BUCKET_ASSETS", value = module.s3_assets.bucket_name },
     { name = "S3_BUCKET_EXPORTS", value = module.s3_exports.bucket_name },
+    # HARDENING-LOG P0-perf: scrypt uses libuv threads for password hashing.
+    # Default UV_THREADPOOL_SIZE=4 starves under concurrent login load (50k target).
+    # 16 threads gives headroom for scrypt + any other async-thread-pool work
+    # (crypto, dns, fs) without exhausting Fargate task CPU budget.
+    { name = "UV_THREADPOOL_SIZE", value = "16" },
   ]
 
   secret_arns = local.api_secret_arns

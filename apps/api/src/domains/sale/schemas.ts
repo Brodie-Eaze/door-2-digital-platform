@@ -12,3 +12,11 @@ export const installerHandoffRequestSchema = z
   })
   .strict();
 export type InstallerHandoffRequest = z.infer<typeof installerHandoffRequestSchema>;
+
+export const cancelSaleRequestSchema = z
+  .object({
+    reason: z.string().min(1).max(500),
+    clawbackCommissions: z.boolean().default(false),
+  })
+  .strict();
+export type CancelSaleRequest = z.infer<typeof cancelSaleRequestSchema>;

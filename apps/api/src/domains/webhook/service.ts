@@ -13,12 +13,21 @@
  *   - `signPayload(secret, body, timestamp)` returns
  *     `"t=<ts>,v1=<hmac>"` per the D2D-Signature spec.
  */
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { Prisma, RegionCode } from '@prisma/client';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { newId, problem, Problems, ProblemError } from '@d2d/shared-utils';
 import { prisma } from '../../config/db';
+import { env } from '../../config/env';
+import { logger } from '../../config/logger';
 import { AuditService } from '../audit/service';
 import type {
   CreateWebhookEndpointRequest,
@@ -150,9 +159,16 @@ export async function assertSafeWebhookUrl(raw: string): Promise<void> {
     return;
   }
   // Hostname — resolve and range-check.
+  // WEBHOOK-DNS: wrap dns.lookup in a 3 s timeout (no new deps — Promise.race
+  // + setTimeout). A stalled DNS response must not block the hot path.
   let resolved: { address: string; family: number };
   try {
-    resolved = await lookup(parsed.hostname);
+    resolved = await Promise.race([
+      lookup(parsed.hostname),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DNS lookup timed out')), 3_000),
+      ),
+    ]);
   } catch {
     throw new ProblemError(
       ssrfProblem(`Webhook URL hostname does not resolve: ${parsed.hostname}`),
@@ -216,8 +232,49 @@ export interface WebhookDeliveryPublic {
   createdAt: string;
 }
 
-function hashSecret(secret: string): string {
-  return createHash('sha256').update(secret).digest('hex');
+/**
+ * Encrypt a webhook signing secret for storage. Format stored in the DB:
+ *   `aes256gcm:<iv_base64>:<ciphertext_base64>:<authtag_base64>`
+ *
+ * Key = PII_ENCRYPTION_KEY (64-char hex = 32 bytes = AES-256).
+ * AAD = endpointId so the ciphertext is bound to a single endpoint row —
+ * copying it to a different row will fail to decrypt.
+ *
+ * Unlike the old SHA-256 hash approach, this is REVERSIBLE so the delivery
+ * worker can re-derive the plaintext and sign each outbound payload.
+ */
+export function encryptWebhookSecret(secret: string, endpointId: string): string {
+  const key = Buffer.from(env().PII_ENCRYPTION_KEY, 'hex');
+  const iv = randomBytes(12);
+  const aad = Buffer.from(`webhook-secret:${endpointId}`, 'utf8');
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return [
+    'aes256gcm',
+    iv.toString('base64'),
+    ciphertext.toString('base64'),
+    authTag.toString('base64'),
+  ].join(':');
+}
+
+export function decryptWebhookSecret(cipher: string, endpointId: string): string {
+  const parts = cipher.split(':');
+  if (parts.length !== 4 || parts[0] !== 'aes256gcm') {
+    throw new Error('Invalid webhook secret cipher format');
+  }
+  const key = Buffer.from(env().PII_ENCRYPTION_KEY, 'hex');
+  const iv = Buffer.from(parts[1]!, 'base64');
+  const ciphertext = Buffer.from(parts[2]!, 'base64');
+  const authTag = Buffer.from(parts[3]!, 'base64');
+  const aad = Buffer.from(`webhook-secret:${endpointId}`, 'utf8');
+  // authTagLength pins the expected GCM tag to 16 bytes — without it a
+  // truncated tag can pass verification (semgrep gcm-no-tag-length).
+  const decipher = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
+  decipher.setAAD(aad);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }
 
 function generateSecret(): string {
@@ -276,14 +333,14 @@ export const WebhookService = {
     await assertSafeWebhookUrl(input.url);
     const id = newId('whk');
     const secret = generateSecret();
-    const hashed = hashSecret(secret);
+    const secretCipher = encryptWebhookSecret(secret, id);
     const row = await prisma().$transaction(async (tx) => {
       const next = await tx.webhookEndpoint.create({
         data: {
           id,
           orgId: actor.orgId,
           url: input.url,
-          secretCipher: hashed,
+          secretCipher,
           eventTypes: input.eventTypes,
           status: 'active',
         },
@@ -331,11 +388,11 @@ export const WebhookService = {
       throw new ProblemError(Problems.tenantMismatch(existing.orgId));
     }
     const secret = generateSecret();
-    const hashed = hashSecret(secret);
+    const secretCipher = encryptWebhookSecret(secret, id);
     const row = await prisma().$transaction(async (tx) => {
       const next = await tx.webhookEndpoint.update({
         where: { id },
-        data: { secretCipher: hashed },
+        data: { secretCipher },
       });
       await AuditService.recordEvent(tx, {
         orgId: actor.orgId,
@@ -415,6 +472,81 @@ export const WebhookService = {
     };
   },
 };
+
+/**
+ * Enqueue outbound webhook deliveries for an org + event.
+ *
+ * Finds all active endpoints for the org that subscribe to `eventType`,
+ * uploads the JSON payload to S3 (exports bucket), and creates a
+ * WebhookDelivery row per endpoint with status=pending.
+ *
+ * The delivery worker (`webhook-deliver.worker.ts`) picks up pending rows,
+ * decrypts the signing secret from `secretCipher`, signs the payload, and
+ * POSTs to the endpoint URL with the D2D-Signature header.
+ *
+ * Safe to call inside a transaction: S3 upload happens OUTSIDE the tx so we
+ * don't hold the tx open during a network call. If the tx is later rolled
+ * back, the S3 object becomes an orphan — acceptable since we guard on
+ * delivery status and the orphan never reaches any endpoint.
+ */
+export async function enqueueWebhookDelivery(opts: {
+  orgId: string;
+  eventType: string;
+  eventId: string;
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  const endpoints = await prisma().webhookEndpoint.findMany({
+    where: { orgId: opts.orgId, status: 'active' },
+    select: { id: true, eventTypes: true },
+  });
+  const matching = endpoints.filter(
+    (ep) => ep.eventTypes.length === 0 || ep.eventTypes.includes(opts.eventType),
+  );
+  if (matching.length === 0) return;
+
+  const e = env();
+  const s3 = new S3Client({ region: e.AWS_REGION });
+  const payloadJson = JSON.stringify({
+    id: opts.eventId,
+    type: opts.eventType,
+    orgId: opts.orgId,
+    data: opts.payload,
+    createdAt: new Date().toISOString(),
+  });
+
+  const log = logger().child({ fn: 'enqueueWebhookDelivery', eventId: opts.eventId });
+
+  for (const ep of matching) {
+    const deliveryId = newId('wdl');
+    const payloadKey = `webhooks/${opts.orgId}/${opts.eventId}/${deliveryId}.json`;
+
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: e.S3_BUCKET_EXPORTS,
+          Key: payloadKey,
+          Body: payloadJson,
+          ContentType: 'application/json',
+        }),
+      );
+    } catch (err) {
+      log.error({ endpointId: ep.id, err }, 'enqueueWebhookDelivery: S3 upload failed — skipping');
+      continue;
+    }
+
+    await prisma().webhookDelivery.create({
+      data: {
+        id: deliveryId,
+        endpointId: ep.id,
+        eventId: opts.eventId,
+        status: 'pending',
+        attempts: 0,
+        payloadKey,
+      },
+    });
+    log.info({ endpointId: ep.id, deliveryId }, 'enqueueWebhookDelivery: queued');
+  }
+}
 
 function toPublic(e: {
   id: string;

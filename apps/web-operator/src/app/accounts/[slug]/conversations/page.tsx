@@ -1,7 +1,12 @@
+'use client';
+
+import { use, useMemo, useState } from 'react';
 import { Phone, Mail, MessageSquare, Search } from 'lucide-react';
 import { Banner, EmptyState, KpiCard, Section } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 const THREADS = [
@@ -50,8 +55,21 @@ const THREADS = [
 ];
 const ICON = { sms: MessageSquare, call: Phone, email: Mail };
 
-export default function ConversationsPage({ params }: { params: { slug: string } }): JSX.Element {
+export default function ConversationsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const firstRun = firstRunSnapshot(params.slug);
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return THREADS;
+    return THREADS.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.preview.toLowerCase().includes(q),
+    );
+  }, [query]);
   if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Conversations">
@@ -86,28 +104,55 @@ export default function ConversationsPage({ params }: { params: { slug: string }
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
             label="Open threads"
-            value={THREADS.length}
-            hint={`${THREADS.filter((t) => t.unread > 0).length} unread`}
+            value={filtered.length}
+            hint={`${filtered.filter((t) => t.unread > 0).length} unread`}
           />
           <KpiCard label="Avg response" value="8m" delta="-2m" deltaTone="positive" />
           <KpiCard label="Messages today" value="287" delta="+12%" deltaTone="positive" />
           <KpiCard label="Calls connected" value="64" hint="34% rate" />
         </div>
 
-        <Section title="Inbox" subtitle="All channels · all reps" paddedBody={false}>
+        <Section
+          title="Inbox"
+          subtitle="All channels · all reps"
+          paddedBody={false}
+          action={<DataSourceBadge source="fixture" />}
+        >
           <div className="px-4 py-2 border-b border-line2 flex items-center gap-2">
             <Search size={14} className="text-soft" />
             <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-soft"
               placeholder="Search conversations…"
             />
           </div>
           <div className="divide-y divide-line2">
-            {THREADS.map((t, i) => {
+            {filtered.length === 0 && (
+              <div className="px-5 py-8 text-center text-[12px] text-muted">
+                No conversations match “{query}”.
+              </div>
+            )}
+            {filtered.map((t, i) => {
               const Icon = ICON[t.channel as keyof typeof ICON];
               return (
                 <div
                   key={i}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    toast.info(
+                      `Open thread · ${t.name} — full thread view wiring lands in Phase 1.2`,
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toast.info(
+                        `Open thread · ${t.name} — full thread view wiring lands in Phase 1.2`,
+                      );
+                    }
+                  }}
                   className={`flex items-start gap-3 px-5 py-3 hover:bg-paper cursor-pointer ${t.unread > 0 ? 'border-l-2 border-l-accent bg-accentSoft/20' : ''}`}
                 >
                   <span className="mono">

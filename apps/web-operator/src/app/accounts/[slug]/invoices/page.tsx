@@ -1,16 +1,20 @@
-import {
-  CreditCard,
-  Download,
-  ExternalLink,
-  Send,
-  AlertTriangle,
-  CheckCircle2,
-} from 'lucide-react';
-import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import { CreditCard, CheckCircle2 } from 'lucide-react';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { InvoicesEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount, type Account } from '@/lib/accounts';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { firstRunSnapshot } from '@/lib/first-run';
+import { ExportCsvButton, InvoiceRowActions } from './InvoiceActions';
+
+/** Live account fields this page needs — org identity + a real MTD revenue
+ * aggregate. Replaces the static fixture; fabricated fields (plan, health,
+ * contractedAt) have no live source and are dropped rather than invented. */
+interface AccountData {
+  slug: string;
+  shortName: string;
+  region: string;
+  revenueCentsMTD: bigint;
+}
 
 interface Invoice {
   id: string;
@@ -35,8 +39,47 @@ function pct(amount: bigint, p: number): bigint {
   return (amount * BigInt(Math.round(p * 100))) / 10000n;
 }
 
-function buildInvoiceHistory(account: Account): Invoice[] {
-  // Build 7 historical invoices for established accounts, fewer for trial
+function startOfMonth(): Date {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Live org identity + a real MTD revenue aggregate (mirrors /api/accounts/stats).
+ * Returns null when the org doesn't exist or the DB is unreachable — the
+ * caller renders the honest empty state rather than fabricating a page. */
+async function loadAccountData(slug: string): Promise<AccountData | null> {
+  try {
+    const { db } = await import('@d2d/database');
+    const org = await db.org.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, tradingName: true, regionCode: true },
+    });
+    if (!org || !org.slug) return null;
+    const revenueAgg = await db.conversion.aggregate({
+      _sum: { d2dRakeCents: true, processorResidualCents: true },
+      where: { orgId: org.id, signedAt: { gte: startOfMonth() } },
+    });
+    const revenueCentsMTD =
+      (revenueAgg._sum.d2dRakeCents ?? 0n) + (revenueAgg._sum.processorResidualCents ?? 0n);
+    return {
+      slug: org.slug,
+      shortName: org.tradingName,
+      region: org.regionCode,
+      revenueCentsMTD,
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[accounts/invoices] DB load failed:', err);
+    return null;
+  }
+}
+
+function buildInvoiceHistory(account: AccountData): Invoice[] {
+  // 7 historical invoices. No live `plan`/`health` field exists to vary the
+  // count or simulate overdue status, so history is a fixed length and every
+  // prior invoice is paid — honest rather than fabricated variation.
   const months = [
     { period: 'Apr 2026', issued: '2026-05-01', due: '2026-05-15' },
     { period: 'Mar 2026', issued: '2026-04-01', due: '2026-04-15' },
@@ -47,33 +90,29 @@ function buildInvoiceHistory(account: Account): Invoice[] {
     { period: 'Oct 2025', issued: '2025-11-01', due: '2025-11-15' },
   ];
 
-  const monthCount = account.plan === 'Trial' ? 0 : account.plan === 'Growth' ? 4 : 7;
   const base = account.revenueCentsMTD;
-  return months.slice(0, monthCount).map((m, i) => {
+  return months.map((m, i) => {
     // Vary revenue by month (older = a bit smaller)
     const factor = 1 - i * 0.04 - (i % 2) * 0.02;
     const amt = (base * bn(factor * 100)) / 100n + PLATFORM_FEE_CENTS;
-    // Mostly paid; one overdue for attention accounts
-    const status: Invoice['status'] =
-      i === 0 && account.health === 'attention'
-        ? 'overdue'
-        : i === 1 && account.health === 'attention'
-          ? 'pending'
-          : 'paid';
     return {
       id: `inv_${m.period.toLowerCase().replace(' ', '_')}_${account.slug.slice(0, 4)}`,
       period: m.period,
       issuedAt: m.issued,
       dueAt: m.due,
-      status,
+      status: 'paid' as const,
       amountCents: amt,
-      daysOverdue: status === 'overdue' ? 12 : undefined,
     };
   });
 }
 
-export default function AccountInvoicesPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
+export default async function AccountInvoicesPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
+  const account = await loadAccountData(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
     return (
@@ -110,17 +149,18 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
   const daysOverdue = invoices.find((i) => i.status === 'overdue')?.daysOverdue ?? 0;
 
   const region = account.region === 'AU' ? 'AU' : 'US';
-  const processor =
-    account.region === 'AU'
-      ? 'Stripe AU + GoCardless'
-      : account.region === 'US'
-        ? 'MiCamp'
-        : 'Stripe';
+  const processor = account.region === 'AU' ? 'Stripe AU + GoCardless' : 'MiCamp';
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Invoices">
       <div className="space-y-5 max-w-[1400px]">
-        <Banner tone={account.health === 'attention' ? 'warn' : 'info'}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] text-muted">
+            Demo data — live billing wiring lands in Phase 1.2
+          </div>
+          <DataSourceBadge source="fixture" />
+        </div>
+        <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <CreditCard size={13} />
             <span>
@@ -159,7 +199,7 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
 
         <Section
           title="Current invoice (in-progress) · May 2026"
-          subtitle={`Auto-generated nightly · finalised on day ${account.contractedAt.slice(8, 10)} of the month`}
+          subtitle="Auto-generated nightly · finalised at month end"
         >
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-3">
@@ -176,7 +216,7 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                   <tr>
                     <td>
                       <div className="text-[13px] font-medium text-ink">Platform fee</div>
-                      <div className="text-[10px] text-muted">Fixed monthly · {account.plan}</div>
+                      <div className="text-[10px] text-muted">Fixed monthly</div>
                     </td>
                     <td className="text-[12px] text-muted">1 × month</td>
                     <td className="text-[12px] text-muted">—</td>
@@ -283,17 +323,13 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
           title="Invoice history"
           subtitle={`${invoices.length} prior invoices · NET-15 terms`}
           paddedBody={false}
-          action={
-            <Button variant="ghost" size="sm" leftIcon={<Download size={13} />}>
-              Export CSV
-            </Button>
-          }
+          action={<ExportCsvButton />}
         >
           {invoices.length === 0 ? (
             <div className="p-5">
               <div className="text-[12px] text-soft">
-                No prior invoices — {account.shortName} is on a 14-day trial. First invoice will be
-                generated when the trial converts.
+                No prior invoices — the first invoice will be generated once billing starts for{' '}
+                {account.shortName}.
               </div>
             </div>
           ) : (
@@ -342,20 +378,7 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                         <Money cents={inv.amountCents} region={region} />
                       </td>
                       <td>
-                        <div className="flex items-center gap-1">
-                          <button
-                            className="text-soft hover:text-ink p-1 rounded hover:bg-paper"
-                            title="View PDF"
-                          >
-                            <ExternalLink size={13} />
-                          </button>
-                          <button
-                            className="text-soft hover:text-ink p-1 rounded hover:bg-paper"
-                            title="Resend"
-                          >
-                            <Send size={13} />
-                          </button>
-                        </div>
+                        <InvoiceRowActions invoiceId={inv.id} />
                       </td>
                     </tr>
                   );
@@ -412,11 +435,6 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                       CommBank Direct Debit · NPP
                     </div>
                   </div>
-                  {account.health === 'attention' && (
-                    <span className="text-warn">
-                      <AlertTriangle size={14} />
-                    </span>
-                  )}
                 </div>
                 <div className="space-y-2 text-[12px]">
                   <Row label="BSB" value={<span className="numeric">062-001</span>} />
@@ -454,10 +472,6 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                   <Row label="Account ending" value={<span className="numeric">••••3412</span>} />
                   <Row label="Routing" value={<span className="numeric">••••0091</span>} />
                   <Row
-                    label="Added"
-                    value={<span className="numeric">{account.contractedAt}</span>}
-                  />
-                  <Row
                     label="Status"
                     value={<StatusPill tone="success">Verified · auto-debit</StatusPill>}
                   />
@@ -471,26 +485,12 @@ export default function AccountInvoicesPage({ params }: { params: { slug: string
                     </div>
                     <div className="text-[14px] font-semibold text-ink mt-1">Visa · Corporate</div>
                   </div>
-                  {account.health === 'attention' && (
-                    <span className="text-warn">
-                      <AlertTriangle size={14} />
-                    </span>
-                  )}
                 </div>
                 <div className="space-y-2 text-[12px]">
                   <Row label="Card ending" value={<span className="numeric">••••8821</span>} />
                   <Row label="Expires" value={<span className="numeric">09/27</span>} />
                   <Row label="Billing zip" value={<span className="numeric">78704</span>} />
-                  <Row
-                    label="Status"
-                    value={
-                      account.health === 'attention' ? (
-                        <StatusPill tone="warn">Expires in 18mo</StatusPill>
-                      ) : (
-                        <StatusPill tone="muted">Backup only</StatusPill>
-                      )
-                    }
-                  />
+                  <Row label="Status" value={<StatusPill tone="muted">Backup only</StatusPill>} />
                 </div>
               </div>
             </div>

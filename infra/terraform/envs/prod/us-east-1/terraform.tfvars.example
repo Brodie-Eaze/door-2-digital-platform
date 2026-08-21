@@ -11,30 +11,66 @@ name_prefix = "d2d-prod"
 vpc_cidr = "10.40.0.0/16"
 azs      = ["us-east-1a", "us-east-1b", "us-east-1c"]
 
-# Aurora Serverless v2
+# Aurora Serverless v2 — scaled for 50k concurrent users.
+# 128 ACU max ≈ 256 GiB RAM budget → ~5 000 max_connections on Aurora.
+# RDS Proxy pools those 5 000 connections for 20-30 API tasks × 10 Prisma pool = ~300 proxy→Aurora connections.
 aurora_engine_version = "16.4"
-aurora_min_acu        = 0.5
-aurora_max_acu        = 4
-aurora_instance_count = 2
+aurora_min_acu        = 2
+aurora_max_acu        = 128
+aurora_instance_count = 2 # writer + 1 reader replica
 db_name               = "d2d"
 db_master_username    = "d2d_admin"
 
-# Redis
-redis_node_type = "cache.t4g.small"
-redis_replicas  = 1
+# RDS Proxy
+rds_proxy_max_connections_percent = 100
 
-# API / ECS
-api_image_tag      = "bootstrap" # CI overrides per build via -var or task-def update
+# Redis — scaled for 50k rate-limiting + BullMQ + session cache.
+# r7g.large: 13.07 GiB, 2 vCPU — handles ~100k ops/sec.
+redis_node_type = "cache.r7g.large"
+redis_replicas  = 2 # writer + 2 replicas across 3 AZs
+
+# API / ECS — 50k sizing
+# 30 tasks × 2 vCPU / 4 GiB → ~600 vCPU total ceiling; target 70% CPU threshold.
+api_image_tag      = "bootstrap"
 api_container_port = 3010
-api_desired_count  = 2
-api_task_cpu       = "512"
-api_task_memory    = "1024"
+api_desired_count  = 3
+api_task_cpu       = "2048"
+api_task_memory    = "4096"
+api_min_count      = 3
+api_max_count      = 30
+
+# Workers — BullMQ queue consumers; higher memory for job processing.
+workers_image_tag     = "bootstrap"
+workers_desired_count = 2
+workers_task_cpu      = "1024"
+workers_task_memory   = "2048"
+workers_min_count     = 2
+workers_max_count     = 20
+
+# Webhooks — inbound webhooks from MiCamp / Stripe / etc.
+webhooks_image_tag      = "bootstrap"
+webhooks_container_port = 3011
+webhooks_desired_count  = 2
+webhooks_task_cpu       = "512"
+webhooks_task_memory    = "1024"
+webhooks_min_count      = 2
+webhooks_max_count      = 10
 
 # CORS allowlist (prod web origins)
 cors_origins = "https://app.door2digital.com"
 
 # Leave null for the first HTTP-only bring-up; attach after issuing an ACM cert.
 # acm_certificate_arn = "arn:aws:acm:us-east-1:<acct>:certificate/<id>"
+
+# Route53 + domain (bind after domain transfer / hosted zone created).
+# Uncomment and fill in both values once your hosted zone exists.
+# route53_zone_id = "Z0123456789ABCDEFGHIJ"
+# domain_name     = "door2digital.com"
+# app_subdomain   = "app"
+
+# CloudFront + WAF
+waf_rate_limit         = 2000
+cloudfront_price_class = "PriceClass_100"
 
 # IAM ARNs allowed to administer the KMS CMKs (e.g. your SSO admin role).
 # Leave empty for root-only administration during initial bring-up.

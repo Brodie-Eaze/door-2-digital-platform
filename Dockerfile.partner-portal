@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.7
+#
+# Door 2 Digital — partner-portal (Next.js 14 standalone client portal).
+# Per-app Dockerfile pattern (mirrors Dockerfile.public-site). The white-label
+# client deliverable: invoices, payout statements, attribution, state clearance,
+# brand kit, and SSO config — live against the D2D API billing/compliance
+# routes. No money movement originates here.
+
+ARG NODE_VERSION=20.10.0
+
+FROM node:${NODE_VERSION}-alpine AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /repo
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY apps/partner-portal/package.json apps/partner-portal/
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/shared-utils/package.json packages/shared-utils/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/ui-web/package.json packages/ui-web/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/database/package.json packages/database/
+COPY packages/integrations/package.json packages/integrations/
+RUN pnpm fetch --frozen-lockfile
+RUN pnpm install --frozen-lockfile --offline
+
+FROM deps AS build
+WORKDIR /repo
+COPY apps/partner-portal ./apps/partner-portal
+COPY packages ./packages
+ARG NEXT_PUBLIC_ENV=production
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_ENV=${NEXT_PUBLIC_ENV}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter partner-portal build
+
+FROM node:${NODE_VERSION}-alpine AS runner
+RUN apk add --no-cache libc6-compat tini
+WORKDIR /repo
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3013
+ENV HOSTNAME=0.0.0.0
+
+COPY --from=build /repo/apps/partner-portal/public ./apps/partner-portal/public
+COPY --from=build /repo/apps/partner-portal/.next/standalone ./
+COPY --from=build /repo/apps/partner-portal/.next/static ./apps/partner-portal/.next/static
+
+USER node
+EXPOSE 3013
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "apps/partner-portal/server.js"]

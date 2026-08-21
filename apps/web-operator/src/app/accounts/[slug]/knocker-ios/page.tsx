@@ -3,25 +3,69 @@ import Link from 'next/link';
 import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount, accountMonogram, type Account } from '@/lib/accounts';
+import { avatarBgFor, monogramFrom } from '@/lib/account-color';
 import { firstRunSnapshot } from '@/lib/first-run';
 
-function teamPhrasing(account: Account): string {
+/** Live account fields this page needs — org identity + avatar colour +
+ * active knocker count. `avatarFg` has no live source; the house monogram
+ * foreground is always white. Fabricated `plan`/`health` etc. are dropped. */
+interface AccountData {
+  slug: string;
+  shortName: string;
+  region: string;
+  vertical: string;
+  avatarBg: string;
+  avatarFg: string;
+  knockers: number;
+}
+
+/** Live org identity + avatar colour + active knocker count. Returns null
+ * when the org doesn't exist or the DB is unreachable — honest empty state
+ * rather than a fabricated page. */
+async function loadAccountData(slug: string): Promise<AccountData | null> {
+  try {
+    const { db } = await import('@d2d/database');
+    const org = await db.org.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, tradingName: true, regionCode: true, vertical: true },
+    });
+    if (!org || !org.slug) return null;
+    const knockers = await db.user.count({
+      where: { orgId: org.id, role: 'knocker', status: 'active' },
+    });
+    return {
+      slug: org.slug,
+      shortName: org.tradingName,
+      region: org.regionCode,
+      vertical: org.vertical ?? 'commercial',
+      avatarBg: avatarBgFor(org.slug),
+      avatarFg: '#FFFFFF',
+      knockers,
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[accounts/knocker-ios] DB load failed:', err);
+    return null;
+  }
+}
+
+function teamPhrasing(account: AccountData): string {
   if (account.vertical === 'charity') return 'your fundraising team';
   if (account.vertical === 'commercial') return 'your sales team';
   return 'your foundation team';
 }
 
-function distLine(account: Account): string {
+function distLine(account: AccountData): string {
   return `TestFlight + Internal Track under D2D Inc · ${account.shortName} build`;
 }
 
-export default function KnockerIOSPreviewPage({
-  params,
+export default async function KnockerIOSPreviewPage({
+  params: paramsPromise,
 }: {
-  params: { slug: string };
-}): JSX.Element {
-  const account = getAccount(params.slug);
+  params: Promise<{ slug: string }>;
+}): Promise<JSX.Element> {
+  const params = await paramsPromise;
+  const account = await loadAccountData(params.slug);
   const firstRun = firstRunSnapshot(params.slug);
   if (!account || firstRun.isFirstRun) {
     return (
@@ -47,7 +91,7 @@ export default function KnockerIOSPreviewPage({
   }
 
   const bundleId = `io.d2d.knocker.${account.slug}`;
-  const monogram = accountMonogram(account.shortName);
+  const monogram = monogramFrom(account.shortName);
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Knocker iOS · Preview">

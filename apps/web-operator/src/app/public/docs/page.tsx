@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { PublicShell } from '@/components/PublicShell';
+import { OpenApiDownloads } from './OpenApiDownloads';
 
 export const metadata = {
   title: 'API Docs — Door 2 Digital',
@@ -427,20 +428,7 @@ function verify(headerSig, rawBody, secret) {
               import into Postman / Insomnia / Bruno.
             </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-3 justify-center">
-              <a
-                href="#"
-                className="inline-flex items-center justify-center gap-2 bg-ink text-surface text-[14px] font-semibold px-5 py-3 rounded-md hover:bg-ink2 transition"
-              >
-                <Download className="h-4 w-4" />
-                openapi.yaml
-              </a>
-              <a
-                href="#"
-                className="inline-flex items-center justify-center gap-2 bg-surface text-ink text-[14px] font-medium px-5 py-3 rounded-md border border-line hover:bg-paper transition"
-              >
-                <Download className="h-4 w-4" />
-                openapi.json
-              </a>
+              <OpenApiDownloads />
               <Link
                 href="/public/signup"
                 className="inline-flex items-center justify-center gap-2 text-muted text-[14px] font-medium px-5 py-3 rounded-md hover:text-ink transition"

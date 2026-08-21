@@ -1,73 +1,92 @@
-//
-//  D2DKnockerApp.swift
-//  D2D Knocker
-//
-//  Door 2 Digital — native iOS knocker app. SwiftUI + Swift Concurrency.
-//
-//  Phase 0 seed. Mobile engineer initialises full Xcode project from
-//  apps/knocker-ios/README.md, then replaces this file with the real
-//  app entry that wires dependencies (API client, OfflineSync, Auth,
-//  Location, Attestation).
-//
+// D2DKnockerApp.swift — app entry point.
+// Wire order: KeychainService → AppState → restore auth from keychain →
+// present RootView which gates on isAuthenticated.
 
 import SwiftUI
 import SwiftData
 
 @main
 struct D2DKnockerApp: App {
+    @State private var appState = AppState()
+
+    // SwiftData model container — shared across the app via environment.
+    var sharedModelContainer: ModelContainer = {
+        let schema = Schema([
+            Knock.self,
+            Lead.self,
+            Sale.self,
+            Address.self,
+            KnockSession.self,
+            PendingSync.self,
+        ])
+        let config = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            allowsSave: true
+        )
+        do {
+            return try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            fatalError("Could not create SwiftData ModelContainer: \(error)")
+        }
+    }()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environment(appState)
+                .onAppear { restoreSession() }
         }
-        .modelContainer(for: [
-            // Phase 0 placeholder — add @Model entities here:
-            // Knock.self, Lead.self, Address.self, KnockSession.self,
-            // Conversion.self, PendingSync.self
-        ])
+        .modelContainer(sharedModelContainer)
     }
-}
 
-struct ContentView: View {
-    var body: some View {
-        TabView {
-            // Phase 0 — placeholder tabs. Real implementations land Phase 1.2.
-            PlaceholderView(title: "Map", systemImage: "map")
-                .tabItem { Label("Map", systemImage: "map") }
+    // Restore access token + user from Keychain on cold launch so the
+    // user doesn't re-authenticate every time they open the app.
+    private func restoreSession() {
+        let keychain = KeychainService()
+        guard let token = keychain.accessToken, let user = keychain.currentUser else { return }
+        // Restore immediately from the keychain so an offline cold-launch still
+        // lands the rep in the app (the access token may be stale, but every
+        // authed call self-heals via the 401→refresh path).
+        appState.signIn(token: token, user: user)
 
-            PlaceholderView(title: "Schedule", systemImage: "calendar")
-                .tabItem { Label("Schedule", systemImage: "calendar") }
-
-            PlaceholderView(title: "Inbox", systemImage: "tray")
-                .tabItem { Label("Inbox", systemImage: "tray") }
-
-            PlaceholderView(title: "Me", systemImage: "person.crop.circle")
-                .tabItem { Label("Me", systemImage: "person.crop.circle") }
-        }
-    }
-}
-
-struct PlaceholderView: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(.tertiary)
-                Text("\(title)")
-                    .font(.title2.weight(.semibold))
-                Text("Phase 0 scaffold — implementation in Phase 1.2")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        // Proactively refresh so the rep starts the shift with a fresh token
+        // instead of eating a 401 on the first call. Best-effort: a NETWORK
+        // failure (offline launch) must NOT sign them out — only an explicitly
+        // rejected refresh token (genuine session end) does.
+        guard keychain.refreshToken != nil else { return }
+        Task { @MainActor in
+            let client = APIClient(accessToken: token, keychain: keychain)
+            do {
+                try await client.refresh()
+                appState.accessToken = keychain.accessToken
+            } catch APIError.sessionExpired {
+                // Genuine session end → FULL PII wipe (DB rows + signature/photo
+                // files + keychain), not just clearing in-memory state. Previously
+                // this called appState.signOut() only, leaving the prior rep's
+                // leads/sales/signatures on a shared device for the next sign-in.
+                AuthViewModel().signOut(appState: appState, context: sharedModelContainer.mainContext)
+            } catch {
+                // Transient (offline / timeout) — keep the restored session; the
+                // 401→refresh retry will recover once connectivity returns.
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(title)
         }
     }
 }
 
-#Preview {
-    ContentView()
+// MARK: - Root gate
+
+struct RootView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Group {
+            if appState.isAuthenticated {
+                ContentView()
+            } else {
+                LoginView()
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: appState.isAuthenticated)
+    }
 }

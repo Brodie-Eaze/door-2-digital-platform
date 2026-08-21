@@ -246,7 +246,7 @@ describe('GET /v1/leads', () => {
 });
 
 describe('GET /v1/leads/:id', () => {
-  it('returns lead with last 20 activities + cross-tenant 403', async () => {
+  it('returns lead with last 20 activities + cross-tenant 404', async () => {
     const tA = await tokenFor(adminEmailA, adminPassA);
     const tB = await tokenFor(adminEmailB, adminPassB);
     const created = await app.inject({
@@ -269,7 +269,8 @@ describe('GET /v1/leads/:id', () => {
       url: `/v1/leads/${id}`,
       headers: { authorization: `Bearer ${tB}` },
     });
-    expect(peek.statusCode).toBe(403);
+    // cross-tenant → 404 (Problems.tenantMismatch), NOT 403: no enumeration oracle.
+    expect(peek.statusCode).toBe(404);
   });
 });
 
@@ -430,14 +431,16 @@ describe('POST /v1/leads/:id/activities', () => {
 });
 
 describe('POST /v1/leads/:id/dnk', () => {
-  it('returns 501 — handled by DNK service', async () => {
+  // dnk is now IMPLEMENTED (flags address do-not-knock + archives lead), not a
+  // 501 stub. A well-formed call against an unknown id resolves to 404.
+  it('is implemented — unknown id → 404', async () => {
     const token = await tokenFor(adminEmailA, adminPassA);
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/leads/lead_anything/dnk',
-      headers: { authorization: `Bearer ${token}` },
+      url: '/v1/leads/lead_does_not_exist/dnk',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'lead-dnk-404' },
       payload: {},
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(404);
   });
 });

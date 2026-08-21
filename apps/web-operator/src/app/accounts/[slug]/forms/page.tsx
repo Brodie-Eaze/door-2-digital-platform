@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Plus,
   Edit3,
@@ -17,7 +17,8 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { FormsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 interface FormDef {
@@ -344,13 +345,17 @@ function buildSubmissions(slug: string): Submission[] {
 
 const SOURCE_ICONS = { web: Globe, qr: QrCode, door: Smartphone, embedded: ExternalLink };
 
-export default function FormsPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
+export default function FormsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'draft' | 'paused'>('all');
   const [query, setQuery] = useState('');
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Forms">
         <div className="space-y-5 max-w-[1400px]">
@@ -426,10 +431,21 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
               />
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" leftIcon={<Edit3 size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Edit3 size={12} />}
+              onClick={() => toast.info('Open builder — form builder lands in Phase 1.2')}
+            >
               Open builder
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New form — form builder lands in Phase 1.2')}
+            >
               New form
             </Button>
           </div>
@@ -483,13 +499,28 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
                       <span className="text-[10px] text-soft">Last: {f.lastSubmission}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Edit "${f.name}" — form builder lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Edit3 size={11} /> Edit
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Preview "${f.name}" — live preview lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Eye size={11} /> Preview
                       </button>
-                      <button className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition">
+                      <button
+                        onClick={() =>
+                          toast.info(`Embed "${f.name}" — embed-snippet copy lands in Phase 1.2`)
+                        }
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-muted hover:text-ink py-1.5 rounded bg-paper hover:bg-line2 transition"
+                      >
                         <Copy size={11} /> Embed
                       </button>
                     </div>
@@ -505,7 +536,14 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
           subtitle="Last 12 captures across all live forms"
           paddedBody={false}
           action={
-            <Button variant="ghost" size="sm" rightIcon={<ArrowUpRight size={11} />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              rightIcon={<ArrowUpRight size={11} />}
+              onClick={() =>
+                toast.info('View all submissions — submissions inbox lands in Phase 1.2')
+              }
+            >
               View all
             </Button>
           }
@@ -626,7 +664,10 @@ export default function FormsPage({ params }: { params: { slug: string } }): JSX
                   <div className="text-[10px] text-muted mt-0.5">{w.wf}</div>
                 </div>
               ))}
-              <button className="w-full text-[11px] text-accent font-medium hover:underline py-1">
+              <button
+                onClick={() => toast.info('Wire new trigger — workflow builder lands in Phase 1.2')}
+                className="w-full text-[11px] text-accent font-medium hover:underline py-1"
+              >
                 + Wire new trigger
               </button>
             </div>

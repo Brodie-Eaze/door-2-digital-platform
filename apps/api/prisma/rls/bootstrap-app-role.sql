@@ -66,12 +66,24 @@ GRANT USAGE ON SCHEMA public TO d2d_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO d2d_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO d2d_app;
 
--- 5. Future tables/sequences created by the owner role inherit the same grants,
---    so new migrations don't silently lock the app out. Scoped to objects the
---    owner creates (that is who migrations run as).
+-- 4b. EXECUTE on existing functions — specifically the SECURITY DEFINER pre-auth
+--     identity resolvers (§4b / Option C). They are the ONLY belt bypass: login,
+--     refresh, and acceptInvite call them to resolve identity + orgId before any
+--     session exists, then re-enter the belt with that orgId. Without this grant
+--     the app role cannot execute them and the pre-auth flows break post-cutover.
+--     (The resolver migration also conditionally grants this when d2d_app already
+--     exists; this line covers the fresh-DB ordering where the role is created
+--     AFTER the migration ran.)
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO d2d_app;
+
+-- 5. Future tables/sequences/functions created by the owner role inherit the same
+--    grants, so new migrations don't silently lock the app out. Scoped to objects
+--    the owner creates (that is who migrations run as).
 ALTER DEFAULT PRIVILEGES FOR ROLE :owner_role IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO d2d_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE :owner_role IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO d2d_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE :owner_role IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO d2d_app;
 
-\echo 'd2d_app bootstrapped: LOGIN NOSUPERUSER NOBYPASSRLS, DML granted, RLS will enforce.'
+\echo 'd2d_app bootstrapped: LOGIN NOSUPERUSER NOBYPASSRLS, DML + function EXECUTE granted, RLS will enforce.'

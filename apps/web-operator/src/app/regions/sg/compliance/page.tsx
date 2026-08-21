@@ -1,30 +1,20 @@
-import {
-  ShieldCheck,
-  AlertTriangle,
-  Mail,
-  Clock,
-  FileSignature,
-  ScrollText,
-  CheckCircle2,
-  Database,
-  Lock,
-  EyeOff,
-  Globe2,
-} from 'lucide-react';
-import { Banner, KpiCard, Section, StatusPill } from '@d2d/ui-web';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { ShieldCheck, Mail, Clock, FileSignature, ScrollText } from 'lucide-react';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
+import { RegistrationsEmpty, CoolingOffEmpty } from '@/components/RegionEmptyStates';
 
 /**
  * SG compliance deep-dive.
  *
- * PDPA's 11 main obligations, Charity Council Code of Governance Tier 3,
- * Commercial Fundraiser appointment letter status, PLRD H2H Collection
- * permit details, and the CPFTA 5-business-day cooling-off tracker.
- *
- * This is the operational source of truth for SG sends: every campaign
- * delivered to a Singapore postal sector passes through these gates.
+ * PDPA's 11 main obligations are a fixed legal framework — kept as a
+ * labeled reference const per the true-source law's "config, not data"
+ * carve-out. Everything per-instance below it (registrations, cooling-off
+ * windows) is real, fetched from GET /api/regions/SG/compliance.
  */
-
 const PDPA_OBLIGATIONS: {
   num: number;
   title: string;
@@ -99,122 +89,63 @@ const PDPA_OBLIGATIONS: {
   },
 ];
 
-interface CpftaWindow {
-  donor: string;
-  area: string;
-  conversionDate: string;
-  daysRemaining: number;
-  account: string;
+interface RegistrationRow {
+  id: string;
+  state: string;
+  status: 'pending' | 'submitted' | 'approved' | 'expired' | 'rejected';
+  filedAt: string | null;
+  expiresAt: string | null;
+  bondAmountCents: string;
+  registrationNumber: string | null;
 }
 
-const CPFTA_OPEN: CpftaWindow[] = [
-  {
-    donor: 'L. T**',
-    area: 'Tampines',
-    conversionDate: '2026-05-23',
-    daysRemaining: 4,
-    account: 'Tampines FSC pilot',
-  },
-  {
-    donor: 'W. L**',
-    area: 'Bedok',
-    conversionDate: '2026-05-23',
-    daysRemaining: 4,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'Y. C***',
-    area: 'Jurong East',
-    conversionDate: '2026-05-22',
-    daysRemaining: 3,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'M. R**',
-    area: 'Toa Payoh',
-    conversionDate: '2026-05-22',
-    daysRemaining: 3,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'S. K**',
-    area: 'Tampines',
-    conversionDate: '2026-05-21',
-    daysRemaining: 2,
-    account: 'Tampines FSC pilot',
-  },
-  {
-    donor: 'P. L***',
-    area: 'Ang Mo Kio',
-    conversionDate: '2026-05-21',
-    daysRemaining: 2,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'N. F***',
-    area: 'Bedok',
-    conversionDate: '2026-05-20',
-    daysRemaining: 1,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'H. Z****',
-    area: 'Woodlands',
-    conversionDate: '2026-05-20',
-    daysRemaining: 1,
-    account: 'SCS pilot',
-  },
-  {
-    donor: 'A. M**',
-    area: 'Punggol',
-    conversionDate: '2026-05-19',
-    daysRemaining: 1,
-    account: 'Tampines FSC pilot',
-  },
-  {
-    donor: 'J. S***',
-    area: 'Jurong East',
-    conversionDate: '2026-05-19',
-    daysRemaining: 1,
-    account: 'SCS pilot',
-  },
-];
+interface CoolingOffWindow {
+  id: string;
+  donor: string;
+  area: string;
+  account: string;
+  conversionDate: string;
+  daysRemaining: number;
+}
 
-const PERMITS = [
-  {
-    name: 'PLRD H2H Collection (Tampines + Bedok)',
-    permitNo: 'PLRD/H2H/2026/0188',
-    bondSgd: 50_000,
-    period: '2026-03-01 → 2026-08-31',
-    status: 'active' as const,
-  },
-  {
-    name: 'PLRD H2H Collection (Jurong East + Toa Payoh)',
-    permitNo: 'PLRD/H2H/2026/0214',
-    bondSgd: 35_000,
-    period: '2026-04-15 → 2026-09-15',
-    status: 'active' as const,
-  },
-  {
-    name: 'PLRD Street/Tin Collection (CBD)',
-    permitNo: 'PLRD/SCC/2026/0091',
-    bondSgd: 20_000,
-    period: 'Pending',
-    status: 'pending' as const,
-  },
-  {
-    name: 'PLRD H2H Collection (Sengkang)',
-    permitNo: 'PLRD/H2H/2026/PEND',
-    bondSgd: 30_000,
-    period: 'Pending',
-    status: 'pending' as const,
-  },
-];
+interface ComplianceResponse {
+  windowDays: number;
+  activeConsentCount: number;
+  registrations: RegistrationRow[];
+  openCoolingOff: CoolingOffWindow[];
+}
 
 export default function SgComplianceDeepDivePage(): JSX.Element {
+  const [compliance, setCompliance] = useState<ComplianceResponse | null>(null);
+  const { source, markFresh, markFixture } = useDataFreshness('fixture');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/regions/SG/compliance', {
+          headers: { accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error(`compliance ${res.status}`);
+        const json = (await res.json()) as ComplianceResponse;
+        if (cancelled) return;
+        setCompliance(json);
+        markFresh();
+      } catch {
+        if (cancelled) return;
+        markFixture();
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, [markFresh, markFixture]);
+
   const implemented = PDPA_OBLIGATIONS.filter((o) => o.impl === 'implemented').length;
   const planned = PDPA_OBLIGATIONS.filter((o) => o.impl === 'planned').length;
-  const activePermits = PERMITS.filter((p) => p.status === 'active').length;
+  const registrations = compliance?.registrations ?? [];
+  const activePermits = registrations.filter((r) => r.status === 'approved').length;
+  const openWindows = compliance?.openCoolingOff ?? [];
 
   return (
     <PlatformShell pageTitle="SG compliance · deep dive">
@@ -225,11 +156,15 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
             <span>
               This page is the <span className="font-semibold">operational source of truth</span>{' '}
               for SG compliance. All campaigns delivered to Singapore addresses pass through these
-              gates: PDPA, Charity Council Code, PLRD H2H + Tin permits, CPFTA cooling-off,
-              Commercial Fundraiser appointment.
+              gates: PDPA, PLRD H2H + Tin permits, CPFTA cooling-off, Commercial Fundraiser
+              appointment.
             </span>
           </span>
         </Banner>
+
+        <div className="flex items-center justify-end">
+          <DataSourceBadge source={source} />
+        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard
@@ -239,22 +174,21 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
             deltaTone="positive"
           />
           <KpiCard
-            label="PLRD permits active"
-            value={`${activePermits} / ${PERMITS.length}`}
-            hint="2 pending review"
+            label="PLRD permits approved"
+            value={`${activePermits} / ${registrations.length || '—'}`}
+            hint="PaidSolicitorRegistration"
           />
           <KpiCard
-            label="PDPC DNC conformance"
-            value="100%"
-            hint="last 30d sends"
-            deltaTone="positive"
+            label="Active consent records"
+            value={compliance?.activeConsentCount ?? 0}
+            hint="granted, not revoked"
           />
-          <KpiCard label="CPFTA windows open" value={CPFTA_OPEN.length} hint="awaiting release" />
+          <KpiCard label="CPFTA windows open" value={openWindows.length} hint="awaiting release" />
         </div>
 
         <Section
-          title="PDPA · 11 main obligations"
-          subtitle="Personal Data Protection Act 2012 · mapped to D2D implementation"
+          title="PDPA · 11 main obligations · reference"
+          subtitle="Personal Data Protection Act 2012 — fixed legal framework, not sourced from the database"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {PDPA_OBLIGATIONS.map((o) => {
@@ -283,30 +217,24 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
         </Section>
 
         <Section
-          title="Spam Control Act · consent + identifier + unsubscribe"
-          subtitle="Three statutory rules · enforced server-side on every electronic message"
+          title="Spam Control Act · consent + identifier + unsubscribe · reference"
+          subtitle="Three statutory rules — enforced server-side on every electronic message"
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SpamCard
               icon={<FileSignature size={14} className="text-accent" />}
               title="Consent capture"
               detail="Express or deemed consent recorded with timestamp + IP + signature method."
-              tickStat="100%"
-              tickHint="of last 30d sends had a consent record"
             />
             <SpamCard
               icon={<Mail size={14} className="text-accent" />}
               title="UEN + sender ID"
               detail="Sender name + UEN + valid SG return-path auto-injected per send."
-              tickStat="Auto-injected"
-              tickHint="header template v3.2 · counsel-approved"
             />
             <SpamCard
               icon={<Clock size={14} className="text-accent" />}
               title="Unsubscribe link"
               detail={'Functional "<UNSUBSCRIBE>" / "STOP" handling per Spam Control Act.'}
-              tickStat="< 1 day"
-              tickHint="median actioning time"
             />
           </div>
         </Section>
@@ -316,239 +244,93 @@ export default function SgComplianceDeepDivePage(): JSX.Element {
           subtitle="Consumer Protection (Fair Trading) Act · all door + phone conversions subject"
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Donor (masked)</th>
-                <th>Planning area</th>
-                <th>Account</th>
-                <th>Conversion date</th>
-                <th>Days remaining</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CPFTA_OPEN.map((w, i) => {
-                const tone: 'warn' | 'info' = w.daysRemaining <= 2 ? 'warn' : 'info';
-                return (
-                  <tr key={i}>
-                    <td className="text-[13px] text-ink mono">{w.donor}</td>
-                    <td className="text-[12px] text-ink">{w.area}</td>
-                    <td className="text-[12px] text-ink">{w.account}</td>
-                    <td className="text-[12px] text-muted numeric">{w.conversionDate}</td>
-                    <td>
-                      <StatusPill tone={tone}>{w.daysRemaining}d left</StatusPill>
-                    </td>
-                    <td>
-                      <button
-                        className="text-[11px] font-semibold text-accent hover:underline"
-                        type="button"
-                      >
-                        Cancel & refund
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {compliance && openWindows.length === 0 ? (
+            <CoolingOffEmpty />
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Donor (masked)</th>
+                  <th>Planning area</th>
+                  <th>Account</th>
+                  <th>Conversion date</th>
+                  <th>Days remaining</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openWindows.map((w) => {
+                  const tone: 'warn' | 'info' = w.daysRemaining <= 2 ? 'warn' : 'info';
+                  return (
+                    <tr key={w.id}>
+                      <td className="text-[13px] text-ink mono">{w.donor}</td>
+                      <td className="text-[12px] text-ink">{w.area}</td>
+                      <td className="text-[12px] text-ink">{w.account}</td>
+                      <td className="text-[12px] text-muted numeric">{w.conversionDate}</td>
+                      <td>
+                        <StatusPill tone={tone}>{w.daysRemaining}d left</StatusPill>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </Section>
 
         <Section
           title="PLRD permits · per-area"
-          subtitle="House-to-House + Tin Collection permits · bonds + renewal cadence"
+          subtitle="PaidSolicitorRegistration rows filed against SG"
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Permit</th>
-                <th>Permit no.</th>
-                <th>Bond (SGD)</th>
-                <th>Period</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PERMITS.map((p) => (
-                <tr key={p.permitNo}>
-                  <td className="text-[12.5px] text-ink font-medium">{p.name}</td>
-                  <td>
-                    <span className="mono text-[10px] !w-auto !px-2">{p.permitNo}</span>
-                  </td>
-                  <td className="text-[12px] text-ink numeric">
-                    {p.bondSgd === 0 ? '—' : `S$${p.bondSgd.toLocaleString()}`}
-                  </td>
-                  <td className="text-[12px] text-muted numeric">{p.period}</td>
-                  <td>
-                    <StatusPill tone={p.status === 'active' ? 'success' : 'warn'}>
-                      {p.status === 'active' ? 'Active' : 'Pending'}
-                    </StatusPill>
-                  </td>
+          {compliance && registrations.length === 0 ? (
+            <RegistrationsEmpty />
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Area / scope</th>
+                  <th>Permit no.</th>
+                  <th>Bond (SGD)</th>
+                  <th>Filed</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {registrations.map((r) => (
+                  <tr key={r.id}>
+                    <td className="text-[12.5px] text-ink font-medium">{r.state}</td>
+                    <td>
+                      <span className="mono text-[10px] !w-auto !px-2">
+                        {r.registrationNumber ?? '—'}
+                      </span>
+                    </td>
+                    <td className="text-[12px] text-ink numeric">
+                      <Money cents={BigInt(r.bondAmountCents)} region="SG" />
+                    </td>
+                    <td className="text-[12px] text-muted numeric">
+                      {r.filedAt ? r.filedAt.slice(0, 10) : '—'}
+                    </td>
+                    <td>
+                      <StatusPill tone={r.status === 'approved' ? 'success' : 'warn'}>
+                        {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                      </StatusPill>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <Section
-            title="Commercial Fundraiser appointment"
-            subtitle="Charities Act (Cap. 37) · CF appointment letter on file"
-          >
-            <div className="space-y-2.5 text-[13px]">
-              <Row label="CF entity" value="Door 2 Digital Pte Ltd (acting as CF)" />
-              <Row label="UEN" value={<span className="mono !w-auto !px-2">202610421R</span>} />
-              <Row label="Appointment letter" value="On file · counter-signed 2026-03-12" />
-              <Row label="Engaging charity" value="Tampines FSC pilot · SCS pilot" />
-              <Row label="Fundraising appeal" value="House-to-house · pre-authorised script" />
-              <Row label="Disclosure of fees" value="≤ 30% of net proceeds · published" />
-              <Row label="Auditor" value="KPMG Singapore" />
-              <Row
-                label="Annual return filed"
-                value={<StatusPill tone="success">Filed 2026-02-28</StatusPill>}
-              />
-            </div>
-          </Section>
-
-          <Section
-            title="Charity Council Code of Governance"
-            subtitle="Tier 3 (large charity) · enhanced disclosure regime"
-          >
-            <div className="space-y-3">
-              <CodeRow
-                title="Board composition"
-                detail="Min 3 directors · max 4yr term per director · ≥ 1 independent"
-                status="met"
-              />
-              <CodeRow
-                title="Conflict of interest register"
-                detail="Annual declaration + per-decision recusal logged in audit trail"
-                status="met"
-              />
-              <CodeRow
-                title="Fundraising governance"
-                detail="Board-approved policy · disclosure of ratio of admin to direct"
-                status="met"
-              />
-              <CodeRow
-                title="Whistleblowing policy"
-                detail="Independent channel · DPO routing · NDPA-conformant"
-                status="met"
-              />
-              <CodeRow
-                title="Programme effectiveness review"
-                detail="Annual outcomes review · published in AR"
-                status="met"
-              />
-              <CodeRow
-                title="Reserves policy"
-                detail="Free reserves between 6–24 months operating cost"
-                status="partial"
-              />
-            </div>
-          </Section>
-        </div>
-
-        <Section title="Active SG notifications" subtitle="DPO + compliance team alerts">
-          <div className="space-y-3">
-            {[
-              {
-                icon: AlertTriangle,
-                tone: 'text-warn',
-                msg: 'PLRD/SCC/2026/0091 (Tin Collection CBD) under PLRD review · ETA week 2.',
-              },
-              {
-                icon: AlertTriangle,
-                tone: 'text-warn',
-                msg: 'Sengkang H2H permit lodged 2026-04-29 · awaiting Town Council letter.',
-              },
-              {
-                icon: ShieldCheck,
-                tone: 'text-success',
-                msg: 'PDPC DNC scrub completed 2026-05-24 02:00 SGT · 1,284 contacts scrubbed.',
-              },
-              {
-                icon: ShieldCheck,
-                tone: 'text-success',
-                msg: 'PDPC notifiable breach drill completed 2026-05-12 · 0 findings.',
-              },
-              {
-                icon: ScrollText,
-                tone: 'text-soft',
-                msg: `CPFTA cooling-off engine: ${CPFTA_OPEN.length} windows currently open · 0 breaches MTD.`,
-              },
-              {
-                icon: CheckCircle2,
-                tone: 'text-success',
-                msg: 'COC AR filed 2026-02-28 · next due 2027-01-31.',
-              },
-              {
-                icon: Lock,
-                tone: 'text-success',
-                msg: 'AWS ap-southeast-1 residency check passed · no cross-region replication detected.',
-              },
-              {
-                icon: EyeOff,
-                tone: 'text-soft',
-                msg: 'NRIC masking enforced on all customer-facing logs · last audit 2026-05-08.',
-              },
-              {
-                icon: Globe2,
-                tone: 'text-accent',
-                msg: 'MAS Outsourcing notice updated for Stripe SG (acct_1NRSxxxSGsxxx).',
-              },
-            ].map((n, i) => (
-              <div key={i} className="flex items-start gap-2 text-[13px]">
-                <n.icon size={14} className={`${n.tone} mt-0.5 shrink-0`} />
-                <span className="text-ink">{n.msg}</span>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <Section
-          title="PDPA data residency · ap-southeast-1"
-          subtitle="Singapore data stays in Singapore · no replication outside region"
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="card card-pad">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted font-medium">
-                <Database size={12} className="text-accent" />
-                Primary RDS
-              </div>
-              <div className="mt-1.5 text-[16px] font-semibold text-ink numeric">
-                ap-southeast-1a
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">aurora-postgres v15.4</div>
-            </div>
-            <div className="card card-pad">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted font-medium">
-                <Database size={12} className="text-accent" />
-                Standby RDS
-              </div>
-              <div className="mt-1.5 text-[16px] font-semibold text-ink numeric">
-                ap-southeast-1c
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">multi-AZ replica · &lt;5s lag</div>
-            </div>
-            <div className="card card-pad">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted font-medium">
-                <Lock size={12} className="text-accent" />
-                S3 bucket
-              </div>
-              <div className="mt-1.5 text-[16px] font-semibold text-ink numeric">d2d-sg-prod</div>
-              <div className="text-[11px] text-muted mt-0.5">KMS · object-lock 7yr</div>
-            </div>
-            <div className="card card-pad">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted font-medium">
-                <ShieldCheck size={12} className="text-success" />
-                Cross-region copy
-              </div>
-              <div className="mt-1.5 text-[16px] font-semibold text-ink numeric">Disabled</div>
-              <div className="text-[11px] text-muted mt-0.5">no offshore replication</div>
-            </div>
-          </div>
+        <Section title="Active SG notifications">
+          {/* No ComplianceNotification model exists yet — an honest banner
+              beats a fabricated activity feed. */}
+          <p className="text-[13px] text-muted flex items-start gap-2">
+            <ScrollText size={14} className="text-soft mt-0.5 shrink-0" />
+            Notification feed not yet wired — no dedicated model for filing-status alerts, PDPC
+            scrub-run events, or breach drills. The KPI rail above reflects live data; this feed
+            does not exist yet.
+          </p>
         </Section>
       </div>
     </PlatformShell>
@@ -559,14 +341,10 @@ function SpamCard({
   icon,
   title,
   detail,
-  tickStat,
-  tickHint,
 }: {
   icon: React.ReactNode;
   title: string;
   detail: string;
-  tickStat: string;
-  tickHint: string;
 }): JSX.Element {
   return (
     <div className="card card-pad">
@@ -574,45 +352,7 @@ function SpamCard({
         {icon}
         <div className="text-[13px] font-semibold text-ink">{title}</div>
       </div>
-      <div className="text-[11.5px] text-muted leading-snug mb-3">{detail}</div>
-      <div className="border-t border-line2 pt-3">
-        <div className="text-[16px] font-semibold text-ink tracking-tight numeric">{tickStat}</div>
-        <div className="text-[10.5px] text-muted mt-0.5">{tickHint}</div>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }): JSX.Element {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted">{label}</span>
-      <span className="text-ink">{value}</span>
-    </div>
-  );
-}
-
-function CodeRow({
-  title,
-  detail,
-  status,
-}: {
-  title: string;
-  detail: string;
-  status: 'met' | 'partial' | 'gap';
-}): JSX.Element {
-  const tone: 'success' | 'warn' | 'danger' =
-    status === 'met' ? 'success' : status === 'partial' ? 'warn' : 'danger';
-  const label = status === 'met' ? 'Met' : status === 'partial' ? 'Partial' : 'Gap';
-  return (
-    <div className="border-b border-line2 last:border-b-0 pb-2.5 last:pb-0">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-ink">{title}</div>
-          <div className="text-[11px] text-muted mt-0.5">{detail}</div>
-        </div>
-        <StatusPill tone={tone}>{label}</StatusPill>
-      </div>
+      <div className="text-[11.5px] text-muted leading-snug">{detail}</div>
     </div>
   );
 }

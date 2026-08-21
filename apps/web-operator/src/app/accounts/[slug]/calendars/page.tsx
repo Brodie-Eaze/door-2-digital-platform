@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -18,7 +18,9 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { CalendarsEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
+import { useAccountMeta } from '@/lib/use-account-meta';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 type ApptType = 'consult' | 'install' | 'follow-up' | 'demo';
@@ -181,14 +183,24 @@ function buildAppointments(slug: string): Appointment[] {
   });
 }
 
-export default function CalendarsPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
+export default function CalendarsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
+  const meta = useAccountMeta(params.slug);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [typeFilter, setTypeFilter] = useState<ApptType | 'all'>('all');
   const [showNew, setShowNew] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [extraAppts, setExtraAppts] = useState<Appointment[]>([]);
+  const [newContact, setNewContact] = useState('');
+  const [newWhen, setNewWhen] = useState('');
+  const [newType, setNewType] = useState<ApptType>('consult');
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Calendars">
         <div className="space-y-5 max-w-[1400px]">
@@ -201,12 +213,35 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
     );
   }
 
-  const allAppts = buildAppointments(params.slug);
+  const allAppts = [...buildAppointments(params.slug), ...extraAppts];
   const appts = typeFilter === 'all' ? allAppts : allAppts.filter((a) => a.type === typeFilter);
 
   const today = new Date();
   const monday = new Date(today);
-  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + weekOffset * 7);
+
+  function handleBook(): void {
+    const contact = newContact.trim() || 'New contact';
+    const appt: Appointment = {
+      id: `appt_local_${Date.now()}`,
+      dayIdx: 0,
+      startHour: 9,
+      durationHours: 1,
+      type: newType,
+      contact,
+      rep: 'Brodie R.',
+      repInitials: 'BR',
+      location: 'Outbound dial',
+      channel: 'phone',
+      notes: newWhen.trim() ? `Requested: ${newWhen.trim()}` : 'Confirm next step + log outcome',
+    };
+    setExtraAppts((prev) => [...prev, appt]);
+    toast.success(`Booked ${contact} — added to this week (local only; sync lands in Phase 1.2)`);
+    setNewContact('');
+    setNewWhen('');
+    setNewType('consult');
+    setShowNew(false);
+  }
 
   const weekDates = DAYS.map((_, i) => {
     const d = new Date(monday);
@@ -216,7 +251,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
 
   const bookingsThisWeek = appts.length;
   const showRate = 86;
-  const avgValue = account.vertical === 'commercial' ? '$1,840' : '$385';
+  const avgValue = meta?.vertical === 'commercial' ? '$1,840' : '$385';
   const openSlots = 7 * HOURS.length - allAppts.reduce((s, a) => s + a.durationHours, 0);
 
   return (
@@ -250,16 +285,27 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
         <div className="card !p-0">
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-line2 flex-wrap">
             <div className="flex items-center gap-2">
-              <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">
+              <button
+                onClick={() => setWeekOffset((w) => w - 1)}
+                aria-label="Previous week"
+                className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+              >
                 <ChevronLeft size={14} className="text-soft" />
               </button>
               <div className="text-[13px] font-semibold text-ink">
                 Week of {monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
-              <button className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center">
+              <button
+                onClick={() => setWeekOffset((w) => w + 1)}
+                aria-label="Next week"
+                className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+              >
                 <ChevronRight size={14} className="text-soft" />
               </button>
-              <button className="ml-2 px-2 py-1 rounded text-[11px] font-medium bg-paper text-muted hover:bg-line2 hover:text-ink">
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="ml-2 px-2 py-1 rounded text-[11px] font-medium bg-paper text-muted hover:bg-line2 hover:text-ink"
+              >
                 Today
               </button>
             </div>
@@ -289,6 +335,7 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                 </span>
               ))}
             </div>
+            <DataSourceBadge source="fixture" />
             <Button
               variant="primary"
               size="sm"
@@ -472,7 +519,12 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
                       <div className="text-[12px] font-medium text-ink">{b.name}</div>
                       <div className="text-[10px] text-muted">{b.bookings} bookings · 30d</div>
                     </div>
-                    <button className="text-[11px] text-accent font-medium hover:underline">
+                    <button
+                      onClick={() =>
+                        toast.info(`Share "${b.name}" — booking-link copy lands in Phase 1.2`)
+                      }
+                      className="text-[11px] text-accent font-medium hover:underline"
+                    >
                       Share
                     </button>
                   </div>
@@ -533,13 +585,31 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
               <div className="text-[12.5px] text-ink mt-1">{selected.notes}</div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="secondary" size="sm" leftIcon={<Phone size={12} />}>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Phone size={12} />}
+                onClick={() =>
+                  toast.info(`Call ${selected.contact} — dialer wiring lands in Phase 1.2`)
+                }
+              >
                 Call
               </Button>
-              <Button variant="secondary" size="sm" leftIcon={<MessageSquare size={12} />}>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<MessageSquare size={12} />}
+                onClick={() => toast.info(`SMS ${selected.contact} — wiring lands in Phase 1.2`)}
+              >
                 SMS
               </Button>
-              <Button variant="primary" size="sm">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  toast.info(`Join ${selected.location} — video link wiring lands in Phase 1.2`)
+                }
+              >
                 Join
               </Button>
             </div>
@@ -559,26 +629,34 @@ export default function CalendarsPage({ params }: { params: { slug: string } }):
             <div className="text-[15px] font-semibold text-ink mb-4">New booking</div>
             <div className="space-y-2 mb-4">
               <input
+                value={newContact}
+                onChange={(e) => setNewContact(e.target.value)}
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Contact name"
                 autoFocus
               />
               <input
+                value={newWhen}
+                onChange={(e) => setNewWhen(e.target.value)}
                 className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
                 placeholder="Date & time"
               />
-              <select className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]">
-                <option>Consult</option>
-                <option>Demo</option>
-                <option>Install</option>
-                <option>Follow-up</option>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as ApptType)}
+                className="w-full px-3 h-9 bg-paper border border-line2 rounded-lg text-[13px]"
+              >
+                <option value="consult">Consult</option>
+                <option value="demo">Demo</option>
+                <option value="install">Install</option>
+                <option value="follow-up">Follow-up</option>
               </select>
             </div>
             <div className="flex items-center gap-2 justify-end">
               <Button variant="ghost" size="sm" onClick={() => setShowNew(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={() => setShowNew(false)}>
+              <Button variant="primary" size="sm" onClick={handleBook}>
                 Book it
               </Button>
             </div>

@@ -1,188 +1,319 @@
-import { Download, ExternalLink } from 'lucide-react';
-import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+/**
+ * /billing — invoices + per-org billing configuration. Server component,
+ * live Prisma reads. No fixture fallback.
+ *
+ * MiCamp ISO residual detail (grouped monthly, by-org volume) lives on
+ * /billing/processor — this page shows only the current-month residual KPI
+ * plus a link, so the two surfaces don't compute overlapping monthly
+ * breakdowns from two different code paths.
+ */
+import Link from 'next/link';
+import { ArrowRight, Download, ExternalLink } from 'lucide-react';
+import { Banner, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
+import type { Tone } from '@d2d/ui-web';
+import { PlatformShell } from '@/components/PlatformShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { ToastButton } from '@/components/ToastButton';
+import { InvoicesEmpty } from '@/components/PlatformEmptyStates';
 
-const INVOICES = [
-  {
-    id: 'inv_2026_05',
-    org: 'Hope Forward International',
-    period: 'May 2026',
-    platformFeeCents: 250000n,
-    doorRakeCents: 1_207_500_00n,
-    insideSalesRakeCents: 218_400_00n,
-    retargetingRakeCents: 36_200_00n,
-    totalCents: 1_605_240_00n + 250000n,
-    status: 'open',
-    issuedAt: '2026-06-01',
-  },
-  {
-    id: 'inv_2026_05_pestmax',
-    org: 'PestMax Services',
-    period: 'May 2026',
-    platformFeeCents: 99_900n,
-    doorRakeCents: 124_800_00n,
-    insideSalesRakeCents: 0n,
-    retargetingRakeCents: 0n,
-    totalCents: 124_800_00n + 99_900n,
-    status: 'paid',
-    issuedAt: '2026-06-01',
-  },
-  {
-    id: 'inv_2026_04',
-    org: 'Hope Forward International',
-    period: 'Apr 2026',
-    platformFeeCents: 250000n,
-    doorRakeCents: 982_400_00n,
-    insideSalesRakeCents: 165_900_00n,
-    retargetingRakeCents: 22_100_00n,
-    totalCents: 1_170_400_00n + 250000n,
-    status: 'paid',
-    issuedAt: '2026-05-01',
-  },
-];
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-const RESIDUALS = [
-  {
-    period: 'May 2026',
-    volumeCents: 12_485_000_00n,
-    residualCents: 18_240_50n,
-    status: 'pending_payout',
-  },
-  { period: 'Apr 2026', volumeCents: 9_820_000_00n, residualCents: 14_180_25n, status: 'paid' },
-  { period: 'Mar 2026', volumeCents: 5_240_000_00n, residualCents: 7_614_80n, status: 'paid' },
-];
+interface InvoiceRow {
+  id: string;
+  orgName: string;
+  regionCode: 'US' | 'AU' | 'SG';
+  periodStart: Date;
+  platformFeeCents: bigint;
+  doorRakeCents: bigint;
+  insideSalesRakeCents: bigint;
+  retargetingRakeCents: bigint;
+  totalCents: bigint;
+  status: string;
+}
 
-export default function BillingPage(): JSX.Element {
+interface OrgBillingRow {
+  orgName: string;
+  regionCode: 'US' | 'AU' | 'SG';
+  platformFeeMonthlyCents: bigint;
+  doorRakePercent: number;
+  insideSalesRakePercent: number;
+  retargetingRakePercent: number;
+  billingDay: number;
+  currency: string;
+}
+
+interface BillingData {
+  invoices: InvoiceRow[];
+  orgBilling: OrgBillingRow[];
+  mtdBilledCents: bigint;
+  openCount: number;
+  openCents: bigint;
+  micampResidualMtdCents: bigint;
+  avgRakePerConvCents: bigint;
+  error?: string;
+}
+
+function statusTone(status: string): Tone {
+  if (status === 'paid') return 'success';
+  if (status === 'sent') return 'info';
+  if (status === 'void') return 'danger';
+  return 'muted';
+}
+
+async function loadBilling(): Promise<BillingData> {
+  const empty: BillingData = {
+    invoices: [],
+    orgBilling: [],
+    mtdBilledCents: 0n,
+    openCount: 0,
+    openCents: 0n,
+    micampResidualMtdCents: 0n,
+    avgRakePerConvCents: 0n,
+  };
+
+  try {
+    const { db } = await import('@d2d/database');
+
+    const mtdStart = new Date();
+    mtdStart.setUTCDate(1);
+    mtdStart.setUTCHours(0, 0, 0, 0);
+
+    const [invoices, orgBillingRows, mtdInvoiceAgg, openAgg, micampAgg, rakeAgg] =
+      await Promise.all([
+        db.invoice.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+          include: { org: { select: { tradingName: true, regionCode: true } } },
+        }),
+        db.orgBilling.findMany({
+          include: { org: { select: { tradingName: true, regionCode: true } } },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        db.invoice.aggregate({
+          _sum: { totalCents: true },
+          where: { createdAt: { gte: mtdStart } },
+        }),
+        db.invoice.aggregate({
+          _count: { _all: true },
+          _sum: { totalCents: true },
+          where: { status: 'sent' },
+        }),
+        db.conversion.aggregate({
+          _sum: { processorResidualCents: true },
+          where: { paymentProvider: 'micamp', signedAt: { gte: mtdStart } },
+        }),
+        db.conversion.aggregate({
+          _avg: { d2dRakeCents: true },
+          where: { signedAt: { gte: mtdStart } },
+        }),
+      ]);
+
+    return {
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        orgName: inv.org.tradingName,
+        regionCode: inv.org.regionCode,
+        periodStart: inv.periodStart,
+        platformFeeCents: inv.platformFeeCents,
+        doorRakeCents: inv.doorRakeCents,
+        insideSalesRakeCents: inv.insideSalesRakeCents,
+        retargetingRakeCents: inv.retargetingRakeCents,
+        totalCents: inv.totalCents,
+        status: inv.status,
+      })),
+      orgBilling: orgBillingRows.map((b) => ({
+        orgName: b.org.tradingName,
+        regionCode: b.org.regionCode,
+        platformFeeMonthlyCents: b.platformFeeMonthlyCents,
+        doorRakePercent: Number(b.doorRakePercent),
+        insideSalesRakePercent: Number(b.insideSalesRakePercent),
+        retargetingRakePercent: Number(b.retargetingRakePercent),
+        billingDay: b.billingDay,
+        currency: b.currency,
+      })),
+      mtdBilledCents: mtdInvoiceAgg._sum.totalCents ?? 0n,
+      openCount: openAgg._count._all,
+      openCents: openAgg._sum.totalCents ?? 0n,
+      micampResidualMtdCents: micampAgg._sum.processorResidualCents ?? 0n,
+      avgRakePerConvCents: BigInt(Math.round(rakeAgg._avg.d2dRakeCents ?? 0)),
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[billing] DB load failed:', err);
+    return { ...empty, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export default async function BillingPage(): Promise<JSX.Element> {
+  const {
+    invoices,
+    orgBilling,
+    mtdBilledCents,
+    openCount,
+    openCents,
+    micampResidualMtdCents,
+    avgRakePerConvCents,
+    error,
+  } = await loadBilling();
+
   return (
-    <OperatorShell pageTitle="Billing & invoices">
+    <PlatformShell pageTitle="Billing & invoices">
       <div className="space-y-6 max-w-[1280px]">
+        {error && (
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              Could not load billing data: {error}. Refresh to retry.
+            </span>
+          </Banner>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard
-            label="MTD billed"
-            value={<Money cents={1_730_440_00n + 350_000n} region="US" />}
-            delta="+22.4%"
-            deltaTone="positive"
-          />
+          <KpiCard label="MTD billed" value={<Money cents={mtdBilledCents} region="US" />} />
           <KpiCard
             label="Open invoices"
-            value="1"
-            hint={<Money cents={1_607_740_00n} region="US" />}
+            value={openCount.toString()}
+            hint={<Money cents={openCents} region="US" />}
           />
           <KpiCard
             label="MiCamp residuals MTD"
-            value={<Money cents={18_240_50n} region="US" />}
-            delta="+28.6%"
-            deltaTone="positive"
+            value={<Money cents={micampResidualMtdCents} region="US" />}
             hint="ISO agreement"
           />
           <KpiCard
             label="Avg rake / conv."
-            value={<Money cents={32_810n} region="US" />}
-            hint="blended across buckets"
+            value={<Money cents={avgRakePerConvCents} region="US" />}
+            hint="blended across buckets, MTD"
           />
         </div>
 
+        {invoices.length === 0 ? (
+          <InvoicesEmpty />
+        ) : (
+          <Section
+            title="Recent invoices"
+            subtitle="Platform fee + per-attribution rake, from Invoice rows"
+            paddedBody={false}
+            action={
+              <div className="flex items-center gap-2">
+                <DataSourceBadge source="live" />
+                <ToastButton
+                  leftIcon={<Download size={14} />}
+                  variant="ghost"
+                  size="sm"
+                  message="Export CSV — wiring lands in Phase 1.2"
+                >
+                  Export CSV
+                </ToastButton>
+              </div>
+            }
+          >
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Org</th>
+                  <th>Period</th>
+                  <th>Platform</th>
+                  <th>Door</th>
+                  <th>Inside</th>
+                  <th>Retarget</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>
+                      <span className="mono text-[10px] !w-auto !px-2">{inv.id}</span>
+                    </td>
+                    <td className="text-[13px] text-ink truncate max-w-[180px]">{inv.orgName}</td>
+                    <td className="text-[12px] text-muted">
+                      {inv.periodStart.toISOString().slice(0, 7)}
+                    </td>
+                    <td>
+                      <Money cents={inv.platformFeeCents} region={inv.regionCode} />
+                    </td>
+                    <td>
+                      <Money cents={inv.doorRakeCents} region={inv.regionCode} emptyAsDash />
+                    </td>
+                    <td>
+                      <Money cents={inv.insideSalesRakeCents} region={inv.regionCode} emptyAsDash />
+                    </td>
+                    <td>
+                      <Money cents={inv.retargetingRakeCents} region={inv.regionCode} emptyAsDash />
+                    </td>
+                    <td className="font-medium">
+                      <Money cents={inv.totalCents} region={inv.regionCode} />
+                    </td>
+                    <td>
+                      <StatusPill tone={statusTone(inv.status)}>
+                        {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                      </StatusPill>
+                    </td>
+                    <td>
+                      <ToastButton
+                        variant="ghost"
+                        size="sm"
+                        message={`Open invoice ${inv.id} — document viewer wiring lands in Phase 1.2`}
+                      >
+                        <ExternalLink size={14} />
+                      </ToastButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+        )}
+
         <Section
-          title="Recent invoices"
-          subtitle="Platform fee + per-attribution rake (door 15% · inside-sales 10% · retargeting 5%)"
+          title="Org billing configuration"
+          subtitle="Live OrgBilling rows — rake %, platform fee, billing day per org"
           paddedBody={false}
           action={
-            <Button leftIcon={<Download size={14} />} variant="ghost" size="sm">
-              Export CSV
-            </Button>
+            <Link
+              href="/billing/processor"
+              className="inline-flex items-center gap-1 text-[12px] text-accent hover:underline"
+            >
+              MiCamp processor detail <ArrowRight size={12} />
+            </Link>
           }
         >
           <table className="tbl">
             <thead>
               <tr>
-                <th>Invoice</th>
                 <th>Org</th>
-                <th>Period</th>
-                <th>Platform</th>
-                <th>Door</th>
-                <th>Inside</th>
-                <th>Retarget</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th></th>
+                <th>Platform fee</th>
+                <th>Door rake</th>
+                <th>Inside rake</th>
+                <th>Retarget rake</th>
+                <th>Billing day</th>
+                <th>Currency</th>
               </tr>
             </thead>
             <tbody>
-              {INVOICES.map((inv) => (
-                <tr key={inv.id}>
+              {orgBilling.map((b, i) => (
+                <tr key={`${b.orgName}-${i}`}>
+                  <td className="text-[13px] text-ink">{b.orgName}</td>
                   <td>
-                    <span className="mono text-[10px] !w-auto !px-2">{inv.id}</span>
+                    <Money cents={b.platformFeeMonthlyCents} region={b.regionCode} /> / mo
                   </td>
-                  <td className="text-[13px] text-ink truncate max-w-[180px]">{inv.org}</td>
-                  <td className="text-[12px] text-muted">{inv.period}</td>
-                  <td>
-                    <Money cents={inv.platformFeeCents} region="US" />
+                  <td className="numeric text-[13px]">{b.doorRakePercent.toFixed(2)}%</td>
+                  <td className="numeric text-[13px]">{b.insideSalesRakePercent.toFixed(2)}%</td>
+                  <td className="numeric text-[13px]">{b.retargetingRakePercent.toFixed(2)}%</td>
+                  <td className="numeric text-[12px] text-muted">
+                    {b.billingDay === 1 ? '1st' : `${b.billingDay}th`}
                   </td>
-                  <td>
-                    <Money cents={inv.doorRakeCents} region="US" />
-                  </td>
-                  <td>
-                    <Money cents={inv.insideSalesRakeCents} region="US" emptyAsDash />
-                  </td>
-                  <td>
-                    <Money cents={inv.retargetingRakeCents} region="US" emptyAsDash />
-                  </td>
-                  <td className="font-medium">
-                    <Money cents={inv.totalCents} region="US" />
-                  </td>
-                  <td>
-                    <StatusPill tone={inv.status === 'paid' ? 'success' : 'info'}>
-                      {inv.status === 'paid' ? 'Paid' : 'Open'}
-                    </StatusPill>
-                  </td>
-                  <td>
-                    <button className="text-soft hover:text-ink">
-                      <ExternalLink size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Section>
-
-        <Section
-          title="MiCamp ISO residuals"
-          subtitle="Processor markup share — separate from D2D platform revenue. Per ADR-0028."
-          paddedBody={false}
-        >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th>Processed volume</th>
-                <th>Residual rate</th>
-                <th>Residual earned</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RESIDUALS.map((r) => (
-                <tr key={r.period}>
-                  <td className="text-[13px] text-ink">{r.period}</td>
-                  <td>
-                    <Money cents={r.volumeCents} region="US" />
-                  </td>
-                  <td className="numeric text-[13px] text-muted">0.146%</td>
-                  <td className="font-medium">
-                    <Money cents={r.residualCents} region="US" />
-                  </td>
-                  <td>
-                    <StatusPill tone={r.status === 'paid' ? 'success' : 'warn'}>
-                      {r.status === 'paid' ? 'Paid' : 'Pending payout'}
-                    </StatusPill>
-                  </td>
+                  <td className="text-[12px] text-muted">{b.currency}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

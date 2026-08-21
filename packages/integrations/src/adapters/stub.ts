@@ -8,21 +8,117 @@
  */
 
 import { createHash } from 'node:crypto';
+import { CredentialsRequiredError, ProviderError, ProviderTimeoutError } from '../errors';
 import type {
   GenerateAvatarOutput,
   GenerateImageOutput,
   GenerateTextOutput,
   GenerateVideoOutput,
   ProviderConfig,
+  Result,
 } from '../types';
 
-/** True when the adapter should produce a stub response rather than a real call. */
+/** Default per-call timeout for outbound provider HTTP. */
+export const DEFAULT_TIMEOUT_MS = 10_000 as const;
+
+/**
+ * Resolved operating posture for a provider config.
+ *   - `stub`             → sandbox/dev: serve deterministic placeholder data.
+ *   - `live`             → production with real credentials: hit the network.
+ *   - `needs_credentials`→ production but creds are missing/blank: FAIL CLOSED.
+ *
+ * The third state is the whole point of this refactor. Previously a production
+ * connection with empty creds collapsed into `stub`, silently serving fake
+ * success in a prod context. Now it surfaces explicitly.
+ */
+export type ProviderPosture = 'stub' | 'live' | 'needs_credentials';
+
+/** True when at least one credential value is present and non-trivial. */
+export function hasRealCredentials(config: ProviderConfig): boolean {
+  if (!config.credentials || Object.keys(config.credentials).length === 0) return false;
+  // Empty-string / whitespace / obvious-placeholder credentials count as missing.
+  return Object.values(config.credentials).some(
+    (v) => typeof v === 'string' && v.trim().length > 4,
+  );
+}
+
+/**
+ * Resolve a config to its operating posture.
+ *
+ * Rules:
+ *   - mode === 'production' + real creds  → 'live'
+ *   - mode === 'production' + no creds    → 'needs_credentials'  (fail closed)
+ *   - mode !== 'production' (sandbox/unset)→ 'stub' regardless of creds
+ */
+export function resolveProviderPosture(config: ProviderConfig): ProviderPosture {
+  if (config.mode === 'production') {
+    return hasRealCredentials(config) ? 'live' : 'needs_credentials';
+  }
+  return 'stub';
+}
+
+/**
+ * True when the adapter should produce a stub response rather than a real call.
+ *
+ * IMPORTANT: this returns `false` in production. It is only `true` for
+ * sandbox/dev. In production with missing creds it returns `false` so the
+ * adapter falls through to its real path, where `requireProductionCreds` (or
+ * the adapter's own credential guard) fails closed. Callers that want to fail
+ * fast on the missing-creds case should branch on `resolveProviderPosture`
+ * directly via `guardProduction`.
+ */
 export function isStubMode(config: ProviderConfig): boolean {
-  if (config.mode === 'sandbox') return true;
-  if (!config.credentials || Object.keys(config.credentials).length === 0) return true;
-  // Empty-string credentials count as missing.
-  const anyReal = Object.values(config.credentials).some((v) => v && v.length > 4);
-  return !anyReal;
+  return resolveProviderPosture(config) === 'stub';
+}
+
+/**
+ * Fail-closed guard for adapter entrypoints. Returns:
+ *   - `{ stub: true }`             → caller should serve stub data
+ *   - `{ stub: false }`            → caller should run the real (live) path
+ *   - `{ error }` (Result.error)   → production + missing creds: return this
+ *
+ * Usage at the top of every adapter method:
+ *   const g = guardProduction(config, kind);
+ *   if (!g.ok) return g;              // fail closed in prod
+ *   if (g.stub) return { ok: true, data: stub... };
+ */
+export function guardProduction(
+  config: ProviderConfig,
+  kind: string,
+): { ok: true; stub: boolean } | { ok: false; error: ProviderError } {
+  const posture = resolveProviderPosture(config);
+  if (posture === 'needs_credentials') {
+    return { ok: false, error: new CredentialsRequiredError(kind) };
+  }
+  return { ok: true, stub: posture === 'stub' };
+}
+
+/**
+ * Timeout-bounded `fetch`. Every outbound provider call MUST go through this —
+ * a bare `await fetch(...)` has no timeout and can hang a request forever.
+ * Maps an abort into a typed `ProviderTimeoutError` and any other transport
+ * failure into a typed `ProviderError('NETWORK')`, so callers never see a raw
+ * throw.
+ */
+export async function fetchWithTimeout(
+  kind: string,
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<Result<Response>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return { ok: true, data: res };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      return { ok: false, error: new ProviderTimeoutError(kind, timeoutMs) };
+    }
+    return { ok: false, error: new ProviderError('NETWORK', String(e), kind) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Hash any string to a stable 12-char hex id. */

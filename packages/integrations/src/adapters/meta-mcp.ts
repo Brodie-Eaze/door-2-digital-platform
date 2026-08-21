@@ -19,7 +19,7 @@
 
 import { ProviderError, StubModeError } from '../errors';
 import type { ProviderAdapter } from '../types';
-import { isStubMode, stubPing } from './stub';
+import { guardProduction, stubPing } from './stub';
 
 export function createMetaMcpAdapter(): ProviderAdapter {
   const kind = 'meta_mcp' as const;
@@ -33,7 +33,9 @@ export function createMetaMcpAdapter(): ProviderAdapter {
     async ping(config) {
       // D2D-as-MCP-server is always "available" — the scaffold mounts at /v1/mcp/sse.
       // When real Meta MCP gateway creds are present in the future, we'd call them here.
-      if (isStubMode(config)) {
+      const g = guardProduction(config, kind);
+      if (!g.ok) return g;
+      if (g.stub) {
         return { ok: true, data: stubPing('D2D MCP', 'd2d_mcp_server') };
       }
       const endpoint = config.credentials.mcpEndpoint;

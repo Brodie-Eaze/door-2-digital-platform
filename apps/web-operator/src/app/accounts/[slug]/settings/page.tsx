@@ -1,55 +1,53 @@
-import { Plug, Settings as SettingsIcon } from 'lucide-react';
-import { Banner, EmptyState, Section, StatusPill } from '@d2d/ui-web';
-import { AccountShell } from '@/components/AccountShell';
-import { FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
-import { firstRunSnapshot } from '@/lib/first-run';
+'use client';
 
-export default function SettingsPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
-  const firstRun = firstRunSnapshot(params.slug);
-  if (!account) {
-    return (
-      <AccountShell accountSlug={params.slug} pageTitle="Settings">
-        <div className="space-y-5 max-w-[1400px]">
-          {firstRun.isFirstRun && (
-            <FirstRunBanner slug={params.slug} accountName={firstRun.accountName} />
-          )}
-          <EmptyState
-            icon={SettingsIcon}
-            title="Account profile is pending."
-            description="Settings for this workspace appear once the onboard-account flow finishes provisioning the org row and brand kit. Refresh if you just finished onboarding."
-            primaryAction={{ label: 'Open accounts list', href: '/accounts' }}
-            secondaryAction={{ label: 'Onboard new account', href: '/onboard-account' }}
-            variant="first-run"
-          />
-        </div>
-      </AccountShell>
-    );
-  }
+import { use } from 'react';
+
+import { Plug } from 'lucide-react';
+import { Banner, Section, StatusPill } from '@d2d/ui-web';
+import { AccountShell } from '@/components/AccountShell';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { useAccountMeta, prettifySlug } from '@/lib/use-account-meta';
+
+export default function SettingsPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
+  const meta = useAccountMeta(params.slug);
+  const name = meta?.name ?? prettifySlug(params.slug);
+  const region = meta?.region ?? null;
+  const vertical = meta?.vertical ?? null;
+  const avatarBg = meta?.avatarBg ?? '#0F172A';
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Settings">
       <div className="space-y-5 max-w-[1400px]">
         <Banner tone="info">
-          <span className="text-[13px]">
-            Account-scoped settings for <span className="font-semibold">{account.name}</span>.
-            Changes audit-logged + pushed to apps within 60s.
+          <span className="text-[13px] flex items-center justify-between gap-3 w-full">
+            <span>
+              Account-scoped settings for <span className="font-semibold">{name}</span>. Read-only
+              demo view — editing, audit-logging + 60s push to apps land in Phase 1.x.
+            </span>
+            <DataSourceBadge source="fixture" className="shrink-0" />
           </span>
         </Banner>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Section title="Account profile">
             <div className="space-y-3 text-[13px]">
-              <Field label="Legal name" value={account.name} />
-              <Field label="Trading name" value={account.shortName} />
-              <Field label="Vertical" value={account.vertical} />
+              <Field label="Legal name" value={name} />
+              <Field label="Trading name" value={name} />
+              <Field label="Vertical" value={vertical ?? '—'} />
               <Field
                 label="Region"
-                value={`${account.region} · ${account.region === 'AU' ? 'ap-southeast-2' : account.region === 'SG' ? 'ap-southeast-1' : 'us-east-1'}`}
+                value={
+                  region
+                    ? `${region} · ${region === 'AU' ? 'ap-southeast-2' : region === 'SG' ? 'ap-southeast-1' : 'us-east-1'}`
+                    : '—'
+                }
               />
               <Field label="EIN / ABN / UEN" value="83-2461037" />
-              <Field label="Contracted" value={account.contractedAt} />
               <Field label="Status" value={<StatusPill tone="success">Active</StatusPill>} />
             </div>
           </Section>
@@ -60,8 +58,7 @@ export default function SettingsPage({ params }: { params: { slug: string } }): 
                 label="Primary colour"
                 value={
                   <span className="inline-flex items-center gap-2">
-                    <span className="w-4 h-4 rounded" style={{ background: account.avatarBg }} />{' '}
-                    {account.avatarBg}
+                    <span className="w-4 h-4 rounded" style={{ background: avatarBg }} /> {avatarBg}
                   </span>
                 }
               />
@@ -81,7 +78,7 @@ export default function SettingsPage({ params }: { params: { slug: string } }): 
               <Field label="Processor" value="MiCamp Gateway (US ISO)" />
               <Field
                 label="Currency"
-                value={account.region === 'AU' ? 'AUD' : account.region === 'SG' ? 'SGD' : 'USD'}
+                value={region === 'AU' ? 'AUD' : region === 'SG' ? 'SGD' : 'USD'}
               />
               <Field label="Platform fee" value="$2,500/mo" />
               <Field label="Door rake" value="15%" />
@@ -148,7 +145,7 @@ export default function SettingsPage({ params }: { params: { slug: string } }): 
                 label="Audit chain integrity"
                 value={<StatusPill tone="success">100% (14m ago)</StatusPill>}
               />
-              <Field label="Data residency" value={`${account.region} only · enforced`} />
+              <Field label="Data residency" value={`${region ?? '—'} only · enforced`} />
               <Field label="DR · RPO / RTO" value="5min / 1h" />
             </div>
           </Section>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { use, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   CheckSquare,
   Plus,
@@ -20,7 +20,8 @@ import {
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { TasksEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
-import { getAccount } from '@/lib/accounts';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
+import { toast } from '@/components/Toaster';
 import { firstRunSnapshot } from '@/lib/first-run';
 
 type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
@@ -269,8 +270,12 @@ function buildTasks(slug: string): Task[] {
   });
 }
 
-export default function TasksPage({ params }: { params: { slug: string } }): JSX.Element {
-  const account = getAccount(params.slug);
+export default function TasksPage({
+  params: paramsPromise,
+}: {
+  params: Promise<{ slug: string }>;
+}): JSX.Element {
+  const params = use(paramsPromise);
   const initial = useMemo(() => buildTasks(params.slug), [params.slug]);
   const [tasks, setTasks] = useState<Task[]>(initial);
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
@@ -296,7 +301,7 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
   }, []);
 
   const firstRun = firstRunSnapshot(params.slug);
-  if (!account || firstRun.isFirstRun) {
+  if (firstRun.isFirstRun) {
     return (
       <AccountShell accountSlug={params.slug} pageTitle="Tasks">
         <div className="space-y-5 max-w-[1400px]">
@@ -427,7 +432,13 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
               />
             </div>
             <div className="flex-1" />
-            <Button variant="primary" size="sm" leftIcon={<Plus size={12} />}>
+            <DataSourceBadge source="fixture" />
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={12} />}
+              onClick={() => toast.info('New task — composer lands in Phase 1.2')}
+            >
               New task
             </Button>
           </div>
@@ -462,7 +473,12 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
                       </div>
                       <span className="mono !w-5 !h-5 !text-[10px]">{colTasks.length}</span>
                     </div>
-                    <button className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center">
+                    <button
+                      onClick={() =>
+                        toast.info(`"${col.label}" column actions — menu lands in Phase 1.2`)
+                      }
+                      className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center"
+                    >
                       <MoreVertical size={13} className="text-soft" />
                     </button>
                   </div>
@@ -538,7 +554,12 @@ export default function TasksPage({ params }: { params: { slug: string } }): JSX
                       </div>
                     )}
                   </div>
-                  <button className="px-3 py-2 border-t border-line2 text-[11px] text-soft hover:text-ink hover:bg-paper transition flex items-center gap-1.5 justify-center">
+                  <button
+                    onClick={() =>
+                      toast.info(`Add task to "${col.label}" — composer lands in Phase 1.2`)
+                    }
+                    className="px-3 py-2 border-t border-line2 text-[11px] text-soft hover:text-ink hover:bg-paper transition flex items-center gap-1.5 justify-center"
+                  >
                     <Plus size={12} /> Add task
                   </button>
                 </div>

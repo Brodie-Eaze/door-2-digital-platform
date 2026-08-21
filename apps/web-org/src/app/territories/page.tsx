@@ -1,18 +1,53 @@
 import { MapPin } from 'lucide-react';
 import { Banner, Section, StatusPill } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
-import { TERRITORIES } from '@/lib/fixtures';
+import { apiFetch, type PageResponse, type TerritoryPublic } from '@/lib/api';
 
-export default function TerritoriesPage(): JSX.Element {
+function shortId(id: string): string {
+  return id.slice(-6).toUpperCase();
+}
+
+function statusTone(status: string): 'success' | 'warn' | 'muted' {
+  if (status === 'active') return 'success';
+  if (status === 'paused' || status === 'draft') return 'warn';
+  return 'muted';
+}
+
+function formatCentroid(territory: TerritoryPublic): string {
+  if (!territory.centroid) return '—';
+  return `${territory.centroid.lat.toFixed(4)}, ${territory.centroid.lng.toFixed(4)}`;
+}
+
+function mapPosition(index: number): { left: string; top: string } {
+  const positions = [
+    { left: '12%', top: '22%' },
+    { left: '32%', top: '16%' },
+    { left: '54%', top: '31%' },
+    { left: '22%', top: '58%' },
+    { left: '72%', top: '21%' },
+    { left: '75%', top: '60%' },
+    { left: '45%', top: '64%' },
+    { left: '8%', top: '66%' },
+  ];
+  return positions[index % positions.length] ?? { left: '50%', top: '50%' };
+}
+
+export default async function TerritoriesPage(): Promise<JSX.Element> {
+  const territoryPage = await apiFetch<PageResponse<TerritoryPublic>>('/territories');
+  const territories = territoryPage.data;
+  const active = territories.filter((territory) => territory.status === 'active').length;
+  const nonActive = territories.length - active;
+
   return (
     <OrgShell pageTitle="Territories">
       <div className="space-y-6 max-w-[1400px]">
-        <Banner tone="warn">
-          <span className="text-[13px]">
-            LA West territory is <span className="font-semibold">blocked</span> — paid-solicitor
-            registration for CA is pending. Knockers will be reassigned once cleared.
-          </span>
-        </Banner>
+        {nonActive > 0 && (
+          <Banner tone="warn">
+            <span className="text-[13px]">
+              {nonActive} territory{nonActive === 1 ? ' is' : 'ies are'} not active.
+            </span>
+          </Banner>
+        )}
 
         {/* Pseudo-map */}
         <div className="card" style={{ height: 360, position: 'relative', overflow: 'hidden' }}>
@@ -27,172 +62,117 @@ export default function TerritoriesPage(): JSX.Element {
             }}
             className="relative"
           >
-            {/* Territory polygon stand-ins */}
-            {[
-              {
-                left: '18%',
-                top: '30%',
-                label: 'Austin East',
-                w: 120,
-                h: 90,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '36%',
-                top: '18%',
-                label: 'Austin North',
-                w: 100,
-                h: 70,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '52%',
-                top: '38%',
-                label: 'Dallas Metro',
-                w: 140,
-                h: 100,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '24%',
-                top: '60%',
-                label: 'Houston SE',
-                w: 130,
-                h: 80,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '72%',
-                top: '25%',
-                label: 'Phoenix West',
-                w: 110,
-                h: 80,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '78%',
-                top: '60%',
-                label: 'Atlanta N',
-                w: 120,
-                h: 90,
-                color: 'rgba(59,130,246,0.18)',
-                stroke: '#1D4ED8',
-              },
-              {
-                left: '4%',
-                top: '15%',
-                label: 'LA West (BLOCKED)',
-                w: 140,
-                h: 100,
-                color: 'rgba(15,23,42,0.12)',
-                stroke: '#0F172A',
-                hatch: true,
-              },
-            ].map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  left: p.left,
-                  top: p.top,
-                  width: p.w,
-                  height: p.h,
-                  background: p.color,
-                  border: `1.5px solid ${p.stroke}`,
-                  borderRadius: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: p.stroke,
-                  textAlign: 'center',
-                  padding: 4,
-                  ...(p.hatch && {
-                    backgroundImage:
-                      'repeating-linear-gradient(45deg, rgba(15,23,42,0.18), rgba(15,23,42,0.18) 6px, transparent 6px, transparent 12px)',
-                  }),
-                }}
-              >
-                {p.label}
+            {territories.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center text-[12px] text-muted">
+                No territories yet — create them in the operator console.
               </div>
-            ))}
+            ) : (
+              territories.slice(0, 8).map((territory, index) => {
+                const position = mapPosition(index);
+                return (
+                  <div
+                    key={territory.id}
+                    style={{
+                      position: 'absolute',
+                      left: position.left,
+                      top: position.top,
+                      width: 132,
+                      minHeight: 74,
+                      background:
+                        territory.status === 'active'
+                          ? 'rgba(59,130,246,0.18)'
+                          : 'rgba(15,23,42,0.12)',
+                      border: `1.5px solid ${territory.status === 'active' ? '#1D4ED8' : '#0F172A'}`,
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: territory.status === 'active' ? '#1D4ED8' : '#0F172A',
+                      textAlign: 'center',
+                      padding: 6,
+                    }}
+                  >
+                    {territory.name}
+                  </div>
+                );
+              })
+            )}
             <div
               style={{ position: 'absolute', bottom: 12, left: 12 }}
               className="text-[10px] text-soft bg-surface/90 px-2 py-1 rounded border border-line2"
             >
-              Mapbox vector tile placeholder · territory polygons via GeoJSON
+              Live territory list · polygons from API
             </div>
           </div>
         </div>
 
         <Section
           title="All territories"
-          subtitle={`${TERRITORIES.filter((t) => t.cleared).length} cleared · ${TERRITORIES.filter((t) => !t.cleared).length} blocked`}
+          subtitle={`${active} active · ${nonActive} not active`}
           paddedBody={false}
         >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Territory</th>
-                <th>State</th>
-                <th>Knockers</th>
-                <th>Doors covered</th>
-                <th>Coverage</th>
-                <th>Conv. rate</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {TERRITORIES.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className="text-soft shrink-0" />
-                      <span className="text-[13px] text-ink">{t.name}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="mono !w-7 !h-5 !text-[10px]">{t.state}</span>
-                  </td>
-                  <td className="numeric text-[13px]">{t.knockers}</td>
-                  <td className="numeric text-[13px]">
-                    {t.doorsKnocked.toLocaleString()} / {t.doorsTotal.toLocaleString()}
-                  </td>
-                  <td>
-                    <div className="bar-track w-32">
-                      <div
-                        className="bar-fill"
-                        style={{ width: `${Math.round((t.doorsKnocked / t.doorsTotal) * 100)}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <StatusPill
-                      tone={
-                        t.conversionRate > 8 ? 'success' : t.conversionRate > 0 ? 'warn' : 'muted'
-                      }
-                    >
-                      {t.conversionRate}%
-                    </StatusPill>
-                  </td>
-                  <td>
-                    {t.cleared ? (
-                      <StatusPill tone="success">Cleared</StatusPill>
-                    ) : (
-                      <StatusPill tone="danger">Blocked</StatusPill>
-                    )}
-                  </td>
+          {territories.length === 0 ? (
+            <div className="text-[12px] text-muted p-5">
+              No territories yet — create them in the operator console.
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Territory</th>
+                  <th>Vertical</th>
+                  <th>Campaign</th>
+                  <th>Centroid</th>
+                  <th>S2 cells</th>
+                  <th>Created</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {territories.map((territory) => (
+                  <tr key={territory.id}>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <MapPin size={14} className="text-soft shrink-0" />
+                        <span className="text-[13px] text-ink">{territory.name}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="tag">{territory.vertical}</span>
+                    </td>
+                    <td>
+                      {territory.campaignId ? (
+                        <span className="mono !w-auto px-2 !h-5 !text-[10px]">
+                          {shortId(territory.campaignId)}
+                        </span>
+                      ) : (
+                        <span className="text-soft">—</span>
+                      )}
+                    </td>
+                    <td className="numeric text-[12px] text-muted">{formatCentroid(territory)}</td>
+                    <td className="numeric text-[13px]">{territory.s2CellIds.length}</td>
+                    <td className="numeric text-[12px] text-muted">
+                      {new Date(territory.createdAt).toISOString().slice(0, 10)}
+                    </td>
+                    <td>
+                      <StatusPill tone={statusTone(territory.status)}>
+                        {territory.status}
+                      </StatusPill>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Section>
+
+        {territoryPage.nextCursor && (
+          <div className="text-[11px] text-muted">
+            More territories are available after this first page.
+          </div>
+        )}
       </div>
     </OrgShell>
   );

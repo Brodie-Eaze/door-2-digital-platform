@@ -39,7 +39,11 @@ function requireAdmin(role: string): void {
 }
 
 export async function registerWebhook(app: FastifyInstance): Promise<void> {
-  app.get('/_status', async () => ({ domain: 'webhook', status: 'live', phase: '1.3' }));
+  app.get('/_status', { preHandler: requireAuth }, async () => ({
+    domain: 'webhook',
+    status: 'live',
+    phase: '1.3',
+  }));
 
   // POST /v1/webhooks/endpoints
   app.post('/endpoints', { preHandler: requireAuth }, async (req, reply) => {

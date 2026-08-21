@@ -1,11 +1,56 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { Button, Card, Input } from '@d2d/ui-web';
 
+interface ProblemDetails {
+  title?: unknown;
+  detail?: unknown;
+}
+
 export default function LoginPage(): JSX.Element {
-  const [email, setEmail] = useState('sarah@hopeforward.org');
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(): Promise<void> {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        let detail = 'Invalid email or password';
+        try {
+          const problem = (await response.json()) as ProblemDetails;
+          const apiDetail = typeof problem.detail === 'string' ? problem.detail : null;
+          const apiTitle = typeof problem.title === 'string' ? problem.title : null;
+          detail = apiDetail ?? apiTitle ?? detail;
+        } catch {
+          // Keep the generic auth failure.
+        }
+        setError(detail);
+        return;
+      }
+
+      router.push('/today');
+      router.refresh();
+    } catch {
+      setError('Login failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper p-6">
       <div className="w-full max-w-sm">
@@ -19,7 +64,7 @@ export default function LoginPage(): JSX.Element {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              window.location.href = '/today';
+              void submit();
             }}
             className="space-y-4"
           >
@@ -28,8 +73,23 @@ export default function LoginPage(): JSX.Element {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
             />
-            <Button type="submit" variant="primary" size="md" className="w-full">
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+            {error && (
+              <div className="text-[12px] text-ink px-3 py-2 rounded-lg bg-paper border border-line2">
+                {error}
+              </div>
+            )}
+            <Button type="submit" variant="primary" size="md" className="w-full" loading={loading}>
               Sign in with email
             </Button>
             <div className="flex items-center gap-2 my-3">
@@ -43,7 +103,7 @@ export default function LoginPage(): JSX.Element {
               size="md"
               className="w-full"
               leftIcon={<ShieldCheck size={14} />}
-              onClick={() => (window.location.href = '/today')}
+              disabled
             >
               Sign in with Okta SSO
             </Button>

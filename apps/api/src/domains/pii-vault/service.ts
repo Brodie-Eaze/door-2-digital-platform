@@ -544,7 +544,18 @@ async function fetchAndDecryptFields(
     if (!don) throw new ProblemError(Problems.notFound(rowType, rowId));
     const out: Record<string, string | null> = {};
     for (const f of fields) {
-      out[f] = f === 'email' ? don.donorEmail : null;
+      if (f === 'email') {
+        // donorEmailVault is the envelope-encrypted blob; null for pre-vault sentinel rows.
+        out[f] = don.donorEmailVault
+          ? PiiVaultService.decrypt(
+              don.donorEmailVault as unknown as EncryptedField,
+              'Donation',
+              rowId,
+            )
+          : null;
+      } else {
+        out[f] = null;
+      }
     }
     return out;
   }

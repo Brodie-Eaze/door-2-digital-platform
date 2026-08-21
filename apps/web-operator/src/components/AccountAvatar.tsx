@@ -1,12 +1,15 @@
-import type { Account } from '@/lib/accounts';
-import { accountMonogram } from '@/lib/accounts';
+import { monogramFrom } from '@/lib/account-color';
 
+/**
+ * Clean monogram avatar. Decoupled from the fixture `Account` type — it takes
+ * only what it draws, so both live account meta and (legacy) fixture accounts
+ * can feed it. `avatarFg` defaults to white (the house monogram foreground).
+ */
 interface AccountAvatarProps {
-  account: Account;
+  account: { shortName: string; avatarBg: string; avatarFg?: string };
   size?: number;
 }
 
-/** Clean monogram avatar — replaces emoji logos. */
 export function AccountAvatar({ account, size = 48 }: AccountAvatarProps): JSX.Element {
   return (
     <span
@@ -15,11 +18,11 @@ export function AccountAvatar({ account, size = 48 }: AccountAvatarProps): JSX.E
         width: size,
         height: size,
         background: account.avatarBg,
-        color: account.avatarFg,
+        color: account.avatarFg ?? '#FFFFFF',
         fontSize: Math.round(size * 0.36),
       }}
     >
-      {accountMonogram(account.shortName)}
+      {monogramFrom(account.shortName)}
     </span>
   );
 }

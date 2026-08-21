@@ -282,7 +282,13 @@ describe('PATCH + archive', () => {
       payload: { givenName: 'Renamed' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().user.givenName).toBe('Renamed');
+    // PII-first: the read boundary returns the MASKED name (first char + dots),
+    // not the plaintext. 'Renamed' (7 chars) → 'R' + 6 dots. The real value is
+    // encrypted in givenNameVault — assert that to keep the test's teeth.
+    expect(res.json().user.givenName).toBe('R••••••');
+    const row = await prisma().user.findUniqueOrThrow({ where: { id } });
+    expect(row.givenName).toBe('R••••••');
+    expect(row.givenNameVault).not.toBeNull();
   });
 
   // D3 — PATCH must NEVER carry a privilege/access field. `role`, `orgId` and
@@ -398,7 +404,7 @@ describe('POST /v1/users/:id/role — guarded role change (D3 / CC6-002)', () =>
     expect(res.json().user.role).toBe('inside_sales');
   });
 
-  it('rejects a cross-tenant role change (target in another org) (403)', async () => {
+  it('rejects a cross-tenant role change (target in another org) (404)', async () => {
     const adminToken = await getAdminToken();
     // Foreign org + user.
     await prisma().org.create({
@@ -430,7 +436,9 @@ describe('POST /v1/users/:id/role — guarded role change (D3 / CC6-002)', () =>
       headers: { authorization: `Bearer ${adminToken}`, 'idempotency-key': 'role-xtenant-1' },
       payload: { role: 'manager' },
     });
-    expect(res.statusCode).toBe(403);
+    // cross-tenant target → 404 (Problems.tenantMismatch), NOT 403: a foreign user
+    // id is indistinguishable from a non-existent one. The role must stay unchanged.
+    expect(res.statusCode).toBe(404);
     const after = await prisma().user.findUniqueOrThrow({ where: { id: 'usr_FOREIGN_ROLE' } });
     expect(after.role).toBe('knocker');
   });
