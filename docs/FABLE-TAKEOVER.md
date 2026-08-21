@@ -362,7 +362,15 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   iOS app — and `activeReps: 5`. So onboard → territory → knocker → app-logged
   knock all surface LIVE in the deployed command-centre's real data path (the
   same endpoints the UI renders). The only unproduced artifact is a literal
-  screen recording; the loop-on-live-data itself is proven end-to-end. The leaf surfaces that had their OWN demo \_content* beyond account
+  screen recording; the loop-on-live-data itself is proven end-to-end.
+  **Org-console leg also verified (2026-08-22):** the deployed Org Console
+  (web-org, https://d2d-web-org-production.up.railway.app) renders LIVE per-org
+  data — for Hope Forward's admin (Sarah Harris, org_admin) it shows "Leads
+  loaded 12", Conversions 0, $0 GMV, "No live anomalies yet" (honest empty),
+  full CRM nav. So the loop's "appears in the Org console" claim holds: an org
+  admin sees their own org's live data. (The old CLAUDE.md note "web-org has
+  zero backend contact" is stale — it is live-wired.) The leaf surfaces that
+  had their OWN demo \_content* beyond account
   fields (e.g. generated task lists) now render live account identity + honest
   empty/degraded states; wiring dedicated tasks/invoices/etc. models where a
   surface needs richer live content is genuine product build-out, tracked
