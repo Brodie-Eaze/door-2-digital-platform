@@ -406,9 +406,16 @@ knocks[]}`. Fix: match the real shape, mark items complete off
   scan once off-site shipping is on; added `@@index([shippedToS3At, id])`; (b)
   Lead — the inbox `WHERE orgId=? ORDER BY createdAt DESC LIMIT 50` had no
   `[orgId, createdAt]` index → sorted the whole org's leads; added it. All three
-  index migrations are live in the prod DB. This is the kind of enterprise-scale
-  hardening that IS in reach without the 50k rig — the load run itself still
-  needs the target infra.
+  index migrations are live in the prod DB. UNBOUNDED-QUERY OOM fix also found +
+  deployed: `/billing/processor` loaded EVERY micamp conversion over 6 months
+  (no org scope) into the server just to bucket them by month in JS — millions
+  of rows at scale, a guaranteed OOM. Replaced with a raw `date_trunc('month')`
+  GROUP BY that returns ~6 rows (same output, bounded memory), deployed +
+  verified rendering in prod. (A findMany-vs-take audit across the high-volume
+  tables found the rest either paginated, bounded by a narrow WHERE, or a
+  worker's own batch — this processor page was the one true unbounded load.)
+  This is the kind of enterprise-scale hardening that IS in reach without the
+  50k rig — the load run itself still needs the target infra.
   The k6 50k scenario is complete + verified (`load-tests/k6/knock-batch.js`:
   ramps 500 → 5000 → 50000 VUs sustained → step-down, thresholds p95<2000ms +
   error<1%; SMOKE mode for script validation; login/leads/heatmap scripts too),
