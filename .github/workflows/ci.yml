@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Run the full gate suite on EVERY pull request, whatever its base — stacked
+  # PRs (recovery chains, feature stacks) must not ship gate-unchecked.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
