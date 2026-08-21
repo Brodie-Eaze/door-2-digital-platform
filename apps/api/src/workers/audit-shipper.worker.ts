@@ -39,6 +39,21 @@ function buildS3Key(regionCode: string, now: Date): string {
 async function shipBatch(): Promise<void> {
   const log = logger().child({ worker: 'audit-shipper' });
 
+  // Graceful degradation: S3 off-site shipping is an OPTIONAL copy — the
+  // hash-chained audit trail's primary store is Postgres (always written in
+  // the same tx as the change). When S3 isn't provisioned (no AWS account /
+  // placeholder bucket) the worker no-ops instead of crash-looping every
+  // tick. Object-Lock off-site retention activates with the AWS deploy;
+  // set AUDIT_SHIP_ENABLED=true there.
+  if (
+    process.env.AUDIT_SHIP_ENABLED !== 'true' ||
+    !process.env.S3_BUCKET_AUDIT ||
+    process.env.S3_BUCKET_AUDIT.endsWith('-placeholder')
+  ) {
+    log.debug('audit-shipper: S3 shipping disabled (not configured) — Postgres remains the primary audit store');
+    return;
+  }
+
   const rows = await prisma().auditEvent.findMany({
     where: { shippedToS3At: null },
     orderBy: { id: 'asc' },
