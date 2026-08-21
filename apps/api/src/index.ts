@@ -146,7 +146,9 @@ async function buildServer() {
     max: (_req, key) => {
       const k = key as string;
       if (k.startsWith('org:') || k.startsWith('key:')) return 300;
-      return 120;
+      // RATE_LIMIT_GLOBAL_MAX: staging/load-test knob (k6 fires from one IP).
+      // Unset in production → the 120/min default stands.
+      return e.RATE_LIMIT_GLOBAL_MAX ?? 120;
     },
     timeWindow: '1 minute',
     redis: redis(),
@@ -165,6 +167,12 @@ async function buildServer() {
     errorResponseBuilder: (_req, context) => {
       const retryAfterSec = Math.ceil((context.ttl ?? 60_000) / 1000);
       return {
+        // statusCode drives the HTTP status @fastify/rate-limit sets. Without
+        // it the reply fell through as 500 — clients saw a server error, not a
+        // 429 with Retry-After (found by the k6 smoke: 250 "500"s that were
+        // all rate-limit refusals). Keep both fields: statusCode for the
+        // plugin, status for RFC 7807 consumers.
+        statusCode: 429,
         type: 'https://docs.d2d.io/problems/rate-limited',
         title: 'Rate limited',
         status: 429,
