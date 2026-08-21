@@ -37,7 +37,7 @@ export interface AnomalyItem {
    * their pin, and opens the reassign drawer. Absent on non-reassign
    * anomalies — they keep an honest queue toast.
    */
-  /** Fleet rep id this anomaly is about (matches a FLEET_REPS entry). */
+  /** Fleet rep id this anomaly is about (matches a live /api/fleet entry). */
   repId?: string;
   /** Coordinates of that rep — the map flies here. */
   repCoords?: { lat: number; lng: number };

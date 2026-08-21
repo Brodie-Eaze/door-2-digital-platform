@@ -21,7 +21,7 @@
 import { useMemo, useState } from 'react';
 import { X, MapPin, Radio, Loader2 } from 'lucide-react';
 import { toast } from '@/components/Toaster';
-import { STATUS_COLORS, type FleetRep } from '@/lib/fleet-reps';
+import { STATUS_COLORS, type FleetRep } from '@/lib/fleet';
 import type { AnomalyItem } from './types';
 
 interface ReassignDrawerProps {

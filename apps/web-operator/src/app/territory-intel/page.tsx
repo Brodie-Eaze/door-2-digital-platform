@@ -9,16 +9,18 @@ import {
   FilterChipStrip,
   KpiCard,
   Section,
+  Skeleton,
   StatusPill,
 } from '@d2d/ui-web';
 import { PlatformShell } from '@/components/PlatformShell';
 import {
   TerritoryHeatmap,
   type CellStatus,
+  type PropensityHeatPoint,
   type ZoneSelection,
 } from '@/components/TerritoryHeatmap';
-import { ALL_CELLS } from '@/components/territoryCells';
-import { useDataFreshness } from '@/components/DataSourceBadge';
+import { PlatformTerritoriesEmpty, PropensityHeatEmpty } from '@/components/TerritoryEmptyStates';
+import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 
 type StatusFilter = 'all' | CellStatus;
 
@@ -36,6 +38,15 @@ type ApiTerritory = {
   centroid: { lat: number; lng: number } | null;
 };
 
+/** Shape returned by GET /api/propensity (live PropensityScore rows). */
+type ApiPropensityPoint = {
+  geoKey: string;
+  centroidLat: number | null;
+  centroidLng: number | null;
+  score: number;
+  band: 'high' | 'medium' | 'low';
+};
+
 type ZoneRow = {
   name: string;
   propensity: number;
@@ -48,156 +59,9 @@ type ZoneRow = {
   knockable: number;
   status: string;
   tone: 'success' | 'info' | 'muted' | 'danger';
-  cellStatus: 'ai_suggested' | 'active' | 'blocked' | 'low_yield';
+  cellStatus: CellStatus;
   bounds: [[number, number], [number, number]];
 };
-
-const ZONES: ZoneRow[] = [
-  {
-    name: 'Austin South · 78704',
-    propensity: 0.81,
-    medianIncome: '$94k',
-    medianIncomeCents: 9_400_000,
-    density: 'High',
-    saturation: 0,
-    estLift: '+14pp',
-    estLiftPp: 14,
-    knockable: 4280,
-    status: 'AI suggested',
-    tone: 'success',
-    cellStatus: 'ai_suggested',
-    bounds: [
-      [30.21, -97.79],
-      [30.27, -97.73],
-    ],
-  },
-  {
-    name: 'Plano · 75024',
-    propensity: 0.78,
-    medianIncome: '$118k',
-    medianIncomeCents: 11_800_000,
-    density: 'Medium',
-    saturation: 0,
-    estLift: '+11pp',
-    estLiftPp: 11,
-    knockable: 3140,
-    status: 'AI suggested',
-    tone: 'success',
-    cellStatus: 'ai_suggested',
-    bounds: [
-      [33.07, -96.83],
-      [33.13, -96.77],
-    ],
-  },
-  {
-    name: 'Sugar Land · 77479',
-    propensity: 0.74,
-    medianIncome: '$112k',
-    medianIncomeCents: 11_200_000,
-    density: 'Medium',
-    saturation: 8,
-    estLift: '+9pp',
-    estLiftPp: 9,
-    knockable: 2890,
-    status: 'AI suggested',
-    tone: 'success',
-    cellStatus: 'ai_suggested',
-    bounds: [
-      [29.55, -95.66],
-      [29.61, -95.6],
-    ],
-  },
-  {
-    name: 'Austin East · 78702',
-    propensity: 0.62,
-    medianIncome: '$58k',
-    medianIncomeCents: 5_800_000,
-    density: 'High',
-    saturation: 42,
-    estLift: '—',
-    estLiftPp: null,
-    knockable: 3240,
-    status: 'Active',
-    tone: 'info',
-    cellStatus: 'active',
-    bounds: [
-      [30.25, -97.72],
-      [30.31, -97.66],
-    ],
-  },
-  {
-    name: 'Dallas Metro · 75201',
-    propensity: 0.59,
-    medianIncome: '$71k',
-    medianIncomeCents: 7_100_000,
-    density: 'High',
-    saturation: 38,
-    estLift: '—',
-    estLiftPp: null,
-    knockable: 5140,
-    status: 'Active',
-    tone: 'info',
-    cellStatus: 'active',
-    bounds: [
-      [32.77, -96.82],
-      [32.83, -96.76],
-    ],
-  },
-  {
-    name: 'Houston SE · 77033',
-    propensity: 0.48,
-    medianIncome: '$48k',
-    medianIncomeCents: 4_800_000,
-    density: 'Medium',
-    saturation: 64,
-    estLift: '—',
-    estLiftPp: null,
-    knockable: 4120,
-    status: 'Active',
-    tone: 'info',
-    cellStatus: 'active',
-    bounds: [
-      [29.66, -95.36],
-      [29.72, -95.3],
-    ],
-  },
-  {
-    name: 'Highland Park · 75205',
-    propensity: 0.42,
-    medianIncome: '$214k',
-    medianIncomeCents: 21_400_000,
-    density: 'Low',
-    saturation: 12,
-    estLift: '—',
-    estLiftPp: null,
-    knockable: 1240,
-    status: 'Low-yield',
-    tone: 'muted',
-    cellStatus: 'low_yield',
-    bounds: [
-      [32.82, -96.81],
-      [32.88, -96.75],
-    ],
-  },
-  {
-    name: 'LA West · 90049',
-    propensity: 0.71,
-    medianIncome: '$142k',
-    medianIncomeCents: 14_200_000,
-    density: 'Medium',
-    saturation: 0,
-    estLift: '+12pp',
-    estLiftPp: 12,
-    knockable: 3520,
-    status: 'Blocked (CA reg pending)',
-    tone: 'danger',
-    cellStatus: 'blocked',
-    bounds: [
-      [34.07, -118.5],
-      [34.1, -118.43],
-    ],
-  },
-];
 
 /**
  * Map a live API territory row → the ZoneRow the table/panel render from.
@@ -207,7 +71,7 @@ const ZONES: ZoneRow[] = [
  * panel; territories with no parseable centroid get a neutral US-center box.
  */
 function apiToZoneRow(t: ApiTerritory): ZoneRow {
-  const cellStatus: ZoneRow['cellStatus'] =
+  const cellStatus: CellStatus =
     t.status === 'blocked'
       ? 'blocked'
       : t.propensity >= 0.75 && t.saturation < 30
@@ -271,23 +135,39 @@ function apiToZoneRow(t: ApiTerritory): ZoneRow {
   };
 }
 
-/**
- * Derive the top AI-suggested zones from live propensity: highest
- * propensity × lowest saturation, excluding blocked. Mirrors the model the
- * fixture constants stand in for, but on real DB-derived numbers.
- */
+/** Build the clickable map/panel selection from a table row — shared by the
+ *  heatmap's `cells` prop and row-click so both stay in lockstep. */
+function toZoneSelection(row: ZoneRow): ZoneSelection {
+  return {
+    id: `row-${row.name}`,
+    name: row.name,
+    bounds: row.bounds,
+    propensity: row.propensity,
+    medianIncomeCents: row.medianIncomeCents,
+    estLiftPp: row.estLiftPp,
+    knockableDoors: row.knockable,
+    saturationPercent: row.saturation,
+    status: row.cellStatus,
+    densityLabel: row.density,
+  };
+}
+
 export default function TerritoryIntelPage(): JSX.Element {
   const [selectedCell, setSelectedCell] = useState<ZoneSelection | null>(null);
   const [assignedSet, setAssignedSet] = useState<Set<string>>(new Set());
   const [showNewZoneBanner, setShowNewZoneBanner] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [, setLiveRows] = useState<ZoneRow[] | null>(null);
-  const { markFresh, markFixture } = useDataFreshness('fixture');
+  const [territories, setTerritories] = useState<ApiTerritory[] | null>(null);
+  const [propensityPoints, setPropensityPoints] = useState<PropensityHeatPoint[]>([]);
+  const {
+    source: territorySource,
+    updatedAt,
+    markFresh,
+    markFixture,
+  } = useDataFreshness('fixture');
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch real territory propensity on mount. When the org has Territory rows
-  // we render those; otherwise we fall back to the fixture heatmap cells and
-  // the badge honestly reports DEMO DATA.
+  // Fetch real territory propensity (Knock-derived) on mount.
   useEffect(() => {
     let cancelled = false;
     (async (): Promise<void> => {
@@ -296,17 +176,11 @@ export default function TerritoryIntelPage(): JSX.Element {
         if (!res.ok) throw new Error(`territories ${res.status}`);
         const json = (await res.json()) as { territories?: ApiTerritory[] };
         if (cancelled) return;
-        const rows = Array.isArray(json.territories) ? json.territories : [];
-        if (rows.length > 0) {
-          setLiveRows(rows.map(apiToZoneRow));
-          markFresh();
-        } else {
-          setLiveRows(null);
-          markFixture();
-        }
+        setTerritories(Array.isArray(json.territories) ? json.territories : []);
+        markFresh();
       } catch {
         if (cancelled) return;
-        setLiveRows(null);
+        setTerritories([]);
         markFixture();
       }
     })();
@@ -315,18 +189,59 @@ export default function TerritoryIntelPage(): JSX.Element {
     };
   }, [markFresh, markFixture]);
 
-  // Count cells by status for the filter pills — derived from the same data
-  // module the map renders from, so the pill numbers match the visible cells.
+  // Fetch the AI PropensityScore heat layer on mount — independent of
+  // whether any Territory has been drawn yet.
+  useEffect(() => {
+    let cancelled = false;
+    (async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/propensity', { headers: { accept: 'application/json' } });
+        if (!res.ok) throw new Error(`propensity ${res.status}`);
+        const json = (await res.json()) as { points?: ApiPropensityPoint[] };
+        if (cancelled) return;
+        const points = Array.isArray(json.points) ? json.points : [];
+        setPropensityPoints(
+          points
+            .filter(
+              (p): p is ApiPropensityPoint & { centroidLat: number; centroidLng: number } =>
+                p.centroidLat != null && p.centroidLng != null,
+            )
+            .map((p) => ({
+              geoKey: p.geoKey,
+              centroidLat: p.centroidLat,
+              centroidLng: p.centroidLng,
+              score: p.score,
+              band: p.band,
+            })),
+        );
+      } catch {
+        if (!cancelled) setPropensityPoints([]);
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+
+  const zoneRows = useMemo(() => (territories ?? []).map(apiToZoneRow), [territories]);
+  const cells = useMemo(() => zoneRows.map(toZoneSelection), [zoneRows]);
+
+  // Count zones by status for the filter pills + KPI row — derived from the
+  // real territory rows so the numbers always match what's on the map.
   const cellCounts = useMemo(() => {
-    return ALL_CELLS.reduce(
-      (acc, c) => {
+    return zoneRows.reduce(
+      (acc, z) => {
         acc.total += 1;
-        acc[c.status] += 1;
+        acc[z.cellStatus] += 1;
         return acc;
       },
       { total: 0, ai_suggested: 0, active: 0, blocked: 0, low_yield: 0 },
     );
-  }, []);
+  }, [zoneRows]);
+
+  const avgPropensity =
+    zoneRows.length > 0 ? zoneRows.reduce((s, z) => s + z.propensity, 0) / zoneRows.length : null;
+  const totalKnockable = zoneRows.reduce((s, z) => s + z.knockable, 0);
 
   // ESC closes the side panel
   useEffect(() => {
@@ -369,19 +284,11 @@ export default function TerritoryIntelPage(): JSX.Element {
   };
 
   const handleRowClick = (row: ZoneRow): void => {
-    setSelectedCell({
-      id: `row-${row.name}`,
-      name: row.name,
-      bounds: row.bounds,
-      propensity: row.propensity,
-      medianIncomeCents: row.medianIncomeCents,
-      estLiftPp: row.estLiftPp,
-      knockableDoors: row.knockable,
-      saturationPercent: row.saturation,
-      status: row.cellStatus,
-      densityLabel: row.density,
-    });
+    setSelectedCell(toZoneSelection(row));
   };
+
+  const loading = territories === null;
+  const empty = !loading && zoneRows.length === 0;
 
   return (
     <PlatformShell pageTitle="Territory intelligence">
@@ -408,168 +315,181 @@ export default function TerritoryIntelPage(): JSX.Element {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <KpiCard label="Zones tracked" value={ZONES.length} hint="across US Phase 1" />
-          <KpiCard
-            label="AI-suggested"
-            value={ZONES.filter((z) => z.status === 'AI suggested').length}
-            delta="+1 today"
-            deltaTone="positive"
-          />
-          <KpiCard
-            label="Active"
-            value={ZONES.filter((z) => z.status === 'Active').length}
-            hint="knockers deployed"
-          />
+          <KpiCard label="Zones tracked" value={zoneRows.length} hint="across your org" />
+          <KpiCard label="AI-suggested" value={cellCounts.ai_suggested} />
+          <KpiCard label="Active" value={cellCounts.active} hint="knockers deployed" />
           <KpiCard
             label="Avg propensity"
-            value="0.64"
-            delta="+0.03"
-            deltaTone="positive"
-            hint="vs LM"
+            value={avgPropensity != null ? avgPropensity.toFixed(2) : '—'}
           />
-          <KpiCard label="Knockable doors" value="27,580" hint="across US zones" />
+          <KpiCard
+            label="Knockable doors"
+            value={totalKnockable.toLocaleString()}
+            hint="knocked so far"
+          />
         </div>
 
-        {/* Real Leaflet heatmap */}
-        <Section
-          title="Propensity heatmap · Texas"
-          subtitle="Census-tract granularity · click any cell to drill in"
-        >
-          <FilterChipStrip label="Show" className="mb-3">
-            {(
-              [
-                { v: 'all', label: 'All zones', n: cellCounts.total },
-                { v: 'ai_suggested', label: 'AI suggested', n: cellCounts.ai_suggested },
-                { v: 'active', label: 'Active', n: cellCounts.active },
-                { v: 'low_yield', label: 'Low yield', n: cellCounts.low_yield },
-                { v: 'blocked', label: 'Blocked', n: cellCounts.blocked },
-              ] as Array<{ v: StatusFilter; label: string; n: number }>
-            ).map((f) => (
-              <FilterChip
-                key={f.v}
-                active={statusFilter === f.v}
-                onClick={() => setStatusFilter(f.v)}
-                count={f.n}
-              >
-                {f.label}
-              </FilterChip>
-            ))}
-          </FilterChipStrip>
-          <TerritoryHeatmap
-            onSelect={setSelectedCell}
-            assignedSet={assignedSet}
-            statusFilter={statusFilter}
-          />
-        </Section>
-
-        {/* Zone table */}
-        <Section
-          title="All zones · ranked by AI propensity"
-          subtitle="Click any row to open detail · click 'Send knocker' to assign"
-          paddedBody={false}
-          action={
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
-                Filter
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus size={13} />}
-                onClick={() => setShowNewZoneBanner((v) => !v)}
-              >
-                New zone
-              </Button>
-            </div>
-          }
-        >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Zone</th>
-                <th>Propensity</th>
-                <th>Est. lift</th>
-                <th>Median income</th>
-                <th>Density</th>
-                <th>Saturation</th>
-                <th>Knockable</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {ZONES.map((z) => {
-                const assigned = assignedSet.has(z.name);
-                const displayStatus = assigned ? 'Assigned' : z.status;
-                const displayTone: 'success' | 'info' | 'muted' | 'danger' = assigned
-                  ? 'success'
-                  : z.tone;
-                return (
-                  <tr
-                    key={z.name}
-                    data-zone-row
-                    onClick={() => handleRowClick(z)}
-                    className="cursor-pointer hover:bg-paper/50"
+        {loading ? (
+          <Section title="Propensity heatmap" subtitle="Loading territories…">
+            <Skeleton height="h-[620px]" rounded="rounded-2xl" />
+          </Section>
+        ) : empty ? (
+          <Section title="Propensity heatmap">
+            <PlatformTerritoriesEmpty />
+          </Section>
+        ) : (
+          <>
+            {/* Real Leaflet heatmap */}
+            <Section
+              title="Propensity heatmap · your org"
+              subtitle="Territory cells from Knock-derived propensity · click any cell to drill in"
+              action={<DataSourceBadge source={territorySource} updatedAt={updatedAt} />}
+            >
+              <FilterChipStrip label="Show" className="mb-3">
+                {(
+                  [
+                    { v: 'all', label: 'All zones', n: cellCounts.total },
+                    { v: 'ai_suggested', label: 'AI suggested', n: cellCounts.ai_suggested },
+                    { v: 'active', label: 'Active', n: cellCounts.active },
+                    { v: 'low_yield', label: 'Low yield', n: cellCounts.low_yield },
+                    { v: 'blocked', label: 'Blocked', n: cellCounts.blocked },
+                  ] as Array<{ v: StatusFilter; label: string; n: number }>
+                ).map((f) => (
+                  <FilterChip
+                    key={f.v}
+                    active={statusFilter === f.v}
+                    onClick={() => setStatusFilter(f.v)}
+                    count={f.n}
                   >
-                    <td>
-                      <div className="flex items-center gap-1.5">
-                        <MapPin size={11} className="text-soft shrink-0" />
-                        <span className="text-[13px] font-medium text-ink">{z.name}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <PropensityBar score={z.propensity} />
-                    </td>
-                    <td
-                      className={`text-[12px] font-medium ${z.estLift !== '—' ? 'text-success' : 'text-soft'}`}
-                    >
-                      {z.estLift}
-                    </td>
-                    <td className="text-[12px] text-ink numeric">{z.medianIncome}</td>
-                    <td className="text-[12px] text-muted">{z.density}</td>
-                    <td className="text-[12px] text-muted numeric">{z.saturation}%</td>
-                    <td className="text-[12px] text-ink numeric">{z.knockable.toLocaleString()}</td>
-                    <td>
-                      <StatusPill tone={displayTone}>{displayStatus}</StatusPill>
-                    </td>
-                    <td>
-                      {z.status === 'AI suggested' && !assigned ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSendRep(z.name);
-                          }}
-                          className="text-[11px] font-semibold text-accent hover:underline"
-                        >
-                          Send knocker
-                        </button>
-                      ) : assigned ? (
-                        <span className="text-[11px] font-semibold text-success inline-flex items-center gap-1">
-                          <Check size={11} /> Sent
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowClick(z);
-                          }}
-                          className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
-                        >
-                          <Eye size={12} className="text-soft" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Section>
+                    {f.label}
+                  </FilterChip>
+                ))}
+              </FilterChipStrip>
+              {propensityPoints.length === 0 && <PropensityHeatEmpty placement="inline" />}
+              <TerritoryHeatmap
+                onSelect={setSelectedCell}
+                assignedSet={assignedSet}
+                statusFilter={statusFilter}
+                cells={cells}
+                propensityPoints={propensityPoints}
+              />
+            </Section>
 
-        {/* External data sources */}
+            {/* Zone table */}
+            <Section
+              title="All zones · ranked by AI propensity"
+              subtitle="Click any row to open detail · click 'Send knocker' to assign"
+              paddedBody={false}
+              action={
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" leftIcon={<Filter size={13} />}>
+                    Filter
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Plus size={13} />}
+                    onClick={() => setShowNewZoneBanner((v) => !v)}
+                  >
+                    New zone
+                  </Button>
+                </div>
+              }
+            >
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Zone</th>
+                    <th>Propensity</th>
+                    <th>Est. lift</th>
+                    <th>Median income</th>
+                    <th>Density</th>
+                    <th>Saturation</th>
+                    <th>Knockable</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {zoneRows.map((z) => {
+                    const assigned = assignedSet.has(z.name);
+                    const displayStatus = assigned ? 'Assigned' : z.status;
+                    const displayTone: 'success' | 'info' | 'muted' | 'danger' = assigned
+                      ? 'success'
+                      : z.tone;
+                    return (
+                      <tr
+                        key={z.name}
+                        data-zone-row
+                        onClick={() => handleRowClick(z)}
+                        className="cursor-pointer hover:bg-paper/50"
+                      >
+                        <td>
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={11} className="text-soft shrink-0" />
+                            <span className="text-[13px] font-medium text-ink">{z.name}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <PropensityBar score={z.propensity} />
+                        </td>
+                        <td
+                          className={`text-[12px] font-medium ${z.estLift !== '—' ? 'text-success' : 'text-soft'}`}
+                        >
+                          {z.estLift}
+                        </td>
+                        <td className="text-[12px] text-ink numeric">{z.medianIncome}</td>
+                        <td className="text-[12px] text-muted">{z.density}</td>
+                        <td className="text-[12px] text-muted numeric">{z.saturation}%</td>
+                        <td className="text-[12px] text-ink numeric">
+                          {z.knockable.toLocaleString()}
+                        </td>
+                        <td>
+                          <StatusPill tone={displayTone}>{displayStatus}</StatusPill>
+                        </td>
+                        <td>
+                          {z.status === 'AI suggested' && !assigned ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendRep(z.name);
+                              }}
+                              className="text-[11px] font-semibold text-accent hover:underline"
+                            >
+                              Send knocker
+                            </button>
+                          ) : assigned ? (
+                            <span className="text-[11px] font-semibold text-success inline-flex items-center gap-1">
+                              <Check size={11} /> Sent
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRowClick(z);
+                              }}
+                              className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
+                            >
+                              <Eye size={12} className="text-soft" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </Section>
+          </>
+        )}
+
+        {/* External data sources — reference/roadmap only. None of these are
+            wired ProviderConnection rows yet; PropensityScore.modelName /
+            .features is the only real signal today (see /api/propensity).
+            Never claim "connected" for a feed nothing actually polls. */}
         <Section
-          title="External data feeding propensity model"
-          subtitle="Updated nightly · attribution preserved"
+          title="External data feeding the propensity model — roadmap"
+          subtitle="Reference only · none of these feeds are configured yet"
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
@@ -577,49 +497,49 @@ export default function TerritoryIntelPage(): JSX.Element {
                 name: 'ACS / US Census',
                 detail: 'Income · age · density · housing tenure',
                 region: 'US',
-                status: 'connected',
+                status: 'not configured',
               },
               {
                 name: 'ESRI Tapestry',
                 detail: '67 lifestyle segments by tract',
                 region: 'US',
-                status: 'connected',
+                status: 'not configured',
               },
               {
                 name: 'Mapbox Boundaries',
                 detail: 'Postal + admin polygons',
                 region: 'Global',
-                status: 'connected',
+                status: 'not configured',
               },
               {
                 name: 'OpenAddresses',
                 detail: 'Door-level address corpus',
                 region: 'Global',
-                status: 'connected',
+                status: 'not configured',
               },
               {
                 name: 'ABS SEIFA',
                 detail: 'AU socio-economic indexes',
                 region: 'AU',
-                status: 'phase 2',
+                status: 'roadmap',
               },
               {
                 name: 'CoreLogic AU',
                 detail: 'AU property values + rents',
                 region: 'AU',
-                status: 'phase 2',
+                status: 'roadmap',
               },
               {
                 name: 'SingStat',
                 detail: 'SG demographics + planning area',
                 region: 'SG',
-                status: 'phase 3',
+                status: 'roadmap',
               },
               {
-                name: 'Internal cohorts',
-                detail: 'Your last 30k conversions',
+                name: 'Internal knock/conversion history',
+                detail: 'Real — powers the propensity signal today',
                 region: 'D2D',
-                status: 'connected',
+                status: 'live',
               },
             ].map((s) => (
               <div key={s.name} className="card card-pad">
@@ -631,7 +551,7 @@ export default function TerritoryIntelPage(): JSX.Element {
                   <span className="tag !text-[9px]">{s.region}</span>
                 </div>
                 <div className="mt-2">
-                  <StatusPill tone={s.status === 'connected' ? 'success' : 'muted'}>
+                  <StatusPill tone={s.status === 'live' ? 'success' : 'muted'}>
                     {s.status}
                   </StatusPill>
                 </div>
