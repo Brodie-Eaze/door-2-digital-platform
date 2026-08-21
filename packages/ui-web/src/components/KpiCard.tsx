@@ -76,7 +76,20 @@ function useCountUp(target: number, durationMs = 700): number {
       if (t < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Backgrounded tabs throttle rAF to zero — without this, a KPI mounted in
+    // a hidden tab sticks at 0 until remount. Snap to target when hidden.
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        setCurrent(target);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    if (document.hidden) onVisibility();
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [target, durationMs]);
   return current;
 }

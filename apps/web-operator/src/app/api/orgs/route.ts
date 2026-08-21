@@ -28,10 +28,13 @@ import {
   validation,
 } from '@/lib/api-helpers';
 import {
+  emailDigest,
   ensureUniqueSlug,
+  generateInviteToken,
   newBillingId,
   newBrandKitId,
   newOrgId,
+  newUserId,
   writeAudit,
 } from '@/lib/db-helpers';
 
@@ -55,6 +58,15 @@ const createOrgSchema = z.object({
   regionCode: regionEnum,
   brandCode: z.string().default('d2d'),
   abnAcnUen: z.string().optional().nullable(),
+  // Optional founding org_admin — invited atomically with the org so a new
+  // client account is never born ownerless (D2: onboarding mints logins).
+  admin: z
+    .object({
+      email: z.string().email(),
+      givenName: z.string().min(1).max(80),
+      familyName: z.string().min(1).max(80),
+    })
+    .optional(),
   // Optional brand kit overrides — applied at create-time.
   brandKit: z
     .object({
@@ -194,6 +206,33 @@ export async function POST(req: NextRequest): Promise<Response> {
   const brkId = newBrandKitId();
   const bilId = newBillingId();
 
+  // Founding admin invite — dup-check the email up front so the whole org
+  // create fails fast instead of half-provisioning.
+  const adminUserId = input.admin ? newUserId() : null;
+  const adminInvite = input.admin ? generateInviteToken() : null;
+  const adminInviteExpiresAt = input.admin ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null;
+  if (input.admin) {
+    try {
+      const existing = await db.user.findUnique({
+        where: { emailDigest: emailDigest(input.admin.email) },
+      });
+      if (existing) {
+        return problemResponse(
+          problem(
+            'conflict',
+            'Admin email already registered',
+            409,
+            'A user with that email already exists. Use a different admin email.',
+          ),
+        );
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[api/orgs POST] admin dup-check failed:', err);
+      return internal('Failed to provision sub-account');
+    }
+  }
+
   let createdOrg: { id: string; slug: string | null };
   try {
     createdOrg = await db.$transaction(async (tx) => {
@@ -244,6 +283,45 @@ export async function POST(req: NextRequest): Promise<Response> {
           ...(input.billing?.billingDay !== undefined && { billingDay: input.billing.billingDay }),
         },
       });
+      if (input.admin && adminUserId && adminInvite && adminInviteExpiresAt) {
+        await tx.user.create({
+          data: {
+            id: adminUserId,
+            orgId,
+            email: input.admin.email,
+            emailDigest: emailDigest(input.admin.email),
+            givenName: input.admin.givenName,
+            familyName: input.admin.familyName,
+            role: 'org_admin',
+            regionCode: org.regionCode,
+            status: 'invited',
+          },
+        });
+        await tx.userCredential.create({
+          data: {
+            userId: adminUserId,
+            // Sentinel — can never match a real scrypt output (same as the
+            // Fastify invite path). accept-invite swaps it for a real hash.
+            passwordHash: '__invite_pending__:00',
+            inviteTokenHash: adminInvite.hash,
+            inviteExpiresAt: adminInviteExpiresAt,
+          },
+        });
+        await writeAudit(tx, {
+          orgId,
+          regionCode: org.regionCode,
+          actorUserId: session.userId,
+          action: 'user.invited',
+          resourceType: 'User',
+          resourceId: adminUserId,
+          afterJson: { email: '[REDACTED]', role: 'org_admin', status: 'invited' },
+          metadata: {
+            invitedBy: session.userId,
+            via: 'web-operator.onboard-wizard',
+            expiresAt: adminInviteExpiresAt.toISOString(),
+          },
+        });
+      }
       await writeAudit(tx, {
         orgId,
         regionCode: org.regionCode,
@@ -279,6 +357,19 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const body = { orgId: createdOrg.id, slug: createdOrg.slug };
+  // The invite token rides the live response EXACTLY ONCE and is never
+  // persisted in plaintext — idempotent replays return the org without it.
+  const liveBody =
+    input.admin && adminInvite && adminInviteExpiresAt
+      ? {
+          ...body,
+          adminInvite: {
+            email: input.admin.email,
+            inviteToken: adminInvite.plaintext,
+            expiresAt: adminInviteExpiresAt.toISOString(),
+          },
+        }
+      : body;
 
   // Persist idempotency record for replay safety (24h TTL).
   try {
@@ -302,5 +393,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     console.warn('[api/orgs POST] idempotency persist failed:', err);
   }
 
-  return ok(body, { status: 201 });
+  return ok(liveBody, { status: 201 });
 }
