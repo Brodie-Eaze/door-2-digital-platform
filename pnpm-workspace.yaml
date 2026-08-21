@@ -4,8 +4,9 @@ packages:
 
 # Security overrides — transitive CVE floors (Trivy HIGH findings 2026-08-21).
 overrides:
-  # Bare names: versioned selector keys do not defeat exact pins (next@15/16
-  # pins postcss@8.4.31 exactly), so these force the floor everywhere.
+  # Bare names: versioned selector keys do not defeat exact pins (next pins
+  # postcss exactly). package.json pnpm.overrides is the pnpm 9 home; this
+  # block is the pnpm 10 home — keep both in sync.
   nanoid: '>=3.3.18'
   postcss: '>=8.5.18'
   fast-uri: '>=3.1.5'
