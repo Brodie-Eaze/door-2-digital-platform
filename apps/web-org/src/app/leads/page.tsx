@@ -2,12 +2,22 @@ import Link from 'next/link';
 import { Inbox, Megaphone, Phone, ArrowRight } from 'lucide-react';
 import { Banner, KpiCard, LeadCard, Section } from '@d2d/ui-web';
 import { OrgShell } from '@/components/OrgShell';
-import { LEADS } from '@/lib/fixtures';
+import { apiFetch, type LeadPublic, type PageResponse } from '@/lib/api';
 
-export default function LeadsPage(): JSX.Element {
-  const door = LEADS.filter((l) => l.source === 'door').length;
-  const inside = LEADS.filter((l) => l.source === 'inside_sales').length;
-  const retarget = LEADS.filter((l) => l.source === 'retargeting').length;
+function shortId(id: string): string {
+  return id.slice(-6).toUpperCase();
+}
+
+function leadSource(lead: LeadPublic): string {
+  return lead.sourceKnockId ? 'door' : 'unattributed';
+}
+
+export default async function LeadsPage(): Promise<JSX.Element> {
+  const leadPage = await apiFetch<PageResponse<LeadPublic>>('/leads');
+  const leads = leadPage.data;
+  const door = leads.filter((lead) => lead.sourceKnockId).length;
+  const assigned = leads.filter((lead) => lead.assignedToId).length;
+  const unassigned = leads.length - assigned;
 
   return (
     <OrgShell pageTitle="Leads">
@@ -18,74 +28,49 @@ export default function LeadsPage(): JSX.Element {
             <span className="font-semibold">
               Every door knock, every retargeting click, every inbound SMS
             </span>{' '}
-            creates a Lead. The sales team works them from this inbox through to conversion. Click{' '}
-            <span className="font-semibold">Maria Santos</span> below to see a real lead journey
-            end-to-end.
+            creates a Lead. The sales team works them from this inbox through to conversion.
           </span>
         </Banner>
+        {leadPage.nextCursor && (
+          <Banner tone="muted">
+            <span className="text-[13px]">More leads are available after this first page.</span>
+          </Banner>
+        )}
 
         {/* Source breakdown */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard
-            label="In inbox"
-            value={LEADS.length}
-            hint={`across ${door + inside + retarget} sources`}
-          />
-          <KpiCard
-            label="Door"
-            value={door}
-            hint="captured at the door"
-            delta="15% rake"
-            deltaTone="neutral"
-          />
-          <KpiCard
-            label="Inside sales"
-            value={inside}
-            hint="closed by call centre"
-            delta="10% rake"
-            deltaTone="neutral"
-          />
-          <KpiCard
-            label="Retargeting"
-            value={retarget}
-            hint="clicked an ad"
-            delta="5% rake"
-            deltaTone="neutral"
-          />
+          <KpiCard label="In inbox" value={leads.length} hint="first page" animate={false} />
+          <KpiCard label="Door" value={door} hint="linked to a knock" animate={false} />
+          <KpiCard label="Assigned" value={assigned} hint="has an owner" animate={false} />
+          <KpiCard label="Unassigned" value={unassigned} hint="needs routing" animate={false} />
         </div>
 
         <Section
-          title={`${LEADS.length} leads in inbox`}
+          title={`${leads.length} leads in inbox`}
           subtitle="Sort: most-recent · Filter: all sources, all stages · Click a card for the full journey"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {LEADS.map((lead) => {
-              // Maria Santos has a real detail page; others are mocked
-              const isLinked = lead.name === 'Maria Santos';
-              const card = (
-                <LeadCard
-                  givenName={lead.name.split(' ')[0] ?? lead.name}
-                  familyName={lead.name.split(' ').slice(1).join(' ') ?? ''}
-                  status={lead.status}
-                  address={lead.address}
-                  phone={lead.phone}
-                  attributionSource={lead.source}
-                  assignee={lead.assignee || undefined}
-                />
-              );
-              return isLinked ? (
-                <Link
-                  key={lead.name}
-                  href="/leads/maria-santos"
-                  className="block focus:outline-none"
-                >
-                  {card}
+          {leads.length === 0 ? (
+            <div className="text-[12px] text-muted">
+              No leads yet — they appear as knockers capture them in the field
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {leads.map((lead) => (
+                <Link key={lead.id} href={`/leads/${lead.id}`} className="block focus:outline-none">
+                  <LeadCard
+                    givenName={lead.givenName}
+                    familyName={lead.familyName}
+                    status={lead.status}
+                    address={lead.addressId ? `Address ${shortId(lead.addressId)}` : undefined}
+                    phone={lead.phone ?? undefined}
+                    email={lead.email ?? undefined}
+                    attributionSource={leadSource(lead)}
+                    assignee={lead.assignedToId ? shortId(lead.assignedToId) : undefined}
+                  />
                 </Link>
-              ) : (
-                <div key={lead.name}>{card}</div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </Section>
 
         {/* CRM flow diagram */}
