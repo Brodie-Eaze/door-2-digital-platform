@@ -4,6 +4,7 @@ import { use } from 'react';
 
 import { AccountShell } from '@/components/AccountShell';
 import { PlanningSurface } from '@/components/PlanningSurface';
+import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { PlanningEmpty, FirstRunBanner } from '@/components/AccountEmptyStates';
 import { getAccount } from '@/lib/accounts';
 import { getAccountPlanning } from '@/lib/account-planning';
@@ -32,6 +33,13 @@ export default function Page({
 
   return (
     <AccountShell accountSlug={params.slug} pageTitle="Planning · day / week / month">
+      {/* The planner has no live backing model yet (forecasts + AI recos are a
+          future propensity-engine feature), so this surface is illustrative.
+          Mark it clearly so an operator never mistakes a demo forecast for a
+          real staffing recommendation. */}
+      <div className="flex justify-end mb-4">
+        <DataSourceBadge source="fixture" />
+      </div>
       <PlanningSurface
         scopeLabel={scopeLabel}
         defaultPlans={planning.plans}
