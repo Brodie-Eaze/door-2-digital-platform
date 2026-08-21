@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import type { AccountMeta } from '@/app/api/accounts/[slug]/meta/route';
+import type { AccountListItem } from '@/app/api/accounts/list/route';
+
+// Pure formatters live in a plain (non-client) module so server components can
+// use them too; re-exported here for the client consumers that already import
+// them from this hook module.
+export { prettifySlug, monogramFrom } from './account-color';
 
 /**
  * Live account header metadata (name / region / avatar) for a slug, fetched
@@ -30,18 +36,28 @@ export function useAccountMeta(slug: string): AccountMeta | null {
   return meta;
 }
 
-/** Human-readable fallback name from a slug while the live meta loads. */
-export function prettifySlug(slug: string): string {
-  return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 /**
- * 2-letter monogram from a display name. Duplicated from the (fixture-backed)
- * `@/lib/accounts` so header surfaces can build a monogram without importing
- * the static account fleet. Pure — no data.
+ * The accounts the caller may switch between, live from /api/accounts/list.
+ * Returns [] until the first answer (the switcher shows only the current
+ * account meanwhile — never a fixture fleet).
  */
-export function monogramFrom(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
-  return (parts[0]?.slice(0, 2) ?? '??').toUpperCase();
+export function useAccountList(): AccountListItem[] {
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/accounts/list');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { accounts?: AccountListItem[] };
+        if (!cancelled && Array.isArray(data.accounts)) setAccounts(data.accounts);
+      } catch {
+        // Keep []; the switcher still shows the current account.
+      }
+    })();
+    return (): void => {
+      cancelled = true;
+    };
+  }, []);
+  return accounts;
 }

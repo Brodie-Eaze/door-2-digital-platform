@@ -11,6 +11,7 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
 import { internal, isCrossTenantOperator, notFound, ok, requireSession } from '@/lib/api-helpers';
+import { avatarBgFor } from '@/lib/account-color';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,16 +23,6 @@ export interface AccountMeta {
   region: string;
   vertical: string;
   avatarBg: string;
-}
-
-/** Stable monogram-background palette (house style — navy/slate/blue). */
-const AVATAR_PALETTE = ['#0F172A', '#1E293B', '#334155', '#475569', '#3B82F6'] as const;
-
-/** Deterministic colour from the slug so an org's avatar never changes. */
-function avatarBgFor(slug: string): string {
-  let h = 0;
-  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]!;
 }
 
 export async function GET(
