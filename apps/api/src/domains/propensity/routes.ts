@@ -78,7 +78,11 @@ export async function registerPropensity(app: FastifyInstance): Promise<void> {
     const body = writeScoresRequestSchema.parse(req.body);
     // Publishing GLOBAL (shared) scores is super_admin-only.
     if (body.global === true) {
-      requireRole(ctx.role, GLOBAL_WRITE_ROLES, 'Only super_admin may write global propensity scores');
+      requireRole(
+        ctx.role,
+        GLOBAL_WRITE_ROLES,
+        'Only super_admin may write global propensity scores',
+      );
     }
     await withIdempotency({
       req,

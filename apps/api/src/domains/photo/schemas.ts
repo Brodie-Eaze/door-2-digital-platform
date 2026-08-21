@@ -13,7 +13,12 @@
 import { z } from 'zod';
 
 /** Content types we accept for a captured property photo (dev path). */
-export const photoContentTypeSchema = z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']);
+export const photoContentTypeSchema = z.enum([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+]);
 export type PhotoContentType = z.infer<typeof photoContentTypeSchema>;
 
 export const createPhotoRequestSchema = z

@@ -36,8 +36,7 @@ export function SavedReportCard({
   schedule: string;
   last: string;
 }): JSX.Element {
-  const open = (): void =>
-    toast.info(`Open "${title}" — saved-report view lands in Phase 1.2`);
+  const open = (): void => toast.info(`Open "${title}" — saved-report view lands in Phase 1.2`);
   return (
     <div
       role="button"

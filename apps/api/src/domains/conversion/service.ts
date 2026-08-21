@@ -347,7 +347,7 @@ async function loadConversionAndAssertTenant(
   currency: string;
   conversionId: string; // alias for id — keeps callers readable
 }> {
-  const row = await prisma().conversion.findUnique({ where: { id } });
+  const row = await tenantPrismaTx(actor.orgId).conversion.findUnique({ where: { id } });
   if (!row) throw new ProblemError(Problems.notFound('Conversion', id));
   if (row.orgId !== actor.orgId) {
     throw new ProblemError(Problems.tenantMismatch(row.orgId));
@@ -382,7 +382,7 @@ export async function refundConversion(
   const instructionId = newId('rfi');
   const instructedAt = new Date();
 
-  await prisma().$transaction(async (tx) => {
+  await tenantTx(actor.orgId, async (tx) => {
     if (input.clawbackCommissions) {
       await tx.commission.updateMany({
         where: { conversionId: conv.id, status: 'accrued' },
@@ -438,7 +438,7 @@ export async function disputeConversion(
   const disputeId = newId('dsp');
   const receivedAt = input.notifiedAt ? new Date(input.notifiedAt) : new Date();
 
-  await prisma().$transaction(async (tx) => {
+  await tenantTx(actor.orgId, async (tx) => {
     await AuditService.recordEvent(tx, {
       orgId: actor.orgId,
       regionCode: actor.regionCode,

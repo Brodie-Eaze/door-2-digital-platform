@@ -193,9 +193,7 @@ export interface InboxMessage {
  * inbox rather than fabricate messages. The org scope is honoured here so the
  * contract and tenant-pinning are correct the moment that model exists.
  */
-export async function listInbox(
-  actor: ActorContext,
-): Promise<InboxMessage[]> {
+export async function listInbox(actor: ActorContext): Promise<InboxMessage[]> {
   void actor.orgId;
   void actor.userId;
   return [];

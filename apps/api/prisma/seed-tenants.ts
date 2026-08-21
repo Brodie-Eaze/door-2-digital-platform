@@ -66,9 +66,33 @@ const TENANTS: TenantSpec[] = [
       'POLYGON((-97.7205 30.2870, -97.7095 30.2870, -97.7095 30.2785, -97.7205 30.2785, -97.7205 30.2870))',
     centroid: '-97.7150 30.2828',
     offerings: [
-      { id: 'svo_hope_20', name: 'Hope Monthly', blurb: 'Feeds a child for a month', amountCents: 2000, frequency: 'monthly', highlighted: false, sortOrder: 1 },
-      { id: 'svo_hope_40', name: 'Hope Plus', blurb: 'Clean water for a family', amountCents: 4000, frequency: 'monthly', highlighted: true, sortOrder: 2 },
-      { id: 'svo_hope_once', name: 'One-off Gift', blurb: 'A single donation today', amountCents: 10000, frequency: 'once', highlighted: false, sortOrder: 3 },
+      {
+        id: 'svo_hope_20',
+        name: 'Hope Monthly',
+        blurb: 'Feeds a child for a month',
+        amountCents: 2000,
+        frequency: 'monthly',
+        highlighted: false,
+        sortOrder: 1,
+      },
+      {
+        id: 'svo_hope_40',
+        name: 'Hope Plus',
+        blurb: 'Clean water for a family',
+        amountCents: 4000,
+        frequency: 'monthly',
+        highlighted: true,
+        sortOrder: 2,
+      },
+      {
+        id: 'svo_hope_once',
+        name: 'One-off Gift',
+        blurb: 'A single donation today',
+        amountCents: 10000,
+        frequency: 'once',
+        highlighted: false,
+        sortOrder: 3,
+      },
     ],
   },
   {
@@ -90,8 +114,24 @@ const TENANTS: TenantSpec[] = [
       'POLYGON((-96.7350 32.8200, -96.7240 32.8200, -96.7240 32.8120, -96.7350 32.8120, -96.7350 32.8200))',
     centroid: '-96.7295 32.8160',
     offerings: [
-      { id: 'svo_pest_mo', name: 'Home Shield Monthly', blurb: 'Year-round pest protection', amountCents: 4900, frequency: 'monthly', highlighted: true, sortOrder: 1 },
-      { id: 'svo_pest_qtr', name: 'Quarterly Service', blurb: 'Four treatments a year', amountCents: 12900, frequency: 'once', highlighted: false, sortOrder: 2 },
+      {
+        id: 'svo_pest_mo',
+        name: 'Home Shield Monthly',
+        blurb: 'Year-round pest protection',
+        amountCents: 4900,
+        frequency: 'monthly',
+        highlighted: true,
+        sortOrder: 1,
+      },
+      {
+        id: 'svo_pest_qtr',
+        name: 'Quarterly Service',
+        blurb: 'Four treatments a year',
+        amountCents: 12900,
+        frequency: 'once',
+        highlighted: false,
+        sortOrder: 2,
+      },
     ],
   },
 ];
@@ -116,8 +156,16 @@ async function upsertUser(
 ): Promise<void> {
   const digest = emailDigest(email, SEARCH_KEY);
   const data: Prisma.UserUncheckedCreateInput = {
-    id, orgId, email, emailDigest: digest, givenName: given, familyName: family,
-    role, regionCode, brandCode, status: 'active',
+    id,
+    orgId,
+    email,
+    emailDigest: digest,
+    givenName: given,
+    familyName: family,
+    role,
+    regionCode,
+    brandCode,
+    status: 'active',
   };
   await prisma.user.upsert({
     where: { id },
@@ -144,22 +192,61 @@ async function main(): Promise<void> {
       where: { id: t.orgId },
       update: { slug: t.slug, tradingName: t.tradingName, vertical: t.vertical, status: 'active' },
       create: {
-        id: t.orgId, slug: t.slug, legalName: t.legalName, tradingName: t.tradingName,
-        vertical: t.vertical, type: 'client', regionCode: 'US', brandCode: 'd2d', status: 'active',
+        id: t.orgId,
+        slug: t.slug,
+        legalName: t.legalName,
+        tradingName: t.tradingName,
+        vertical: t.vertical,
+        type: 'client',
+        regionCode: 'US',
+        brandCode: 'd2d',
+        status: 'active',
       },
     });
 
     // Manager + knocker
-    await upsertUser(t.managerId, t.orgId, t.managerEmail, 'Morgan', 'Lee', 'manager', 'US', 'd2d', passwordHash);
-    await upsertUser(t.knockerId, t.orgId, t.knockerEmail, t.knockerGiven, t.knockerFamily, 'knocker', 'US', 'd2d', passwordHash);
+    await upsertUser(
+      t.managerId,
+      t.orgId,
+      t.managerEmail,
+      'Morgan',
+      'Lee',
+      'manager',
+      'US',
+      'd2d',
+      passwordHash,
+    );
+    await upsertUser(
+      t.knockerId,
+      t.orgId,
+      t.knockerEmail,
+      t.knockerGiven,
+      t.knockerFamily,
+      'knocker',
+      'US',
+      'd2d',
+      passwordHash,
+    );
 
     // Territory + assignment
     await prisma.territory.upsert({
       where: { id: t.territoryId },
-      update: { name: t.territoryName, polygon: t.polygonWkt, centroid: t.centroid, status: 'active' },
+      update: {
+        name: t.territoryName,
+        polygon: t.polygonWkt,
+        centroid: t.centroid,
+        status: 'active',
+      },
       create: {
-        id: t.territoryId, orgId: t.orgId, regionCode: 'US', brandCode: 'd2d',
-        name: t.territoryName, vertical: t.vertical, polygon: t.polygonWkt, centroid: t.centroid, status: 'active',
+        id: t.territoryId,
+        orgId: t.orgId,
+        regionCode: 'US',
+        brandCode: 'd2d',
+        name: t.territoryName,
+        vertical: t.vertical,
+        polygon: t.polygonWkt,
+        centroid: t.centroid,
+        status: 'active',
       },
     });
     const assignmentId = `tas_demo_${t.knockerId}`;
@@ -173,11 +260,28 @@ async function main(): Promise<void> {
     for (const o of t.offerings) {
       await prisma.serviceOffering.upsert({
         where: { id: o.id },
-        update: { name: o.name, blurb: o.blurb, amountCents: BigInt(o.amountCents), frequency: o.frequency, highlighted: o.highlighted, active: true, sortOrder: o.sortOrder },
+        update: {
+          name: o.name,
+          blurb: o.blurb,
+          amountCents: BigInt(o.amountCents),
+          frequency: o.frequency,
+          highlighted: o.highlighted,
+          active: true,
+          sortOrder: o.sortOrder,
+        },
         create: {
-          id: o.id, orgId: t.orgId, regionCode: 'US', brandCode: 'd2d',
-          name: o.name, blurb: o.blurb, amountCents: BigInt(o.amountCents), frequency: o.frequency,
-          vertical: t.vertical, highlighted: o.highlighted, active: true, sortOrder: o.sortOrder,
+          id: o.id,
+          orgId: t.orgId,
+          regionCode: 'US',
+          brandCode: 'd2d',
+          name: o.name,
+          blurb: o.blurb,
+          amountCents: BigInt(o.amountCents),
+          frequency: o.frequency,
+          vertical: t.vertical,
+          highlighted: o.highlighted,
+          active: true,
+          sortOrder: o.sortOrder,
         },
       });
     }
@@ -187,18 +291,35 @@ async function main(): Promise<void> {
       const shiftId = `ksft_demo_${t.knockerId}_${day}`;
       await prisma.knockerShift.upsert({
         where: { id: shiftId },
-        update: { userId: t.knockerId, territoryId: t.territoryId, territory: t.territoryName, status: 'scheduled' },
+        update: {
+          userId: t.knockerId,
+          territoryId: t.territoryId,
+          territory: t.territoryName,
+          status: 'scheduled',
+        },
         create: {
-          id: shiftId, orgId: t.orgId, weekStart: WEEK_START,
-          repInitials: initials(t.knockerGiven, t.knockerFamily), repName: `${t.knockerGiven} ${t.knockerFamily}`,
-          account: t.tradingName, day, start: '09:00', end: '17:00', territory: t.territoryName,
-          lunch: '12:30-13:00', userId: t.knockerId, territoryId: t.territoryId, status: 'scheduled',
+          id: shiftId,
+          orgId: t.orgId,
+          weekStart: WEEK_START,
+          repInitials: initials(t.knockerGiven, t.knockerFamily),
+          repName: `${t.knockerGiven} ${t.knockerFamily}`,
+          account: t.tradingName,
+          day,
+          start: '09:00',
+          end: '17:00',
+          territory: t.territoryName,
+          lunch: '12:30-13:00',
+          userId: t.knockerId,
+          territoryId: t.territoryId,
+          status: 'scheduled',
         },
       });
     }
 
     // eslint-disable-next-line no-console
-    console.log(`Seeded tenant ${t.tradingName} (${t.vertical}): knocker ${t.knockerEmail}, territory ${t.territoryName}, ${t.offerings.length} offerings, 2 shifts`);
+    console.log(
+      `Seeded tenant ${t.tradingName} (${t.vertical}): knocker ${t.knockerEmail}, territory ${t.territoryName}, ${t.offerings.length} offerings, 2 shifts`,
+    );
   }
 }
 

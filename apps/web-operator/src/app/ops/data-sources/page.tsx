@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { RefreshCw, ExternalLink, Plug } from 'lucide-react';
 import { Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
 import type { Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -124,7 +124,7 @@ export default function DataSourcesPage(): JSX.Element {
   }
 
   return (
-    <OperatorShell pageTitle="Ops · Data sources">
+    <PlatformShell pageTitle="Ops · Data sources">
       <div className="space-y-6 max-w-[1280px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Connectors" value={SOURCES.length} hint="configured sources" />
@@ -185,7 +185,11 @@ export default function DataSourcesPage(): JSX.Element {
                   </td>
                   <td className="text-[12px] text-muted">{s.lastSync}</td>
                   <td className="numeric text-[13px] text-ink">
-                    {s.latencyMs === null ? <span className="text-soft">—</span> : `${s.latencyMs} ms`}
+                    {s.latencyMs === null ? (
+                      <span className="text-soft">—</span>
+                    ) : (
+                      `${s.latencyMs} ms`
+                    )}
                   </td>
                   <td className="numeric text-[13px] text-muted">{s.errorRate}</td>
                   <td>
@@ -203,7 +207,9 @@ export default function DataSourcesPage(): JSX.Element {
                       <button
                         className="inline-flex items-center gap-1 text-[12px] text-soft hover:text-ink"
                         onClick={() =>
-                          toast.info(`Open ${s.name} provider console — link wiring lands in Phase 1.3.`)
+                          toast.info(
+                            `Open ${s.name} provider console — link wiring lands in Phase 1.3.`,
+                          )
                         }
                       >
                         <ExternalLink size={12} />
@@ -240,6 +246,6 @@ export default function DataSourcesPage(): JSX.Element {
           </div>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

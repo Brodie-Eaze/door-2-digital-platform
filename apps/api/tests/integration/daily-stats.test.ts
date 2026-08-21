@@ -106,8 +106,22 @@ async function makeConversion(
 async function seed(): Promise<void> {
   await prisma().org.createMany({
     data: [
-      { id: orgA, legalName: 'Stats A', tradingName: 'SA', vertical: 'charity', type: 'client', regionCode: 'US' },
-      { id: orgB, legalName: 'Stats B', tradingName: 'SB', vertical: 'charity', type: 'client', regionCode: 'US' },
+      {
+        id: orgA,
+        legalName: 'Stats A',
+        tradingName: 'SA',
+        vertical: 'charity',
+        type: 'client',
+        regionCode: 'US',
+      },
+      {
+        id: orgB,
+        legalName: 'Stats B',
+        tradingName: 'SB',
+        vertical: 'charity',
+        type: 'client',
+        regionCode: 'US',
+      },
     ],
   });
   await prisma().user.createMany({

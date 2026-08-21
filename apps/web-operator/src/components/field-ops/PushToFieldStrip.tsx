@@ -1,10 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { MapPin, Radio, Sparkles, TrendingUp } from 'lucide-react';
 import { Section } from '@d2d/ui-web';
-import { toast } from '@/components/Toaster';
-import type { BroadcastResult } from '@/app/api/broadcast/route';
 import type { PushToFieldAction } from './types';
 
 interface PushToFieldStripProps {

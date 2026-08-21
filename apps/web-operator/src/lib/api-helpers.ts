@@ -204,7 +204,12 @@ export async function resolveAccountOrg(
 ): Promise<ResolvedOrg | NextResponse> {
   if (!slug) return notFound('Org', slug);
 
-  let org: { id: string; slug: string | null; regionCode: 'US' | 'AU' | 'SG'; tradingName: string } | null;
+  let org: {
+    id: string;
+    slug: string | null;
+    regionCode: 'US' | 'AU' | 'SG';
+    tradingName: string;
+  } | null;
   try {
     org = await db.org.findUnique({
       where: { slug },

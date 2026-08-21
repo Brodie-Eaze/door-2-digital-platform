@@ -546,7 +546,9 @@ export default function SgTerritoryIntelPage(): JSX.Element {
                     ) : (
                       <button
                         className="w-7 h-7 rounded hover:bg-paper flex items-center justify-center"
-                        onClick={() => toast.info(`View ${z.area} — detail panel lands in Phase 1.2`)}
+                        onClick={() =>
+                          toast.info(`View ${z.area} — detail panel lands in Phase 1.2`)
+                        }
                       >
                         <Eye size={12} className="text-soft" />
                       </button>

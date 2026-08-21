@@ -357,7 +357,9 @@ export default function SgPaymentsPage(): JSX.Element {
         </Banner>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted">SG · Phase 3 demo data — live wiring lands in Phase 3.x</span>
+          <span className="text-[11px] text-muted">
+            SG · Phase 3 demo data — live wiring lands in Phase 3.x
+          </span>
           <DataSourceBadge source="fixture" />
         </div>
 

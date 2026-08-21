@@ -1392,9 +1392,7 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Archive size={13} />}
                   disabled={selectedCount === 0}
-                  onClick={() =>
-                    toast.info(`Archive ${selectedCount} — wiring lands in Phase 1.2`)
-                  }
+                  onClick={() => toast.info(`Archive ${selectedCount} — wiring lands in Phase 1.2`)}
                 >
                   Archive
                 </Button>
@@ -1403,9 +1401,7 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Download size={13} />}
                   disabled={selectedCount === 0}
-                  onClick={() =>
-                    toast.info(`Export ${selectedCount} — wiring lands in Phase 1.2`)
-                  }
+                  onClick={() => toast.info(`Export ${selectedCount} — wiring lands in Phase 1.2`)}
                 >
                   Export
                 </Button>
@@ -1414,9 +1410,7 @@ export default function CreativeLibraryPage(): JSX.Element {
                   size="sm"
                   leftIcon={<Trash2 size={13} />}
                   disabled={selectedCount === 0}
-                  onClick={() =>
-                    toast.info(`Delete ${selectedCount} — wiring lands in Phase 1.2`)
-                  }
+                  onClick={() => toast.info(`Delete ${selectedCount} — wiring lands in Phase 1.2`)}
                 >
                   Delete
                 </Button>
@@ -1733,12 +1727,7 @@ function DetailDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2 pt-3 border-t border-line2">
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Check size={12} />}
-              onClick={onApprove}
-            >
+            <Button variant="primary" size="sm" leftIcon={<Check size={12} />} onClick={onApprove}>
               Approve
             </Button>
             <Button variant="ghost" size="sm" leftIcon={<X size={12} />} onClick={onReject}>
@@ -1749,9 +1738,7 @@ function DetailDrawer({
               size="sm"
               leftIcon={<Send size={12} />}
               onClick={() =>
-                toast.info(
-                  `Send ${creative.id} to review — workflow wiring lands in Phase 1.2`,
-                )
+                toast.info(`Send ${creative.id} to review — workflow wiring lands in Phase 1.2`)
               }
             >
               Send to review

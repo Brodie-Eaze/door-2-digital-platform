@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button, KpiCard, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
 import type { RegionCode, Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -131,7 +131,7 @@ export default function ProvisioningPage(): JSX.Element {
   }
 
   return (
-    <OperatorShell pageTitle="Orgs · Provisioning queue">
+    <PlatformShell pageTitle="Orgs · Provisioning queue">
       <div className="space-y-6 max-w-[1280px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
@@ -156,7 +156,9 @@ export default function ProvisioningPage(): JSX.Element {
                 leftIcon={<RefreshCw size={14} />}
                 variant="ghost"
                 size="sm"
-                onClick={() => toast.info('Refresh queue — live provisioning stream lands in Phase 1.2.')}
+                onClick={() =>
+                  toast.info('Refresh queue — live provisioning stream lands in Phase 1.2.')
+                }
               >
                 Refresh
               </Button>
@@ -240,6 +242,6 @@ export default function ProvisioningPage(): JSX.Element {
           </div>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

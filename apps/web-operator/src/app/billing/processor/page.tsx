@@ -4,7 +4,7 @@ import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
 import type { Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -105,7 +105,7 @@ export default function ProcessorPage(): JSX.Element {
   const totalTxns = PROCESSOR_VOLUME.reduce((a, t) => a + t.txns, 0);
 
   return (
-    <OperatorShell pageTitle="Billing · MiCamp processor">
+    <PlatformShell pageTitle="Billing · MiCamp processor">
       <div className="space-y-6 max-w-[1280px]">
         <Link
           href="/billing"
@@ -190,7 +190,9 @@ export default function ProcessorPage(): JSX.Element {
                 leftIcon={<Download size={14} />}
                 variant="ghost"
                 size="sm"
-                onClick={() => toast.info('Export residuals CSV — MiCamp feed export lands in Phase 1.2.')}
+                onClick={() =>
+                  toast.info('Export residuals CSV — MiCamp feed export lands in Phase 1.2.')
+                }
               >
                 Export
               </Button>
@@ -252,6 +254,6 @@ export default function ProcessorPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

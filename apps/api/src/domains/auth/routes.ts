@@ -212,8 +212,9 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     const userId = req.principal?.userId;
     const orgId = req.principal?.orgId;
     if (!userId || !orgId) throw new ProblemError(Problems.unauthorized());
-    const me = await getCurrentUser(userId, orgId);
-    if (!me) throw new ProblemError(Problems.unauthorized('User not active'));
+    const me = await getCurrentUser(userId);
+    // Belt: the JWT's orgId claim must match the user's actual org.
+    if (!me || me.orgId !== orgId) throw new ProblemError(Problems.unauthorized('User not active'));
     return reply.code(200).send({ user: me });
   });
 

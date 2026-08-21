@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Section, StatusPill, KpiCard, Banner } from '@d2d/ui-web';
 import type { Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -81,7 +81,10 @@ function FieldGrid({ fields }: { fields: Field[] }): JSX.Element {
   return (
     <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3.5">
       {fields.map((f) => (
-        <div key={f.label} className="flex items-center justify-between gap-3 border-b border-line2 pb-2.5">
+        <div
+          key={f.label}
+          className="flex items-center justify-between gap-3 border-b border-line2 pb-2.5"
+        >
           <dt className="text-[12px] text-muted">{f.label}</dt>
           <dd className="text-[13px] font-medium text-ink text-right flex items-center gap-2">
             {f.value}
@@ -107,19 +110,25 @@ function SaveButton({ scope }: { scope: string }): JSX.Element {
 
 export default function SettingsPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Settings">
+    <PlatformShell pageTitle="Settings">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
             <Building2 size={14} />
             HQ organisation settings. Fields are read-only in this build —{' '}
-            <span className="text-muted">edit lands in Phase 1.x once the settings API is wired.</span>
+            <span className="text-muted">
+              edit lands in Phase 1.x once the settings API is wired.
+            </span>
           </span>
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Regions enabled" value="1 / 4" hint="US live" />
-          <KpiCard label="Operator users" value={USERS.reduce((s, u) => s + u.count, 0)} hint="4 roles" />
+          <KpiCard
+            label="Operator users"
+            value={USERS.reduce((s, u) => s + u.count, 0)}
+            hint="4 roles"
+          />
           <KpiCard label="Billed accounts" value="3" delta="1 trial" deltaTone="neutral" />
           <KpiCard label="Audit retention" value="7 yr" hint="append-only" />
         </div>
@@ -260,6 +269,6 @@ export default function SettingsPage(): JSX.Element {
           </div>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

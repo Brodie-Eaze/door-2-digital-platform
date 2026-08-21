@@ -585,7 +585,7 @@ export default function RosterPage(): JSX.Element {
   // Roster directory of knockers. Seeded from REPS, overridden on mount from
   // /api/users?role=knocker. `repsLive` tells the UI which mode it's in.
   const [reps, setReps] = useState<Rep[]>(REPS);
-  const [repsLive, setRepsLive] = useState(false);
+  const [, setRepsLive] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [dayIndex, setDayIndex] = useState(0);
@@ -614,8 +614,12 @@ export default function RosterPage(): JSX.Element {
 
   // Honest-data freshness for the week-schedule section. markFresh() on a
   // successful /api/shifts fetch; otherwise it stays 'fixture' (demo data).
-  const { source: shiftSource, updatedAt: shiftUpdatedAt, markFresh, markFixture } =
-    useDataFreshness('fixture');
+  const {
+    source: shiftSource,
+    updatedAt: shiftUpdatedAt,
+    markFresh,
+    markFixture,
+  } = useDataFreshness('fixture');
 
   const dragId = useRef<string | null>(null);
   const justDraggedRef = useRef(false);
@@ -1046,9 +1050,7 @@ export default function RosterPage(): JSX.Element {
     if (ids.length === 0) return;
     const before = new Map(shifts.filter((s) => ids.includes(s.id)).map((s) => [s.id, s] as const));
     // Optimistic update.
-    const nextShifts = shifts.map((s) =>
-      selectedShiftIds.has(s.id) ? { ...s, ...patch } : s,
-    );
+    const nextShifts = shifts.map((s) => (selectedShiftIds.has(s.id) ? { ...s, ...patch } : s));
     setShifts(nextShifts);
     warnBulkResult(nextShifts, new Set(ids));
     const touched = new Set(ids);
@@ -1072,9 +1074,7 @@ export default function RosterPage(): JSX.Element {
     ).then(() => {
       if (failed > 0) {
         // Roll back only the failed rows.
-        setShifts((prev) =>
-          prev.map((s) => (touched.has(s.id) ? before.get(s.id) ?? s : s)),
-        );
+        setShifts((prev) => prev.map((s) => (touched.has(s.id) ? (before.get(s.id) ?? s) : s)));
         toast.error(`${label}: ${ids.length - failed} saved · ${failed} failed and reverted`);
       } else {
         toast.success(`${label} — ${ids.length} shift${ids.length > 1 ? 's' : ''}`);
@@ -1108,8 +1108,12 @@ export default function RosterPage(): JSX.Element {
         const curRes = await fetch(`/api/shifts?weekStart=${curWS}`);
         const curData = curRes.ok ? ((await curRes.json()) as { shifts?: Shift[] }) : {};
         const curShifts = Array.isArray(curData.shifts) ? curData.shifts : [];
-        const dupKey = (s: { repInitials: string; day: number; start: string; end: string }): string =>
-          `${s.repInitials}|${s.day}|${s.start}|${s.end}`;
+        const dupKey = (s: {
+          repInitials: string;
+          day: number;
+          start: string;
+          end: string;
+        }): string => `${s.repInitials}|${s.day}|${s.start}|${s.end}`;
         const existing = new Set(curShifts.map(dupKey));
         const toCopy = prevShifts.filter((s) => !existing.has(dupKey(s)));
         if (toCopy.length === 0) {
@@ -1134,7 +1138,9 @@ export default function RosterPage(): JSX.Element {
           return;
         }
         await refetchCurrentWeek();
-        toast.success(`Copied ${created.length} shift${created.length > 1 ? 's' : ''} from last week`);
+        toast.success(
+          `Copied ${created.length} shift${created.length > 1 ? 's' : ''} from last week`,
+        );
       } catch {
         toast.error('Copy last week failed — network error');
       } finally {
@@ -1290,15 +1296,6 @@ export default function RosterPage(): JSX.Element {
   const summaryShifts = summaryRep ? shifts.filter((s) => s.repInitials === summaryRep) : [];
 
   // Conflict set + weekly-hours map, recomputed when shifts change.
-  const conflictIds = useMemo(() => conflictedShiftIds(shifts), [shifts]);
-  const weeklyHoursByRep = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const s of shifts) {
-      map[s.repInitials] = (map[s.repInitials] ?? 0) + hoursOf(s);
-    }
-    return map;
-  }, [shifts]);
-
   // Coverage per day = count of distinct reps with ≥1 shift that day.
   // Used by the heat bar to show fleet-coverage at a glance.
   const coverageByDay = useMemo(() => {
@@ -1407,11 +1404,7 @@ export default function RosterPage(): JSX.Element {
               <Save size={13} />
               Save as template
             </button>
-            <TemplateMenu
-              templates={templates}
-              onApply={applyTemplate}
-              onDelete={deleteTemplate}
-            />
+            <TemplateMenu templates={templates} onApply={applyTemplate} onDelete={deleteTemplate} />
             <Button
               variant="primary"
               size="sm"
@@ -2600,4 +2593,3 @@ function TemplateMenu({
     </div>
   );
 }
-

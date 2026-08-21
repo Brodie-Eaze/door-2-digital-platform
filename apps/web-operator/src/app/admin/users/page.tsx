@@ -2,7 +2,7 @@
 
 import { ShieldCheck, UserPlus } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -29,13 +29,62 @@ const ROLE_LABEL: Record<Role, string> = {
 const ROLES: Role[] = ['super_admin', 'ops_admin', 'support', 'read_only'];
 
 const USERS: OperatorUser[] = [
-  { id: 'u_be', initials: 'BE', emailHint: 'b•••@door2digital.io', role: 'super_admin', lastActive: '2m ago', status: 'active' },
-  { id: 'u_jl', initials: 'JL', emailHint: 'j•••@door2digital.io', role: 'ops_admin', lastActive: '41m ago', status: 'active' },
-  { id: 'u_mn', initials: 'MN', emailHint: 'm•••@door2digital.io', role: 'ops_admin', lastActive: '3h ago', status: 'active' },
-  { id: 'u_rk', initials: 'RK', emailHint: 'r•••@door2digital.io', role: 'support', lastActive: '1d ago', status: 'active' },
-  { id: 'u_ta', initials: 'TA', emailHint: 't•••@door2digital.io', role: 'support', lastActive: 'never', status: 'invited' },
-  { id: 'u_pv', initials: 'PV', emailHint: 'p•••@door2digital.io', role: 'read_only', lastActive: '6d ago', status: 'active' },
-  { id: 'u_sd', initials: 'SD', emailHint: 's•••@door2digital.io', role: 'read_only', lastActive: '22d ago', status: 'suspended' },
+  {
+    id: 'u_be',
+    initials: 'BE',
+    emailHint: 'b•••@door2digital.io',
+    role: 'super_admin',
+    lastActive: '2m ago',
+    status: 'active',
+  },
+  {
+    id: 'u_jl',
+    initials: 'JL',
+    emailHint: 'j•••@door2digital.io',
+    role: 'ops_admin',
+    lastActive: '41m ago',
+    status: 'active',
+  },
+  {
+    id: 'u_mn',
+    initials: 'MN',
+    emailHint: 'm•••@door2digital.io',
+    role: 'ops_admin',
+    lastActive: '3h ago',
+    status: 'active',
+  },
+  {
+    id: 'u_rk',
+    initials: 'RK',
+    emailHint: 'r•••@door2digital.io',
+    role: 'support',
+    lastActive: '1d ago',
+    status: 'active',
+  },
+  {
+    id: 'u_ta',
+    initials: 'TA',
+    emailHint: 't•••@door2digital.io',
+    role: 'support',
+    lastActive: 'never',
+    status: 'invited',
+  },
+  {
+    id: 'u_pv',
+    initials: 'PV',
+    emailHint: 'p•••@door2digital.io',
+    role: 'read_only',
+    lastActive: '6d ago',
+    status: 'active',
+  },
+  {
+    id: 'u_sd',
+    initials: 'SD',
+    emailHint: 's•••@door2digital.io',
+    role: 'read_only',
+    lastActive: '22d ago',
+    status: 'suspended',
+  },
 ];
 
 function roleTone(role: Role): 'success' | 'info' | 'muted' {
@@ -63,7 +112,7 @@ export default function UsersPage(): JSX.Element {
   };
 
   return (
-    <OperatorShell pageTitle="Operator users & RBAC">
+    <PlatformShell pageTitle="Operator users & RBAC">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <div className="flex items-center gap-2">
@@ -78,7 +127,12 @@ export default function UsersPage(): JSX.Element {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Operator users" value={String(USERS.length)} hint="across all roles" />
-          <KpiCard label="Active now" value={String(active)} delta="+1 this week" deltaTone="positive" />
+          <KpiCard
+            label="Active now"
+            value={String(active)}
+            delta="+1 this week"
+            deltaTone="positive"
+          />
           <KpiCard label="Privileged (admin)" value={String(admins)} hint="super + ops admin" />
           <KpiCard label="Pending invites" value={String(pending)} hint="awaiting acceptance" />
         </div>
@@ -140,6 +194,6 @@ export default function UsersPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

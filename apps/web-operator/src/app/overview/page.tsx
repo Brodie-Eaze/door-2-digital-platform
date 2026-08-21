@@ -9,8 +9,8 @@
  * Authorization: super_admin sees all orgs; org-scoped sessions see their
  * own org only (isCrossTenantOperator mirrors the BFF helper).
  */
-import { AnomalyCard, Banner, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { AnomalyCard, KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
+import { PlatformShell } from '@/components/PlatformShell';
 import { ANOMALIES, KPIS } from '@/lib/fixtures';
 import { getSession } from '@/lib/session';
 import { isCrossTenantOperator } from '@/lib/api-helpers';
@@ -159,7 +159,7 @@ export default async function OverviewPage(): Promise<JSX.Element> {
   const { kpis, anomalies, source, error } = await loadOverview();
 
   return (
-    <OperatorShell pageTitle="Cross-org overview">
+    <PlatformShell pageTitle="Cross-org overview">
       <div className="space-y-6 max-w-[1280px]">
         <div className="flex items-center gap-2">
           {source === 'database' ? (
@@ -274,6 +274,6 @@ export default async function OverviewPage(): Promise<JSX.Element> {
           </div>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

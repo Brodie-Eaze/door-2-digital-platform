@@ -68,10 +68,10 @@ export default function ReviewQueuePage(): JSX.Element {
           <span className="text-[13px] flex items-center gap-2">
             <ListChecks size={14} className="text-accent" />
             <span>
-              Approved creatives queue here as <span className="font-semibold">draft</span> campaigns.
-              Review the grouped creatives, then publish to Meta or Google. Publishing is gated on a
-              live provider connection — no ad spend leaves this surface until your ad account is
-              connected and verified.
+              Approved creatives queue here as <span className="font-semibold">draft</span>{' '}
+              campaigns. Review the grouped creatives, then publish to Meta or Google. Publishing is
+              gated on a live provider connection — no ad spend leaves this surface until your ad
+              account is connected and verified.
             </span>
           </span>
         </Banner>

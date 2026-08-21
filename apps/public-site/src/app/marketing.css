@@ -35,8 +35,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(70% 55% at 78% 8%, rgba(59, 130, 246, 0.20), transparent 60%),
-    radial-gradient(55% 50% at 8% 100%, rgba(59, 130, 246, 0.10), transparent 55%);
+    radial-gradient(70% 55% at 78% 8%, rgba(59, 130, 246, 0.2), transparent 60%),
+    radial-gradient(55% 50% at 8% 100%, rgba(59, 130, 246, 0.1), transparent 55%);
 }
 
 /* Soft top-down vignette to seat content over the grid. */
@@ -76,59 +76,103 @@
 /* ───────────────────────── Motion ───────────────────────── */
 
 @keyframes mk-rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes mk-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes mk-pulse-ring {
-  0% { transform: scale(0.6); opacity: 0.7; }
-  70% { opacity: 0; }
-  100% { transform: scale(2.4); opacity: 0; }
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
 }
 
 @keyframes mk-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 @keyframes mk-dash {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* Traveling pulse around the loop ring (offset animated along the dasharray). */
 @keyframes mk-orbit {
-  to { stroke-dashoffset: -1000; }
+  to {
+    stroke-dashoffset: -1000;
+  }
 }
 
 @keyframes mk-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 @keyframes mk-shimmer {
-  to { background-position: 200% 0; }
+  to {
+    background-position: 200% 0;
+  }
 }
 
 /* Continuous vertical scroll. The feed is duplicated in the DOM, so translating
  * the track by exactly -50% returns to a visually identical frame → seamless. */
 @keyframes mk-ticker {
-  from { transform: translateY(0); }
-  to { transform: translateY(-50%); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
 }
 
 @keyframes mk-sheen {
-  0% { transform: translateX(-120%) skewX(-12deg); }
-  100% { transform: translateX(220%) skewX(-12deg); }
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-12deg);
+  }
 }
 
 /* Data flowing along a connector (dashes travel along the path). */
 @keyframes mk-flow {
-  to { stroke-dashoffset: -24; }
+  to {
+    stroke-dashoffset: -24;
+  }
 }
 .mk-flow {
   stroke-dasharray: 4 4;
@@ -141,15 +185,21 @@
   animation-delay: var(--d, 0ms);
 }
 
-.mk-float { animation: mk-float 6s ease-in-out infinite; }
+.mk-float {
+  animation: mk-float 6s ease-in-out infinite;
+}
 
 .mk-orbit {
   stroke-dasharray: 14 986;
   animation: mk-orbit 4.5s linear infinite;
 }
 
-.mk-pulse-ring { animation: mk-pulse-ring 2.4s ease-out infinite; }
-.mk-blink { animation: mk-blink 1.6s ease-in-out infinite; }
+.mk-pulse-ring {
+  animation: mk-pulse-ring 2.4s ease-out infinite;
+}
+.mk-blink {
+  animation: mk-blink 1.6s ease-in-out infinite;
+}
 
 .mk-marquee-track {
   display: flex;
@@ -157,10 +207,15 @@
   animation: mk-marquee 32s linear infinite;
 }
 
-.mk-ticker-track { animation: mk-ticker 16s linear infinite; }
+.mk-ticker-track {
+  animation: mk-ticker 16s linear infinite;
+}
 
 /* Sheen sweep across a surface (the hero deck catches light once on enter). */
-.mk-sheen { position: relative; overflow: hidden; }
+.mk-sheen {
+  position: relative;
+  overflow: hidden;
+}
 .mk-sheen::after {
   content: '';
   position: absolute;
@@ -168,13 +223,18 @@
   left: 0;
   width: 40%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
   animation: mk-sheen 6.5s ease-in-out 1.2s infinite;
 }
 
 /* Number shimmer for emphasized stats. */
 .mk-shine {
-  background: linear-gradient(100deg, currentColor 30%, rgba(147, 197, 253, 0.9) 50%, currentColor 70%);
+  background: linear-gradient(
+    100deg,
+    currentColor 30%,
+    rgba(147, 197, 253, 0.9) 50%,
+    currentColor 70%
+  );
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -183,7 +243,9 @@
 }
 
 /* Pause the loop pulse on hover so a curious visitor can read the ring. */
-.loop-wrap:hover .mk-orbit { animation-play-state: paused; }
+.loop-wrap:hover .mk-orbit {
+  animation-play-state: paused;
+}
 
 /* ─────────── Reduced motion: everything goes still ─────────── */
 @media (prefers-reduced-motion: reduce) {
@@ -199,6 +261,12 @@
   .mk-shine {
     animation: none !important;
   }
-  .mk-rise { opacity: 1; transform: none; }
-  .mk-shine { color: inherit; -webkit-text-fill-color: currentColor; }
+  .mk-rise {
+    opacity: 1;
+    transform: none;
+  }
+  .mk-shine {
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+  }
 }

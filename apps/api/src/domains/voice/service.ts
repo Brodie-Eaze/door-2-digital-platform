@@ -150,9 +150,7 @@ export async function captureVoiceRecording(
   // SAFETY (belt + suspenders) — the route gates these first, but the service
   // refuses to write a recording if the flag is off or consent is not true.
   if (!voiceCaptureEnabled()) {
-    throw new ProblemError(
-      Problems.forbidden('Voice capture is disabled'),
-    );
+    throw new ProblemError(Problems.forbidden('Voice capture is disabled'));
   }
   if (input.consentObtained !== true) {
     throw new ProblemError(Problems.validation('All-party consent is required to record'));

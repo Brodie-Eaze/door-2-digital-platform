@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -p 3011",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=200",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -38,7 +38,7 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
-    "eslint-config-next": "^16.2.7",
+    "eslint-config-next": "^14.2.13",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",

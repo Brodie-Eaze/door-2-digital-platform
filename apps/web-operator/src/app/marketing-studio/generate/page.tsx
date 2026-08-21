@@ -54,23 +54,6 @@ interface Variant {
   capability: 'image' | 'carousel' | 'video' | 'avatar';
 }
 
-/**
- * Plain-language explanation of why a variant failed safety. In production the
- * Fastify safety scanner returns a structured reason; until that field is wired
- * we derive a deterministic, human-readable reason from the variant content so
- * the "View issue" panel is never empty and never generic.
- */
-function safetyIssueReason(v: { headline: string; copy: string }): string {
-  const text = `${v.headline} ${v.copy}`.toLowerCase();
-  if (/guarantee|guaranteed|100%|risk-free/.test(text)) {
-    return 'Flagged for potential regulatory language — an absolute claim ("guaranteed"/"100%") may violate charity and advertising standards. Substantiate or soften the claim before approval.';
-  }
-  if (/below the line|quiet \d|poverty/.test(text)) {
-    return 'Flagged for an ambiguous impact claim ("the quiet 8% live below the line") — the figure needs a cited source before this can run under the fundraising code.';
-  }
-  return 'Flagged by the safety scanner for a claim that requires substantiation or a sensitive-targeting review. A human must resolve the flag before this variant can be approved.';
-}
-
 const VARIANT_SEEDS: Variant[] = [
   {
     id: 'var_a01',

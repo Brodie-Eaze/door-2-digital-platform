@@ -12,7 +12,6 @@ import {
   Zap,
   Target,
   CheckCircle2,
-  Clock,
   Calendar,
   Database,
   Wifi,

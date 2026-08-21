@@ -9,7 +9,6 @@ import {
   Construction,
   ArrowRight,
 } from 'lucide-react';
-import { Banner } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */

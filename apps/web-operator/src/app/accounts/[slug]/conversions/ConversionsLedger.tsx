@@ -81,7 +81,9 @@ export function ConversionsLedger({
       paddedBody={false}
     >
       <div className="px-5 pt-3 -mb-1">
-        <p className="text-[11px] text-muted">Demo data — live audit-chain wiring lands in Phase 1.2</p>
+        <p className="text-[11px] text-muted">
+          Demo data — live audit-chain wiring lands in Phase 1.2
+        </p>
       </div>
       <div className="max-h-[760px] overflow-y-auto">
         <table className="tbl">

@@ -720,7 +720,9 @@ export default function BrandSafetyPage(): JSX.Element {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          toast.info(`Inspect ${b.id} — decision history wiring lands in Phase 1.2`);
+                          toast.info(
+                            `Inspect ${b.id} — decision history wiring lands in Phase 1.2`,
+                          );
                         }}
                         className="w-6 h-6 rounded hover:bg-paper flex items-center justify-center text-soft"
                         title="Inspect"

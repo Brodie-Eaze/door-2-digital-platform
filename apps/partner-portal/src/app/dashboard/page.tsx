@@ -1,5 +1,5 @@
 import { PartnerShell } from '@/components/PartnerShell';
-import { Section, KpiCard, StatusPill, Money } from '@d2d/ui-web';
+import { Section, KpiCard, StatusPill } from '@d2d/ui-web';
 import { INVOICES, CONVERSION_SUMMARY, STATE_CLEARANCES, PAYOUT_STATEMENTS } from '@/lib/fixtures';
 
 function formatCents(cents: number): string {

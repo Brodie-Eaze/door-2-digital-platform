@@ -17,7 +17,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { KpiCard, Money, RegionBadge, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { PILOT, STATE_CLEARANCE } from '@/lib/fixtures';
 import { getSession } from '@/lib/session';
@@ -221,7 +221,7 @@ export default async function PilotCharliePage(): Promise<JSX.Element> {
   const dedicatedDb = org?.dedicatedDb ?? true;
 
   return (
-    <OperatorShell pageTitle="Hope Forward International">
+    <PlatformShell pageTitle="Hope Forward International">
       <div className="space-y-6 max-w-[1280px]">
         {/* Header card */}
         <div className="card card-pad">
@@ -422,6 +422,6 @@ export default async function PilotCharliePage(): Promise<JSX.Element> {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

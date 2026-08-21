@@ -2,7 +2,7 @@
 
 import { Check, Minus, Tag } from 'lucide-react';
 import { Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -76,15 +76,67 @@ const PLANS: Plan[] = [
 ];
 
 const ORGS = [
-  { id: 'org_hope', name: 'Hope Forward International', plan: 'growth', seats: 184, mrrCents: 9_500_00n, renews: '2026-12-01', status: 'active' },
-  { id: 'org_pestmax', name: 'PestMax Services', plan: 'pilot', seats: 22, mrrCents: 2_500_00n, renews: '2026-07-15', status: 'active' },
-  { id: 'org_solarbright', name: 'SolarBright Energy', plan: 'growth', seats: 96, mrrCents: 9_500_00n, renews: '2026-09-01', status: 'active' },
-  { id: 'org_cleanstreets', name: 'Clean Streets Coalition', plan: 'pilot', seats: 14, mrrCents: 2_500_00n, renews: '2026-08-20', status: 'trial' },
-  { id: 'org_unitedaid', name: 'United Aid Alliance', plan: 'enterprise', seats: 412, mrrCents: 24_000_00n, renews: '2027-03-01', status: 'active' },
-  { id: 'org_doorworks', name: 'DoorWorks Home Services', plan: 'pilot', seats: 19, mrrCents: 2_500_00n, renews: '2026-07-30', status: 'past_due' },
+  {
+    id: 'org_hope',
+    name: 'Hope Forward International',
+    plan: 'growth',
+    seats: 184,
+    mrrCents: 9_500_00n,
+    renews: '2026-12-01',
+    status: 'active',
+  },
+  {
+    id: 'org_pestmax',
+    name: 'PestMax Services',
+    plan: 'pilot',
+    seats: 22,
+    mrrCents: 2_500_00n,
+    renews: '2026-07-15',
+    status: 'active',
+  },
+  {
+    id: 'org_solarbright',
+    name: 'SolarBright Energy',
+    plan: 'growth',
+    seats: 96,
+    mrrCents: 9_500_00n,
+    renews: '2026-09-01',
+    status: 'active',
+  },
+  {
+    id: 'org_cleanstreets',
+    name: 'Clean Streets Coalition',
+    plan: 'pilot',
+    seats: 14,
+    mrrCents: 2_500_00n,
+    renews: '2026-08-20',
+    status: 'trial',
+  },
+  {
+    id: 'org_unitedaid',
+    name: 'United Aid Alliance',
+    plan: 'enterprise',
+    seats: 412,
+    mrrCents: 24_000_00n,
+    renews: '2027-03-01',
+    status: 'active',
+  },
+  {
+    id: 'org_doorworks',
+    name: 'DoorWorks Home Services',
+    plan: 'pilot',
+    seats: 19,
+    mrrCents: 2_500_00n,
+    renews: '2026-07-30',
+    status: 'past_due',
+  },
 ];
 
-const PLAN_LABEL: Record<string, string> = { pilot: 'Pilot', growth: 'Growth', enterprise: 'Enterprise' };
+const PLAN_LABEL: Record<string, string> = {
+  pilot: 'Pilot',
+  growth: 'Growth',
+  enterprise: 'Enterprise',
+};
 
 function planTone(plan: string): 'muted' | 'info' | 'success' {
   if (plan === 'enterprise') return 'success';
@@ -103,13 +155,32 @@ export default function PlansPage(): JSX.Element {
   const totalSeats = ORGS.reduce((acc, o) => acc + o.seats, 0);
 
   return (
-    <OperatorShell pageTitle="Plans & billing config">
+    <PlatformShell pageTitle="Plans & billing config">
       <div className="space-y-6 max-w-[1280px]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Total MRR" value={<Money cents={totalMrr} region="US" />} delta="+18.2%" deltaTone="positive" />
-          <KpiCard label="Orgs on a plan" value={String(ORGS.length)} hint="2 verticals · 1 charity" />
-          <KpiCard label="Billable seats" value={totalSeats.toLocaleString('en-US')} hint="across all plans" />
-          <KpiCard label="Net revenue retention" value="118%" delta="+6pp" deltaTone="positive" hint="trailing 90d" />
+          <KpiCard
+            label="Total MRR"
+            value={<Money cents={totalMrr} region="US" />}
+            delta="+18.2%"
+            deltaTone="positive"
+          />
+          <KpiCard
+            label="Orgs on a plan"
+            value={String(ORGS.length)}
+            hint="2 verticals · 1 charity"
+          />
+          <KpiCard
+            label="Billable seats"
+            value={totalSeats.toLocaleString('en-US')}
+            hint="across all plans"
+          />
+          <KpiCard
+            label="Net revenue retention"
+            value="118%"
+            delta="+6pp"
+            deltaTone="positive"
+            hint="trailing 90d"
+          />
         </div>
 
         <Section
@@ -152,7 +223,9 @@ export default function PlansPage(): JSX.Element {
                   </div>
                   <div className="rounded-lg bg-paper border border-line2 px-2.5 py-1.5">
                     <div className="text-muted">Rake</div>
-                    <div className="text-ink font-medium numeric">{(plan.rakeBps / 100).toFixed(1)}%</div>
+                    <div className="text-ink font-medium numeric">
+                      {(plan.rakeBps / 100).toFixed(1)}%
+                    </div>
                   </div>
                 </div>
 
@@ -164,7 +237,9 @@ export default function PlansPage(): JSX.Element {
                       ) : (
                         <Minus size={14} className="text-soft shrink-0 mt-0.5" />
                       )}
-                      <span className={f.included ? 'text-ink2' : 'text-soft line-through'}>{f.label}</span>
+                      <span className={f.included ? 'text-ink2' : 'text-soft line-through'}>
+                        {f.label}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -173,7 +248,9 @@ export default function PlansPage(): JSX.Element {
                   variant={plan.highlight ? 'primary' : 'secondary'}
                   size="sm"
                   className="mt-4 w-full"
-                  onClick={() => toast.info(`Edit ${plan.name} pricing — config writes land in Phase 1.3`)}
+                  onClick={() =>
+                    toast.info(`Edit ${plan.name} pricing — config writes land in Phase 1.3`)
+                  }
                 >
                   Edit plan
                 </Button>
@@ -225,7 +302,11 @@ export default function PlansPage(): JSX.Element {
                   <td className="text-[12px] text-muted">{org.renews}</td>
                   <td>
                     <StatusPill tone={statusTone(org.status)}>
-                      {org.status === 'past_due' ? 'Past due' : org.status === 'trial' ? 'Trial' : 'Active'}
+                      {org.status === 'past_due'
+                        ? 'Past due'
+                        : org.status === 'trial'
+                          ? 'Trial'
+                          : 'Active'}
                     </StatusPill>
                   </td>
                   <td>
@@ -233,7 +314,9 @@ export default function PlansPage(): JSX.Element {
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        toast.info(`Change plan for ${org.name} — billing changes require an active subscription in Phase 1.3`)
+                        toast.info(
+                          `Change plan for ${org.name} — billing changes require an active subscription in Phase 1.3`,
+                        )
                       }
                     >
                       Change plan
@@ -245,6 +328,6 @@ export default function PlansPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

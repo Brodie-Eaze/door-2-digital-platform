@@ -2,7 +2,7 @@
 
 import { Eye, KeyRound, RotateCw, ShieldAlert } from 'lucide-react';
 import { Banner, Button, KpiCard, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -21,13 +21,76 @@ interface SecretRef {
 }
 
 const SECRETS: SecretRef[] = [
-  { id: 'sec_micamp', name: 'MICAMP_ISO_API_KEY', scope: 'platform', provider: 'MiCamp', masked: 'mcp_live_••••••••••3f9a', lastRotated: '2026-05-02', rotationDays: 90, status: 'active' },
-  { id: 'sec_stripe', name: 'STRIPE_SECRET_KEY', scope: 'platform', provider: 'Stripe', masked: 'sk_live_••••••••••71kP', lastRotated: '2026-04-18', rotationDays: 90, status: 'active' },
-  { id: 'sec_crs', name: 'CRS_CREDIT_API_TOKEN', scope: 'platform', provider: 'CRS Credit API', masked: 'crs_••••••••••••a204', lastRotated: '2026-03-01', rotationDays: 90, status: 'rotation_due' },
-  { id: 'sec_twilio', name: 'TWILIO_AUTH_TOKEN', scope: 'org:hope-forward', provider: 'Twilio', masked: '••••••••••••••e8b1', lastRotated: '2026-05-28', rotationDays: 60, status: 'active' },
-  { id: 'sec_maps', name: 'MAPBOX_ACCESS_TOKEN', scope: 'platform', provider: 'Mapbox', masked: 'pk.••••••••••••.9Qz2', lastRotated: '2026-02-14', rotationDays: 180, status: 'expiring' },
-  { id: 'sec_webhook', name: 'WEBHOOK_SIGNING_SECRET', scope: 'platform', provider: 'Internal', masked: 'whsec_••••••••••dd4c', lastRotated: '2026-05-20', rotationDays: 90, status: 'active' },
-  { id: 'sec_db', name: 'DATABASE_ENCRYPTION_KEY', scope: 'platform', provider: 'AWS KMS', masked: 'arn:aws:kms:••••6f2e', lastRotated: '2026-01-10', rotationDays: 365, status: 'active' },
+  {
+    id: 'sec_micamp',
+    name: 'MICAMP_ISO_API_KEY',
+    scope: 'platform',
+    provider: 'MiCamp',
+    masked: 'mcp_live_••••••••••3f9a',
+    lastRotated: '2026-05-02',
+    rotationDays: 90,
+    status: 'active',
+  },
+  {
+    id: 'sec_stripe',
+    name: 'STRIPE_SECRET_KEY',
+    scope: 'platform',
+    provider: 'Stripe',
+    masked: 'sk_live_••••••••••71kP',
+    lastRotated: '2026-04-18',
+    rotationDays: 90,
+    status: 'active',
+  },
+  {
+    id: 'sec_crs',
+    name: 'CRS_CREDIT_API_TOKEN',
+    scope: 'platform',
+    provider: 'CRS Credit API',
+    masked: 'crs_••••••••••••a204',
+    lastRotated: '2026-03-01',
+    rotationDays: 90,
+    status: 'rotation_due',
+  },
+  {
+    id: 'sec_twilio',
+    name: 'TWILIO_AUTH_TOKEN',
+    scope: 'org:hope-forward',
+    provider: 'Twilio',
+    masked: '••••••••••••••e8b1',
+    lastRotated: '2026-05-28',
+    rotationDays: 60,
+    status: 'active',
+  },
+  {
+    id: 'sec_maps',
+    name: 'MAPBOX_ACCESS_TOKEN',
+    scope: 'platform',
+    provider: 'Mapbox',
+    masked: 'pk.••••••••••••.9Qz2',
+    lastRotated: '2026-02-14',
+    rotationDays: 180,
+    status: 'expiring',
+  },
+  {
+    id: 'sec_webhook',
+    name: 'WEBHOOK_SIGNING_SECRET',
+    scope: 'platform',
+    provider: 'Internal',
+    masked: 'whsec_••••••••••dd4c',
+    lastRotated: '2026-05-20',
+    rotationDays: 90,
+    status: 'active',
+  },
+  {
+    id: 'sec_db',
+    name: 'DATABASE_ENCRYPTION_KEY',
+    scope: 'platform',
+    provider: 'AWS KMS',
+    masked: 'arn:aws:kms:••••6f2e',
+    lastRotated: '2026-01-10',
+    rotationDays: 365,
+    status: 'active',
+  },
 ];
 
 function statusPill(status: SecretStatus): JSX.Element {
@@ -52,7 +115,7 @@ export default function SecretsPage(): JSX.Element {
   };
 
   return (
-    <OperatorShell pageTitle="Secrets inventory">
+    <PlatformShell pageTitle="Secrets inventory">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="danger">
           <div className="flex items-center gap-2">
@@ -66,8 +129,17 @@ export default function SecretsPage(): JSX.Element {
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Tracked secrets" value={String(SECRETS.length)} hint="across all scopes" />
-          <KpiCard label="Rotation due" value={String(rotationDue)} delta={rotationDue > 0 ? `${rotationDue} need attention` : 'all current'} deltaTone={rotationDue > 0 ? 'negative' : 'positive'} />
+          <KpiCard
+            label="Tracked secrets"
+            value={String(SECRETS.length)}
+            hint="across all scopes"
+          />
+          <KpiCard
+            label="Rotation due"
+            value={String(rotationDue)}
+            delta={rotationDue > 0 ? `${rotationDue} need attention` : 'all current'}
+            deltaTone={rotationDue > 0 ? 'negative' : 'positive'}
+          />
           <KpiCard label="Vault backend" value="AWS Secrets Mgr" hint="KMS-encrypted at rest" />
           <KpiCard label="Plaintext reads" value="0" hint="dual-control enforced" />
         </div>
@@ -84,7 +156,9 @@ export default function SecretsPage(): JSX.Element {
                 size="sm"
                 leftIcon={<KeyRound size={14} />}
                 onClick={() =>
-                  toast.info('Register a new secret — provisioning requires real vault credentials and a dual-control approval in Phase 1.4')
+                  toast.info(
+                    'Register a new secret — provisioning requires real vault credentials and a dual-control approval in Phase 1.4',
+                  )
                 }
               >
                 Register secret
@@ -121,10 +195,20 @@ export default function SecretsPage(): JSX.Element {
                   <td>{statusPill(s.status)}</td>
                   <td>
                     <div className="flex items-center gap-1.5 justify-end">
-                      <Button variant="ghost" size="sm" leftIcon={<Eye size={13} />} onClick={() => onReveal(s)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<Eye size={13} />}
+                        onClick={() => onReveal(s)}
+                      >
                         Reveal
                       </Button>
-                      <Button variant="secondary" size="sm" leftIcon={<RotateCw size={13} />} onClick={() => onRotate(s)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leftIcon={<RotateCw size={13} />}
+                        onClick={() => onRotate(s)}
+                      >
                         Rotate
                       </Button>
                     </div>
@@ -135,6 +219,6 @@ export default function SecretsPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

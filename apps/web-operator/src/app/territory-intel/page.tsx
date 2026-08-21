@@ -18,8 +18,7 @@ import {
   type ZoneSelection,
 } from '@/components/TerritoryHeatmap';
 import { ALL_CELLS } from '@/components/territoryCells';
-import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
-import { toast } from '@/components/Toaster';
+import { useDataFreshness } from '@/components/DataSourceBadge';
 
 type StatusFilter = 'all' | CellStatus;
 
@@ -277,22 +276,13 @@ function apiToZoneRow(t: ApiTerritory): ZoneRow {
  * propensity × lowest saturation, excluding blocked. Mirrors the model the
  * fixture constants stand in for, but on real DB-derived numbers.
  */
-function deriveTopZones(rows: ZoneRow[], n: number): ZoneRow[] {
-  return [...rows]
-    .filter((r) => r.cellStatus !== 'blocked')
-    .map((r) => ({ r, score: r.propensity * (1 - r.saturation / 100) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .map((x) => x.r);
-}
-
 export default function TerritoryIntelPage(): JSX.Element {
   const [selectedCell, setSelectedCell] = useState<ZoneSelection | null>(null);
   const [assignedSet, setAssignedSet] = useState<Set<string>>(new Set());
   const [showNewZoneBanner, setShowNewZoneBanner] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [liveRows, setLiveRows] = useState<ZoneRow[] | null>(null);
-  const { source, updatedAt, markFresh, markFixture } = useDataFreshness('fixture');
+  const [, setLiveRows] = useState<ZoneRow[] | null>(null);
+  const { markFresh, markFixture } = useDataFreshness('fixture');
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch real territory propensity on mount. When the org has Territory rows
@@ -324,30 +314,6 @@ export default function TerritoryIntelPage(): JSX.Element {
       cancelled = true;
     };
   }, [markFresh, markFixture]);
-
-  const isLive = liveRows != null && liveRows.length > 0;
-
-  // Zones the table renders: live DB rows ranked by propensity, else fixtures.
-  const zones = useMemo<ZoneRow[]>(() => {
-    const base = isLive ? (liveRows as ZoneRow[]) : ZONES;
-    return [...base].sort((a, b) => b.propensity - a.propensity);
-  }, [isLive, liveRows]);
-
-  // AI-suggested zones: derived from live propensity × saturation when live,
-  // else the curated fixture suggestions.
-  const suggestedZones = useMemo<ZoneRow[]>(() => {
-    if (isLive) return deriveTopZones(liveRows as ZoneRow[], 3);
-    return ZONES.filter((z) => z.cellStatus === 'ai_suggested');
-  }, [isLive, liveRows]);
-
-  // Header KPIs, computed from whichever dataset is active.
-  const avgPropensity = useMemo(() => {
-    if (zones.length === 0) return '0.00';
-    const sum = zones.reduce((acc, z) => acc + z.propensity, 0);
-    return (sum / zones.length).toFixed(2);
-  }, [zones]);
-
-  const totalKnockable = useMemo(() => zones.reduce((acc, z) => acc + z.knockable, 0), [zones]);
 
   // Count cells by status for the filter pills — derived from the same data
   // module the map renders from, so the pill numbers match the visible cells.

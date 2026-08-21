@@ -928,9 +928,7 @@ export default function MarketingStudioPage(): JSX.Element {
                   <li
                     key={it.id}
                     onClick={() =>
-                      toast.info(
-                        `Inspect ${it.id} — creative inspector wiring lands in Phase 1.2`,
-                      )
+                      toast.info(`Inspect ${it.id} — creative inspector wiring lands in Phase 1.2`)
                     }
                     className="flex items-start gap-2.5 p-2 rounded-md hover:bg-paper transition cursor-pointer"
                   >

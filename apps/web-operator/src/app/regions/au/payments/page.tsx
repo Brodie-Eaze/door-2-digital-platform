@@ -402,7 +402,9 @@ export default function AuPaymentsPage(): JSX.Element {
         </Banner>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted">AU · Phase 2 demo data — live wiring lands in Phase 2.x</span>
+          <span className="text-[11px] text-muted">
+            AU · Phase 2 demo data — live wiring lands in Phase 2.x
+          </span>
           <DataSourceBadge source="fixture" />
         </div>
 

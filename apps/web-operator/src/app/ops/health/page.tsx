@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Activity,
   Server,
   Cpu,
   Webhook,
@@ -16,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Section, StatusPill, KpiCard, Banner } from '@d2d/ui-web';
 import type { Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge, useDataFreshness } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 import type { RealtimeMetrics } from '@/app/api/metrics/realtime/route';
@@ -112,7 +111,8 @@ const INCIDENTS: Incident[] = [
     id: 'inc_03',
     severity: 'degraded',
     title: 'Webhook delivery latency to MiCamp',
-    detail: 'p95 climbed to 310 ms; 2 deliveries parked in DLQ. Auto-retry with backoff in progress.',
+    detail:
+      'p95 climbed to 310 ms; 2 deliveries parked in DLQ. Auto-retry with backoff in progress.',
     when: 'ongoing · 14 min',
     resolved: false,
   },
@@ -120,7 +120,8 @@ const INCIDENTS: Incident[] = [
     id: 'inc_02',
     severity: 'operational',
     title: 'Redis failover completed',
-    detail: 'Primary node replaced during maintenance window. Zero dropped jobs, 40s read-only blip.',
+    detail:
+      'Primary node replaced during maintenance window. Zero dropped jobs, 40s read-only blip.',
     when: '2026-06-12 02:10 UTC',
     resolved: true,
   },
@@ -128,7 +129,8 @@ const INCIDENTS: Incident[] = [
     id: 'inc_01',
     severity: 'operational',
     title: 'Mapbox geocode timeouts',
-    detail: 'Upstream returned 5xx for ~6 min. Fell back to cached tiles; geocode queued and drained.',
+    detail:
+      'Upstream returned 5xx for ~6 min. Fell back to cached tiles; geocode queued and drained.',
     when: '2026-06-09 18:42 UTC',
     resolved: true,
   },
@@ -140,24 +142,27 @@ export default function HealthPage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const mounted = useRef(true);
 
-  const poll = useCallback(async (announce = false): Promise<void> => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/metrics/realtime', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      const data = (await res.json()) as RealtimeMetrics;
-      if (!mounted.current) return;
-      setMetrics(data);
-      markFresh();
-      if (announce) toast.success('Realtime tile refreshed from live API');
-    } catch {
-      if (!mounted.current) return;
-      markFixture();
-      if (announce) toast.info('Live API unreachable — showing demo fallback');
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
-  }, [markFresh, markFixture]);
+  const poll = useCallback(
+    async (announce = false): Promise<void> => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/metrics/realtime', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = (await res.json()) as RealtimeMetrics;
+        if (!mounted.current) return;
+        setMetrics(data);
+        markFresh();
+        if (announce) toast.success('Realtime tile refreshed from live API');
+      } catch {
+        if (!mounted.current) return;
+        markFixture();
+        if (announce) toast.info('Live API unreachable — showing demo fallback');
+      } finally {
+        if (mounted.current) setLoading(false);
+      }
+    },
+    [markFresh, markFixture],
+  );
 
   useEffect(() => {
     mounted.current = true;
@@ -173,12 +178,13 @@ export default function HealthPage(): JSX.Element {
   const down = SERVICES.filter((s) => s.status === 'down').length;
   const operational = SERVICES.length - degraded - down;
   const overallTone: Tone = down > 0 ? 'danger' : degraded > 0 ? 'warn' : 'success';
-  const overallLabel = down > 0 ? 'Partial outage' : degraded > 0 ? 'Degraded' : 'All systems operational';
+  const overallLabel =
+    down > 0 ? 'Partial outage' : degraded > 0 ? 'Degraded' : 'All systems operational';
 
   const activeReps = metrics?.activeReps;
 
   return (
-    <OperatorShell pageTitle="System health">
+    <PlatformShell pageTitle="System health">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone={overallTone}>
           <span className="text-[13px] flex items-center gap-2">
@@ -328,6 +334,6 @@ export default function HealthPage(): JSX.Element {
           </Section>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

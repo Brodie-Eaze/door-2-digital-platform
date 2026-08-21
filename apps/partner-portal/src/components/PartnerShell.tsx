@@ -2,13 +2,11 @@
 
 import {
   BarChart3,
-  DollarSign,
   FileText,
   LayoutDashboard,
   Palette,
   Shield,
   ShieldCheck,
-  Settings,
   Wallet,
 } from 'lucide-react';
 import { AppShell, Sidebar, TopBar, type NavGroup } from '@d2d/ui-web';

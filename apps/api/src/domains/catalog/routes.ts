@@ -15,12 +15,7 @@ import { Problems, ProblemError } from '@d2d/shared-utils';
 import { requireAuth } from '../../shared/middleware/auth-guard';
 import { withIdempotency } from '../../shared/middleware/idempotency';
 import { requireTenant } from '../../shared/middleware/tenant-guard';
-import {
-  archiveOffering,
-  createOffering,
-  listOfferings,
-  updateOffering,
-} from './service';
+import { archiveOffering, createOffering, listOfferings, updateOffering } from './service';
 import { createOfferingRequestSchema, updateOfferingRequestSchema } from './schemas';
 
 const WRITE_ROLES = new Set(['super_admin', 'org_admin', 'manager']);
@@ -66,21 +61,17 @@ export async function registerCatalog(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /v1/catalog/:id — update an offering (manager+).
-  app.patch<{ Params: { id: string } }>(
-    '/:id',
-    { preHandler: requireAuth },
-    async (req, reply) => {
-      const ctx = requireTenant(req);
-      requireRole(ctx.role, WRITE_ROLES);
-      const body = updateOfferingRequestSchema.parse(req.body);
-      const result = await updateOffering(req.params.id, body, {
-        userId: ctx.userId,
-        orgId: ctx.orgId,
-        regionCode: ctx.regionCode as never,
-      });
-      return reply.code(200).send(result);
-    },
-  );
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ctx = requireTenant(req);
+    requireRole(ctx.role, WRITE_ROLES);
+    const body = updateOfferingRequestSchema.parse(req.body);
+    const result = await updateOffering(req.params.id, body, {
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      regionCode: ctx.regionCode as never,
+    });
+    return reply.code(200).send(result);
+  });
 
   // DELETE /v1/catalog/:id — soft delete (active=false) (manager+).
   app.delete<{ Params: { id: string } }>(

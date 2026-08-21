@@ -9,22 +9,15 @@ import { z } from 'zod';
 import { idSchema } from '@d2d/shared-types';
 
 /** "YYYY-MM-DD" calendar date (no time component). */
-const isoDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO date "YYYY-MM-DD"');
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO date "YYYY-MM-DD"');
 
 /** "HH:MM" 24-hour wall-clock time. */
-const hhmmSchema = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be "HH:MM" 24-hour time');
+const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be "HH:MM" 24-hour time');
 
 /** "HH:MM-HH:MM" lunch window. */
 const lunchSchema = z
   .string()
-  .regex(
-    /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/,
-    'must be "HH:MM-HH:MM"',
-  );
+  .regex(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/, 'must be "HH:MM-HH:MM"');
 
 export const createShiftRequestSchema = z
   .object({

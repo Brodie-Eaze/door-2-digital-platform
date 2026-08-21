@@ -1,6 +1,6 @@
 import { ShieldCheck, Hash } from 'lucide-react';
 import { Banner, Section } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { RECENT_AUDIT } from '@/lib/fixtures';
 
@@ -19,7 +19,7 @@ function fnv1aHex(input: string): string {
 
 export default function AuditPage(): JSX.Element {
   return (
-    <OperatorShell pageTitle="Audit log">
+    <PlatformShell pageTitle="Audit log">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="success">
           <span className="text-[13px] flex items-center gap-2">
@@ -88,6 +88,6 @@ export default function AuditPage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

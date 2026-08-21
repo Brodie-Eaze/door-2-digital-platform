@@ -16,17 +16,17 @@ write models back, and where the honest scaffolding ends.
 
 ## 1. The capture model — what lands, and from where
 
-| Table | Purpose | Written by | Key columns | PII | Tenancy |
-|---|---|---|---|---|---|
-| `Knock` | One door interaction | App → `POST /v1/knocks/batch` | `disposition`, `geo`, `capturedAt`, `territoryId`, `idempotencyKey` | `notes` | `orgId` |
-| `KnockSession` | A clock-in shift session | App roster clock-in/out | `startedAt`, `endedAt`, `territoryId`, `deviceId`, `attestationToken` | — | `orgId` |
-| `Lead` | A captured prospect | App / inside-sales | `givenName/familyName/email/phone` (vaulted), `emailDigest`, `status` | yes (vault) | `orgId` |
-| `Conversion` (+`Donation`/`Sale`) | A signed donation/sale | `POST /v1/field/signups` | `amountCents`, `attributionSource`, `type`, `knockerId` | — | `orgId` |
-| `ConsentRecord` | Door-step consent proof | field sign-up | `channel='door'`, `granted`, `proofKey` (signature) | — | `orgId` |
-| **`KnockPhoto`** | Property photo per knock | `POST /v1/photos` | `storageKey`, `capturedAt`, `lat/lng`, `clientKnockId`, **`mlLabels`** | `addressLine` | `orgId` |
-| **`PropensityScore`** | Neighbourhood propensity | **ML →** `POST /v1/propensity/scores` | `geoType/geoKey`, `centroidLat/Lng`, `score`, `band`, `modelName/Version`, `features` | — | `orgId` (null = global) |
-| **`VoiceRecording`** | Door-conversation audio (scaffold) | `POST /v1/voice` (gated off) | `storageKey`, `durationMs`, `consentObtained`, **`transcript`**, **`analysis`** | `transcript` | `orgId` |
-| **`AnalyticsEvent`** | Append-only warehouse outbox | platform (backfill + future inline) | `eventType`, `entityType/Id`, `occurredAt`, `payload` (flat), `shippedAt` | — | `orgId` |
+| Table                             | Purpose                            | Written by                            | Key columns                                                                           | PII           | Tenancy                 |
+| --------------------------------- | ---------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- | ------------- | ----------------------- |
+| `Knock`                           | One door interaction               | App → `POST /v1/knocks/batch`         | `disposition`, `geo`, `capturedAt`, `territoryId`, `idempotencyKey`                   | `notes`       | `orgId`                 |
+| `KnockSession`                    | A clock-in shift session           | App roster clock-in/out               | `startedAt`, `endedAt`, `territoryId`, `deviceId`, `attestationToken`                 | —             | `orgId`                 |
+| `Lead`                            | A captured prospect                | App / inside-sales                    | `givenName/familyName/email/phone` (vaulted), `emailDigest`, `status`                 | yes (vault)   | `orgId`                 |
+| `Conversion` (+`Donation`/`Sale`) | A signed donation/sale             | `POST /v1/field/signups`              | `amountCents`, `attributionSource`, `type`, `knockerId`                               | —             | `orgId`                 |
+| `ConsentRecord`                   | Door-step consent proof            | field sign-up                         | `channel='door'`, `granted`, `proofKey` (signature)                                   | —             | `orgId`                 |
+| **`KnockPhoto`**                  | Property photo per knock           | `POST /v1/photos`                     | `storageKey`, `capturedAt`, `lat/lng`, `clientKnockId`, **`mlLabels`**                | `addressLine` | `orgId`                 |
+| **`PropensityScore`**             | Neighbourhood propensity           | **ML →** `POST /v1/propensity/scores` | `geoType/geoKey`, `centroidLat/Lng`, `score`, `band`, `modelName/Version`, `features` | —             | `orgId` (null = global) |
+| **`VoiceRecording`**              | Door-conversation audio (scaffold) | `POST /v1/voice` (gated off)          | `storageKey`, `durationMs`, `consentObtained`, **`transcript`**, **`analysis`**       | `transcript`  | `orgId`                 |
+| **`AnalyticsEvent`**              | Append-only warehouse outbox       | platform (backfill + future inline)   | `eventType`, `entityType/Id`, `occurredAt`, `payload` (flat), `shippedAt`             | —             | `orgId`                 |
 
 Bold tables + columns are the new data-company layer; the bold columns
 (`mlLabels`, `score`/`features`, `transcript`/`analysis`) are **written by you**.
@@ -36,6 +36,7 @@ Bold tables + columns are the new data-company layer; the bold columns
 ## 2. ML I/O surfaces
 
 ### 2.1 Propensity — the read+write loop that powers the map
+
 The manager sets a canvass **area** (polygon or center+radius) informed by
 neighbourhood propensity. You produce that propensity.
 
@@ -59,6 +60,7 @@ neighbourhood propensity. You produce that propensity.
   Visibility = your org's rows **OR** global rows. Never another tenant's.
 
 ### 2.2 Photo annotation — computer vision on properties
+
 - List/fetch: `GET /v1/photos?knockId=...` (metadata) → `GET /v1/photos/:id/raw` (bytes).
 - Write annotations back to `KnockPhoto.mlLabels` (JSON — e.g.
   `{ "houseType":"single_family", "condition":"well_kept", "hasGate":true }`)
@@ -66,6 +68,7 @@ neighbourhood propensity. You produce that propensity.
   future `PATCH /v1/photos/:id/labels` — currently DB-direct.)
 
 ### 2.3 Conversation intelligence — voice (SCAFFOLD, gated OFF)
+
 - `VoiceRecording` captures door audio → you transcribe into `transcript` and
   write `analysis` (sentiment, objections, outcome signals) + `processedAt`.
 - ⚠️ **Disabled by default.** `POST /v1/voice` returns `403 voice-capture-disabled`
@@ -93,15 +96,22 @@ warehouse (BigQuery / Snowflake) + model in dbt without reading OLTP.
   Re-delivery is safe because warehouse loads should `MERGE`/upsert on `id`.
   A loader loops until the body is empty. Example row:
   ```json
-  {"id":"aev_...","orgId":"org_demo_hope_forward","userId":"usr_...",
-   "eventType":"sale","entityType":"Conversion","entityId":"cnv_...",
-   "occurredAt":"2026-06-14T00:46:02Z",
-   "payload":{"amountCents":4000,"attributionSource":"door","type":"donation_recurring"},
-   "shippedAt":"..."}
+  {
+    "id": "aev_...",
+    "orgId": "org_demo_hope_forward",
+    "userId": "usr_...",
+    "eventType": "sale",
+    "entityType": "Conversion",
+    "entityId": "cnv_...",
+    "occurredAt": "2026-06-14T00:46:02Z",
+    "payload": { "amountCents": 4000, "attributionSource": "door", "type": "donation_recurring" },
+    "shippedAt": "..."
+  }
   ```
 - **Browse (no shipping):** `GET /v1/analytics/events?eventType=sale&since=...&limit=500`.
 
 Suggested dbt staging model over the stream:
+
 ```sql
 -- models/staging/stg_knock_events.sql
 select
@@ -169,5 +179,5 @@ scores; better scores come from more field data. That's the moat.
 
 ---
 
-*Generated as part of the data-company backend build. Every claim here is wired +
-live-verified against the dev API except the items called out in §5.*
+_Generated as part of the data-company backend build. Every claim here is wired +
+live-verified against the dev API except the items called out in §5._

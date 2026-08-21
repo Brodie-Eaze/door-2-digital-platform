@@ -36,10 +36,7 @@ interface ReassignDrawerProps {
 }
 
 /** Rough great-circle-ish distance (squared euclidean on lat/lng is fine for ordering). */
-function roughDistance(
-  a: { lat: number; lng: number },
-  b: { lat: number; lng: number },
-): number {
+function roughDistance(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const dLat = a.lat - b.lat;
   const dLng = a.lng - b.lng;
   return dLat * dLat + dLng * dLng;
@@ -271,8 +268,8 @@ export function ReassignDrawer({
 
         {/* Footer note — honest about the push path */}
         <div className="px-5 py-3 border-t border-line2 text-[10px] text-muted">
-          Assignment writes a real territory record when backed by DB rows. The rep push is
-          queued + audited; live APNs/FCM fan-out lands with the Knocker-iOS notification service.
+          Assignment writes a real territory record when backed by DB rows. The rep push is queued +
+          audited; live APNs/FCM fan-out lands with the Knocker-iOS notification service.
         </div>
       </aside>
     </>

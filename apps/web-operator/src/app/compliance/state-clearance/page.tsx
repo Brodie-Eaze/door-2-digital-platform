@@ -3,7 +3,7 @@
 import { FilePlus2, FileText, ShieldCheck, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Banner, Button, KpiCard, Money, Section, StatusPill } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 import { STATE_CLEARANCE } from '@/lib/fixtures';
@@ -55,7 +55,7 @@ export default function StateClearancePage(): JSX.Element {
   const totalBondCents = rows.reduce((acc, r) => acc + r.bondCents, 0n);
 
   return (
-    <OperatorShell pageTitle="Compliance · State clearance">
+    <PlatformShell pageTitle="Compliance · State clearance">
       <div className="space-y-6 max-w-[1280px]">
         <Link
           href="/compliance"
@@ -75,7 +75,11 @@ export default function StateClearancePage(): JSX.Element {
         </Banner>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="States approved" value={`${approved} / ${rows.length}`} hint="filed set" />
+          <KpiCard
+            label="States approved"
+            value={`${approved} / ${rows.length}`}
+            hint="filed set"
+          />
           <KpiCard label="Filings in flight" value={inFlight} hint="counsel-managed" />
           <KpiCard
             label="Surety bonds posted"
@@ -168,6 +172,6 @@ export default function StateClearancePage(): JSX.Element {
           </table>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

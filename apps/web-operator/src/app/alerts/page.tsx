@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Banner, Section, StatusPill, KpiCard, FilterChip, FilterChipStrip } from '@d2d/ui-web';
 import type { Tone } from '@d2d/ui-web';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { toast } from '@/components/Toaster';
 
@@ -166,7 +166,7 @@ export default function AlertsPage(): JSX.Element {
   }
 
   return (
-    <OperatorShell pageTitle="Alerts">
+    <PlatformShell pageTitle="Alerts">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
@@ -296,6 +296,6 @@ export default function AlertsPage(): JSX.Element {
           </ul>
         </Section>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

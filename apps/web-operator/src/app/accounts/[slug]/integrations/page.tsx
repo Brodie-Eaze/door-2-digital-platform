@@ -11,7 +11,7 @@ import {
   Activity,
   Info,
 } from 'lucide-react';
-import { Banner, Section } from '@d2d/ui-web';
+import { Banner } from '@d2d/ui-web';
 import { AccountShell } from '@/components/AccountShell';
 import { toast } from '@/components/Toaster';
 
@@ -243,7 +243,6 @@ export default function CrmIntegrationsPage({
 /* ─── Sub-components ─────────────────────────────────────────────────────── */
 
 function IntegrationCard({
-  id,
   icon,
   iconBg,
   name,

@@ -27,7 +27,7 @@ import { Worker } from 'bullmq';
 import { prisma } from '../config/db';
 import { logger } from '../config/logger';
 import { redis } from '../config/redis';
-import { newId } from '@d2d/shared-utils';
+import {} from '@d2d/shared-utils';
 import { AuditService } from '../domains/audit/service';
 import { enqueueWebhookDelivery } from '../domains/webhook/service';
 import type { RegionCode } from '@prisma/client';

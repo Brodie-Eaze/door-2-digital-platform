@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { PartnerShell } from '@/components/PartnerShell';
-import { Section, StatusPill } from '@d2d/ui-web';
+import { StatusPill } from '@d2d/ui-web';
 import { Download, FileText } from 'lucide-react';
 import { INVOICES, type InvoiceFixture } from '@/lib/fixtures';
 
@@ -11,7 +11,6 @@ function formatCents(cents: number): string {
 }
 
 function InvoiceDetail({ inv }: { inv: InvoiceFixture }) {
-  const rake = inv.doorRakeCents + inv.insideSalesRakeCents + inv.retargetingRakeCents;
   return (
     <div className="card p-6 space-y-5">
       <div className="flex items-start justify-between">

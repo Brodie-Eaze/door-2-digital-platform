@@ -153,10 +153,7 @@ export async function updateOffering(
  * Soft delete — set `active = false`. The offering vanishes from the catalog
  * read but the row (and any conversions/audit rows that reference it) survives.
  */
-export async function archiveOffering(
-  id: string,
-  actor: ActorContext,
-): Promise<{ id: string }> {
+export async function archiveOffering(id: string, actor: ActorContext): Promise<{ id: string }> {
   const existing = await prisma().serviceOffering.findFirst({
     where: { id, orgId: actor.orgId },
   });

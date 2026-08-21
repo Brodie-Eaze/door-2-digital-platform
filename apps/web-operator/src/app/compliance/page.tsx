@@ -1,7 +1,7 @@
 import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Banner, Section, StatusPill, KpiCard } from '@d2d/ui-web';
 import { db } from '@d2d/database';
-import { OperatorShell } from '@/components/OperatorShell';
+import { PlatformShell } from '@/components/PlatformShell';
 import { DataSourceBadge } from '@/components/DataSourceBadge';
 import { STATE_CLEARANCE } from '@/lib/fixtures';
 
@@ -43,7 +43,7 @@ export default async function CompliancePage(): Promise<JSX.Element> {
   const pending = clearances.filter((s) => s.status !== 'approved').length;
 
   return (
-    <OperatorShell pageTitle="Compliance">
+    <PlatformShell pageTitle="Compliance">
       <div className="space-y-6 max-w-[1280px]">
         <Banner tone="info">
           <span className="text-[13px] flex items-center gap-2">
@@ -232,6 +232,6 @@ export default async function CompliancePage(): Promise<JSX.Element> {
           </Section>
         </div>
       </div>
-    </OperatorShell>
+    </PlatformShell>
   );
 }

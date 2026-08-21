@@ -10,7 +10,7 @@
  */
 import type { NextRequest } from 'next/server';
 import { db } from '@d2d/database';
-import { internal, notFound, ok, requireSession, resolveAccountOrg } from '@/lib/api-helpers';
+import { internal, ok, requireSession, resolveAccountOrg } from '@/lib/api-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
