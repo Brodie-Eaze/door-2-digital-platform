@@ -289,7 +289,7 @@ knocks[]}`. Fix: match the real shape, mark items complete off
      match the server, and the idempotency key is kept ≤64 chars (the full
      deviceId+territory overflowed the server's key limit → its own 400).
      VERIFIED END-TO-END against prod from the app UI: `POST /v1/sessions →
-     201` (sess_01M0JDHDJNK0…) then `POST /v1/knocks/batch → 201`; the knock
+201` (sess_01M0JDHDJNK0…) then `POST /v1/knocks/batch → 201`; the knock
      (`knock-939148fe…`, captured 15:02:57) now PERSISTS in production tied to
      that real session, and the local queue item is marked complete
      (`completed=1, attempts=0, no error`) — the "Syncing" banner clears.
@@ -305,6 +305,18 @@ knocks[]}`. Fix: match the real shape, mark items complete off
      a real device the default access group makes this work; and pure-offline shift
      start (never online to open a session) still needs the local→server session-id
      reconcile path.
+- **D2 (multi-tenant isolation) — PROVEN in suite AND live in prod.** The full
+  integration suite is 374/374 green (28 files), including the dedicated
+  `cross-tenant-isolation` suite (9), `tenant-prisma` read/write isolation (12),
+  and per-domain 404-across-tenant assertions (audit, sale, user, territory,
+  knock, lead, donation, catalog, marketing). LIVE probe against production:
+  logged in as a DIFFERENT org (Hope Forward, `manager@hope-forward.com`) and hit
+  Northside Trust's real resources with org B's token —
+  `GET /v1/territories/ter_01M0J6G3CB… → 404`, `…/satellite → 404`,
+  `/v1/knocks/knk_01M0J6KAS8… → 404`, `/v1/sessions/sess_01M0J6KA2N… → 404` —
+  every resource type returns **404, never 403**, while org B's own
+  `/v1/territories/assigned → 200`. Cross-tenant reads are indistinguishable from
+  "does not exist", which is the correct posture (no existence leak).
 - **D5 (backpressure) — PROVEN in prod.** 150-request burst → 120 pass, 121st+
   return 429 + Retry-After + x-ratelimit-remaining:0, per-client (TRUST_PROXY_HOPS=2).
 - **D6/D7/D8/D9-partial** — executable proof in the integration suite (374 green):
